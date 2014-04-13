@@ -19,7 +19,7 @@ install:
 - go install github.com/onsi/ginkgo/ginkgo
 
 script:
-- ginkgo -r -cover
+- ginkgo -r -cover -race
 
 after_success:
 - 'echo "mode: set" > all.coverprofile'
