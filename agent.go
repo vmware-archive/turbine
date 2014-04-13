@@ -8,6 +8,7 @@ import (
 	"github.com/rcrowley/go-tigertonic"
 
 	"github.com/room101-ci/agent/api"
+	"github.com/room101-ci/agent/api/builds/scheduler"
 )
 
 var listenAddr = flag.String(
@@ -20,7 +21,8 @@ func main() {
 	logger := log.New(os.Stdout, "", 0)
 	logger.Println("Booting...")
 
-	server := tigertonic.NewServer(*listenAddr, api.New(logger))
+	handler := api.New(logger, scheduler.NewScheduler())
+	server := tigertonic.NewServer(*listenAddr, handler)
 
 	err := server.ListenAndServe()
 	logger.Fatalln("listen error:", err)
