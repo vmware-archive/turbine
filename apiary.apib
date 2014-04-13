@@ -4,155 +4,99 @@ FORMAT: 1A
 The Agent API controls the lifecycle of builds and jobs running on a worker.
 
 # Group Build
-A Build is a unique object for a given source location and identifier.
+A Build is an object that, when created, starts executing a build of the given
+source location, controlled by the Agent that accepted the request.
 
 ## Build [/builds/{guid}]
-A single Build.
-
 + Parameters
 
     + guid (required, string, `abc123`) ... `guid` of the Build to view.
-    
+
 + Model (application/json)
 
     + Body
-    
+
             {
-                // Unique identifier for this build. If not given, the agent will generate
-                // one.
+                // Unique identifier for this build.
                 "guid": "abc123",
-            
+
+                // URL to notify upon completion.
+                "callback": "http://example.com/builds/abc123",
+
+                // Location to fetch the bits from.
                 "source": {
                     // The type of remote location.
                     //
                     // One of: git, hg, bzr, raw
                     "type": "git",
-            
+
                     // The URI from which the source can be fetched.
                     //
                     // For `raw` type, this must be a URL to a `.zip` or `.tar.gz` file.
                     "uri": "https://github.com/foo/bar.git",
-            
+
                     // The ref from the repository to build.
                     //
                     // This is only required for repositories.
                     "ref": "deadbeef"
                 }
-            }
 
-### Retrieve a Single Build [GET]
-+ Response 200
-    
-    [Build][]
-
-### Remove a Build [DELETE]
-+ Response 204
-
-## Builds Collection [/builds]
-### Create a Build [POST]
-+ Request (application/json)
-
-        {
-            "guid": "abc123",
-            "source": {
-                "type": "git",
-                "uri": "https://github.com/foo/bar.git",
-                "ref": "deadbeef"
-            }
-        }
-
-+ Response 201 (application/json)
-
-    [Build][]
-
-# Group Job
-A Job is a particular execution of a build's source.
-
-## Job [/builds/{guid}/jobs/{id}]
-A single Job.
-
-+ Parameters
-
-    + guid (required, string, `abc123`) ... `guid` of the Build to which the Job belongs.
-    + id (required, numeric, `1`) ... `id` of the Job.
-    
-+ Model (application/json)
-
-    + Body
-    
-            {
-                // ID of the job. Starts at 1 and increments as
-                // jobs are added to a Build.
-                "id": 1,
-                
-                // One of 'running', 'succeeded', 'failed', or 'errored'.
-                "state": "completed",
-                
                 // Parameters to provide for the job.
                 "parameters": {
                     "FOO": "bar"
                 },
-                
+
                 // Parameters to provide and censor from the output.
                 //
                 // Not provided to jobs from pull-requests.
                 "secure_parameters": {
                     "SECRET": "12345"
-                }
+                },
+
+                // State of the build.
+                //
+                // One of running, succeeded, failed, or errored.
+                "state": "running"
             }
 
+### Retrieve a Single Build [GET]
+A Build can be inspected as long as it's running. Once the build completes it
+will go away. Do not use [GET] to poll for the resulting `state` as you may
+miss the transition: instead set up a `callback` URL.
 
-### Retrieve a Single Job [GET]
 + Response 200
-    
-    [Job][]
 
-### Remove a Job [DELETE]
+    [Build][]
+
+### Remove a Build [DELETE]
+Deleting a Build cancels any running actions.
+
+If the build is not running on this agent, a `503` error will be returned.
+
 + Response 204
 
-## Jobs Collection [/builds/{guid}/jobs]
-
-+ Parameters
-
-    + guid (required, string, `abc123`) ... `guid` of the Build to which the Job belongs.
-    
-+ Model (application/json)
-
-    + Body
-    
-            [
-                {
-                    "id": 1,
-                    "state": "succeeded",
-                    "parameters": {
-                        "FOO": "bar"
-                    },
-                    "secure_parameters": {
-                        "SECRET": "12345"
-                    }
-                },
-                {
-                    "id": 2,
-                    "state": "running",
-                    "parameters": {
-                        "FOO": "buzz"
-                    },
-                    "secure_parameters": {
-                        "SECRET": "12345"
-                    }
-                }
-            ]
++ Response 503
 
 
-### List all Jobs [GET]
-+ Response 200 (application/json)
+## Builds Collection [/builds]
+Creating a build starts it immediately.
 
-    [Jobs Collection][]
+When the build completes, the given callback will receive a `PUT` with the
+Build as the message body.
 
-### Create a Job [POST]
+The callback URL must be idempotent.
+
+### Create a Build [POST]
 + Request (application/json)
 
         {
+            "guid": "abc123",
+            "callback": "http://example.com/builds/abc123",
+            "source": {
+                "type": "git",
+                "uri": "https://github.com/foo/bar.git",
+                "ref": "deadbeef"
+            }
             "parameters": {
                 "FOO": "bar"
             },
@@ -163,4 +107,10 @@ A single Job.
 
 + Response 201 (application/json)
 
-    [Job][]
+    [Build][]
+
++ Response 503
+
+    [Build][]
+
++ Response 200
