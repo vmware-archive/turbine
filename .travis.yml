@@ -10,7 +10,7 @@ before_install:
 
 install:
 - godep restore
-- godep go install github.com/onsi/ginkgo/ginkgo
+- go install github.com/onsi/ginkgo/ginkgo
 
 script:
 - ginkgo -r
