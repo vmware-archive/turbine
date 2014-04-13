@@ -6,21 +6,20 @@
 	],
 	"Deps": [
 		{
-			"ImportPath": "github.com/codegangsta/inject",
-			"Rev": "9aea7a2fa5b79ef7fc00f63a575e72df33b4e886"
-		},
-		{
-			"ImportPath": "github.com/go-martini/martini",
-			"Comment": "v0.1-149-g7cea1b3",
-			"Rev": "7cea1b34e29976de64195b7cca1f668cad9abc8d"
-		},
-		{
 			"ImportPath": "github.com/onsi/ginkgo",
 			"Rev": "3632cbe0b58a9005513942e9d4c4920e375d6778"
 		},
 		{
 			"ImportPath": "github.com/onsi/gomega",
 			"Rev": "fce60402026b32bb9e95d4850773cd67bdd47c93"
+		},
+		{
+			"ImportPath": "github.com/rcrowley/go-metrics",
+			"Rev": "d1774362a14f30b8eb31af8867bfb15142263644"
+		},
+		{
+			"ImportPath": "github.com/rcrowley/go-tigertonic",
+			"Rev": "86e8a7d9c595d926bfd999d7a4a43af79f9671ef"
 		}
 	]
 }
