@@ -52,6 +52,23 @@ var _ = Describe("Scheduler", func() {
 			}
 		})
 
+		handleBuild := func(build builds.Build) <-chan struct{} {
+			gotRequest := make(chan struct{})
+
+			server.AppendHandlers(
+				ghttp.CombineHandlers(
+					ghttp.VerifyRequest("PUT", "/abc"),
+					ghttp.VerifyJSONRepresenting(build),
+					ghttp.RespondWith(http.StatusOK, ""),
+					func(http.ResponseWriter, *http.Request) {
+						close(gotRequest)
+					},
+				),
+			)
+
+			return gotRequest
+		}
+
 		It("kicks off a builder", func() {
 			server.AllowUnhandledRequests = true
 
@@ -62,77 +79,62 @@ var _ = Describe("Scheduler", func() {
 		})
 
 		Context("when the build succeeds", func() {
+			var gotRequest <-chan struct{}
+
 			BeforeEach(func() {
 				builder.BuildResult = true
 
 				succeededBuild := *build
 				succeededBuild.Status = "succeeded"
 
-				server.AppendHandlers(
-					ghttp.CombineHandlers(
-						ghttp.VerifyRequest("PUT", "/abc"),
-						ghttp.VerifyContentType("application/json"),
-						ghttp.VerifyJSONRepresenting(succeededBuild),
-						ghttp.RespondWith(http.StatusOK, ""),
-					),
-				)
+				gotRequest = handleBuild(succeededBuild)
 			})
 
 			It("reports the build as succeeded", func() {
 				err := scheduler.Schedule(build)
 				Ω(err).ShouldNot(HaveOccurred())
 
-				Eventually(server.ReceivedRequests).ShouldNot(BeEmpty())
+				Eventually(gotRequest).Should(BeClosed())
 			})
 		})
 
 		Context("when the build fails", func() {
+			var gotRequest <-chan struct{}
+
 			BeforeEach(func() {
 				builder.BuildResult = false
 
 				failedBuild := *build
 				failedBuild.Status = "failed"
 
-				server.AppendHandlers(
-					ghttp.CombineHandlers(
-						ghttp.VerifyRequest("PUT", "/abc"),
-						ghttp.VerifyContentType("application/json"),
-						ghttp.VerifyJSONRepresenting(failedBuild),
-						ghttp.RespondWith(http.StatusOK, ""),
-					),
-				)
+				gotRequest = handleBuild(failedBuild)
 			})
 
 			It("reports the build as failed", func() {
 				err := scheduler.Schedule(build)
 				Ω(err).ShouldNot(HaveOccurred())
 
-				Eventually(server.ReceivedRequests).ShouldNot(BeEmpty())
+				Eventually(gotRequest).Should(BeClosed())
 			})
 		})
 
 		Context("when building fails", func() {
+			var gotRequest <-chan struct{}
+
 			BeforeEach(func() {
 				builder.BuildError = errors.New("oh no!")
 
 				erroredBuild := *build
 				erroredBuild.Status = "errored"
 
-				server.AppendHandlers(
-					ghttp.CombineHandlers(
-						ghttp.VerifyRequest("PUT", "/abc"),
-						ghttp.VerifyContentType("application/json"),
-						ghttp.VerifyJSONRepresenting(erroredBuild),
-						ghttp.RespondWith(http.StatusOK, ""),
-					),
-				)
+				gotRequest = handleBuild(erroredBuild)
 			})
 
 			It("reports the build as errored", func() {
 				err := scheduler.Schedule(build)
 				Ω(err).ShouldNot(HaveOccurred())
 
-				Eventually(server.ReceivedRequests).ShouldNot(BeEmpty())
+				Eventually(gotRequest).Should(BeClosed())
 			})
 		})
 	})
