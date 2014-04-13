@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"net/http/httptest"
 
@@ -23,7 +24,8 @@ var _ = Describe("API", func() {
 
 	BeforeEach(func() {
 		scheduler = fakescheduler.New()
-		handler := api.New(NullLogger(), scheduler)
+
+		handler := api.New(log.New(GinkgoWriter, "test", 0), scheduler)
 
 		server = httptest.NewServer(handler)
 		client = &http.Client{
@@ -109,6 +111,17 @@ var _ = Describe("API", func() {
 			BeforeEach(func() {
 				build.Source.Type = "git"
 				build.Source.Ref = ""
+				requestBody = buildPayload(build)
+			})
+
+			It("returns 400", func() {
+				Ω(response.StatusCode).Should(Equal(http.StatusBadRequest))
+			})
+		})
+
+		Context("when the callback url is malformed", func() {
+			BeforeEach(func() {
+				build.Callback = "ß"
 				requestBody = buildPayload(build)
 			})
 

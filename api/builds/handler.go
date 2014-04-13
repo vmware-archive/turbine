@@ -49,5 +49,12 @@ func (handler *Handler) validateBuild(build *Build) error {
 		return errors.New("missing build source ref")
 	}
 
+	if build.Callback != "" {
+		_, err := url.ParseRequestURI(build.Callback)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
