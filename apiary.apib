@@ -1,1 +1,167 @@
-apiary.apib
+FORMAT: 1A
+
+# Room 101 Agent
+The Agent API controls the lifecycle of builds and jobs running on a worker.
+
+# Group Build
+A Build is a unique object for a given source location and identifier.
+
+## Build [/builds/{guid}]
+A single Build.
+
++ Parameters
+
+    + guid (required, string, `abc123`) ... `guid` of the Build to view.
+    
++ Model (application/json)
+
+    + Body
+    
+            {
+                // Unique identifier for this build. If not given, the agent will generate
+                // one.
+                "guid": "abc123",
+            
+                "source": {
+                    // The type of remote location.
+                    //
+                    // One of: git, hg, bzr, raw
+                    "type": "git",
+            
+                    // The URI from which the source can be fetched.
+                    //
+                    // For `raw` type, this must be a URL to a `.zip` or `.tar.gz` file.
+                    "uri": "https://github.com/foo/bar.git",
+            
+                    // The ref from the repository to build.
+                    //
+                    // This is only required for repositories.
+                    "ref": "deadbeef"
+                }
+            }
+
+### Retrieve a Single Build [GET]
++ Response 200
+    
+    [Build][]
+
+### Remove a Build [DELETE]
++ Response 204
+
+## Builds Collection [/builds]
+### Create a Build [POST]
++ Request (application/json)
+
+        {
+            "guid": "abc123",
+            "source": {
+                "type": "git",
+                "uri": "https://github.com/foo/bar.git",
+                "ref": "deadbeef"
+            }
+        }
+
++ Response 201 (application/json)
+
+    [Build][]
+
+# Group Job
+A Job is a particular execution of a build's source.
+
+## Job [/builds/{guid}/jobs/{id}]
+A single Job.
+
++ Parameters
+
+    + guid (required, string, `abc123`) ... `guid` of the Build to which the Job belongs.
+    + id (required, numeric, `1`) ... `id` of the Job.
+    
++ Model (application/json)
+
+    + Body
+    
+            {
+                // ID of the job. Starts at 1 and increments as
+                // jobs are added to a Build.
+                "id": 1,
+                
+                // One of 'running', 'succeeded', 'failed', or 'errored'.
+                "state": "completed",
+                
+                // Parameters to provide for the job.
+                "parameters": {
+                    "FOO": "bar"
+                },
+                
+                // Parameters to provide and censor from the output.
+                //
+                // Not provided to jobs from pull-requests.
+                "secure_parameters": {
+                    "SECRET": "12345"
+                }
+            }
+
+
+### Retrieve a Single Job [GET]
++ Response 200
+    
+    [Job][]
+
+### Remove a Job [DELETE]
++ Response 204
+
+## Jobs Collection [/builds/{guid}/jobs]
+
++ Parameters
+
+    + guid (required, string, `abc123`) ... `guid` of the Build to which the Job belongs.
+    
++ Model (application/json)
+
+    + Body
+    
+            [
+                {
+                    "id": 1,
+                    "state": "succeeded",
+                    "parameters": {
+                        "FOO": "bar"
+                    },
+                    "secure_parameters": {
+                        "SECRET": "12345"
+                    }
+                },
+                {
+                    "id": 2,
+                    "state": "running",
+                    "parameters": {
+                        "FOO": "buzz"
+                    },
+                    "secure_parameters": {
+                        "SECRET": "12345"
+                    }
+                }
+            ]
+
+
+### List all Jobs [GET]
++ Response 200 (application/json)
+
+    [Jobs Collection][]
+
+### Create a Job [POST]
++ Request (application/json)
+
+        {
+            "parameters": {
+                "FOO": "bar"
+            },
+            "secure_parameters": {
+                "SECRET": "12345"
+            }
+        }
+
++ Response 201 (application/json)
+
+    [Job][]
+
