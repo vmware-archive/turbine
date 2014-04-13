@@ -1,23 +1,53 @@
 package builds
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 
 	"github.com/rcrowley/go-tigertonic"
 )
 
+type Scheduler interface {
+	Schedule(*Build) error
+}
+
 type Handler struct {
+	scheduler Scheduler
 }
 
-func NewHandler() *Handler {
-	return &Handler{}
+func NewHandler(scheduler Scheduler) *Handler {
+	return &Handler{
+		scheduler: scheduler,
+	}
 }
 
-func (handler *Handler) GetHandler() http.Handler {
-	return tigertonic.Marshaled(handler.get)
+func (handler *Handler) PostHandler() http.Handler {
+	return tigertonic.Marshaled(handler.post)
 }
 
-func (handler *Handler) get(url *url.URL, header http.Header, _ interface{}) (int, http.Header, *Build, error) {
-	return http.StatusOK, nil, &Build{}, nil
+func (handler *Handler) post(url *url.URL, header http.Header, build *Build) (int, http.Header, *Build, error) {
+	err := handler.validateBuild(build)
+	if err != nil {
+		return http.StatusBadRequest, nil, nil, err
+	}
+
+	err = handler.scheduler.Schedule(build)
+	if err != nil {
+		return http.StatusServiceUnavailable, nil, nil, err
+	}
+
+	return http.StatusCreated, nil, &Build{}, nil
+}
+
+func (handler *Handler) validateBuild(build *Build) error {
+	if build.Guid == "" {
+		return errors.New("missing build guid")
+	}
+
+	if build.Source.Type == "git" && build.Source.Ref == "" {
+		return errors.New("missing build source ref")
+	}
+
+	return nil
 }

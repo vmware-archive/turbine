@@ -9,12 +9,12 @@ import (
 	"github.com/room101-ci/agent/api/builds"
 )
 
-func New(logger *log.Logger) http.Handler {
+func New(logger *log.Logger, buildScheduler builds.Scheduler) http.Handler {
 	mux := tigertonic.NewTrieServeMux()
 
-	builds := builds.NewHandler()
+	builds := builds.NewHandler(buildScheduler)
 
-	mux.Handle("GET", "/builds/{guid}", logged(logger, builds.GetHandler()))
+	mux.Handle("POST", "/builds", logged(logger, builds.PostHandler()))
 
 	return mux
 }
