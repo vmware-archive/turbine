@@ -4,13 +4,23 @@ go:
 - 1.2
 - tip
 
+env:
+  global:
+    secure: ZBqQnFYuf0qyL4kg5nF6kKy/wpgdp2/Fcxx43/hktulNI9jjxs/XUm22Jzy00jgAJImoxTFzd6EVR5AAX84pcwHrozAu5ZAX6lmuDmvKn0aFQONZLx+S6KP8rmPGbbjJHP5wSpNfMONNrzaAsQ2+aKaiNYqOfYJ4MgcMsAL4nTE=
+
 before_install:
 - export PATH=$HOME/gopath/bin:$PATH
 - go get github.com/tools/godep
 
 install:
 - godep restore
+- go get -v github.com/mattn/goveralls
 - go install github.com/onsi/ginkgo/ginkgo
 
 script:
 - ginkgo -r
+
+after_success:
+- 'echo "mode: set" > all.coverprofile'
+- 'find . -name "*.coverprofile" -exec grep -v mode: {} >> all.coverprofile \;'
+- goveralls -coverprofile=all.coverprofile -repotoken=$COVERALLS_TOKEN
