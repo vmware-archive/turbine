@@ -9,6 +9,8 @@ type Build struct {
 
 	Parameters       map[string]string `json:"parameters"`
 	SecureParameters map[string]string `json:"secure_parameters"`
+
+	Status string `json:"status"`
 }
 
 type BuildSource struct {
