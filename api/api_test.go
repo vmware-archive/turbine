@@ -17,7 +17,9 @@ var _ = Describe("API", func() {
 	BeforeEach(func() {
 		handler := api.New(NullLogger())
 		server = httptest.NewServer(handler)
-		client = &http.Client{}
+		client = &http.Client{
+			Transport: &http.Transport{},
+		}
 	})
 
 	Describe("GET /builds/:build", func() {

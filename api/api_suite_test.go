@@ -1,8 +1,8 @@
 package api_test
 
 import (
+	"io/ioutil"
 	"log"
-	"os"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -15,9 +15,5 @@ func TestApi(t *testing.T) {
 }
 
 func NullLogger() *log.Logger {
-	devNull, err := os.Open(os.DevNull)
-	if err != nil {
-		panic("Could not make a null logger")
-	}
-	return log.New(devNull, "", 0)
+	return log.New(ioutil.Discard, "", 0)
 }

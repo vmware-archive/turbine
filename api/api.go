@@ -2,17 +2,27 @@ package api
 
 import (
 	"log"
+	"net/http"
+	"net/url"
 
-	"github.com/go-martini/martini"
+	"github.com/rcrowley/go-tigertonic"
 )
 
-func New(logger *log.Logger) *martini.ClassicMartini {
-	m := martini.Classic()
-	m.Map(logger)
+func New(logger *log.Logger) http.Handler {
+	mux := tigertonic.NewTrieServeMux()
 
-	m.Get("/builds/:build_id", func() string {
-		return "a build"
-	})
+	getBuild := tigertonic.Logged(tigertonic.Marshaled(getBuild), nil)
+	getBuild.Logger = logger
 
-	return m
+	mux.Handle(
+		"GET",
+		"/builds/{guid}",
+		getBuild,
+	)
+
+	return mux
+}
+
+func getBuild(*url.URL, http.Header, interface{}) (int, http.Header, interface{}, error) {
+	return http.StatusOK, nil, "ok", nil
 }
