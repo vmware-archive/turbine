@@ -10,15 +10,15 @@ env:
 
 before_install:
 - export PATH=$HOME/gopath/bin:$PATH
-- go get github.com/tools/godep
+- export PATH=$PWD/Godeps/_workspace/bin:$PATH
+- export GOPATH=$PWD/Godeps/_workspace:$GOPATH
 
 install:
-- godep restore
 - go get -v github.com/mattn/goveralls
 - go install github.com/onsi/ginkgo/ginkgo
 
 script:
-- ginkgo -r
+- ginkgo -r -cover
 
 after_success:
 - 'echo "mode: set" > all.coverprofile'
