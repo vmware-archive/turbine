@@ -32,8 +32,6 @@ var _ = Describe("Scheduler", func() {
 			build = &builds.Build{
 				Guid: "abc",
 
-				Callback: server.URL() + "/abc",
-
 				Source: builds.BuildSource{
 					Type: "git",
 					URI:  "http://10.10.2.20:56789/foo.git",
@@ -70,71 +68,75 @@ var _ = Describe("Scheduler", func() {
 		}
 
 		It("kicks off a builder", func() {
-			server.AllowUnhandledRequests = true
-
 			err := scheduler.Schedule(build)
 			Ω(err).ShouldNot(HaveOccurred())
 
 			Eventually(builder.Built).Should(ContainElement(build))
 		})
 
-		Context("when the build succeeds", func() {
-			var gotRequest <-chan struct{}
-
+		Context("when there is a callback registered", func() {
 			BeforeEach(func() {
-				builder.BuildResult = true
-
-				succeededBuild := *build
-				succeededBuild.Status = "succeeded"
-
-				gotRequest = handleBuild(succeededBuild)
+				build.Callback = server.URL() + "/abc"
 			})
 
-			It("reports the build as succeeded", func() {
-				err := scheduler.Schedule(build)
-				Ω(err).ShouldNot(HaveOccurred())
+			Context("when the build succeeds", func() {
+				var gotRequest <-chan struct{}
 
-				Eventually(gotRequest).Should(BeClosed())
-			})
-		})
+				BeforeEach(func() {
+					builder.BuildResult = true
 
-		Context("when the build fails", func() {
-			var gotRequest <-chan struct{}
+					succeededBuild := *build
+					succeededBuild.Status = "succeeded"
 
-			BeforeEach(func() {
-				builder.BuildResult = false
+					gotRequest = handleBuild(succeededBuild)
+				})
 
-				failedBuild := *build
-				failedBuild.Status = "failed"
+				It("reports the build as succeeded", func() {
+					err := scheduler.Schedule(build)
+					Ω(err).ShouldNot(HaveOccurred())
 
-				gotRequest = handleBuild(failedBuild)
-			})
-
-			It("reports the build as failed", func() {
-				err := scheduler.Schedule(build)
-				Ω(err).ShouldNot(HaveOccurred())
-
-				Eventually(gotRequest).Should(BeClosed())
-			})
-		})
-
-		Context("when building fails", func() {
-			var gotRequest <-chan struct{}
-
-			BeforeEach(func() {
-				builder.BuildError = errors.New("oh no!")
-
-				erroredBuild := *build
-				erroredBuild.Status = "errored"
-
-				gotRequest = handleBuild(erroredBuild)
+					Eventually(gotRequest).Should(BeClosed())
+				})
 			})
 
-			It("reports the build as errored", func() {
-				err := scheduler.Schedule(build)
-				Ω(err).ShouldNot(HaveOccurred())
+			Context("when the build fails", func() {
+				var gotRequest <-chan struct{}
 
-				Eventually(gotRequest).Should(BeClosed())
+				BeforeEach(func() {
+					builder.BuildResult = false
+
+					failedBuild := *build
+					failedBuild.Status = "failed"
+
+					gotRequest = handleBuild(failedBuild)
+				})
+
+				It("reports the build as failed", func() {
+					err := scheduler.Schedule(build)
+					Ω(err).ShouldNot(HaveOccurred())
+
+					Eventually(gotRequest).Should(BeClosed())
+				})
+			})
+
+			Context("when building fails", func() {
+				var gotRequest <-chan struct{}
+
+				BeforeEach(func() {
+					builder.BuildError = errors.New("oh no!")
+
+					erroredBuild := *build
+					erroredBuild.Status = "errored"
+
+					gotRequest = handleBuild(erroredBuild)
+				})
+
+				It("reports the build as errored", func() {
+					err := scheduler.Schedule(build)
+					Ω(err).ShouldNot(HaveOccurred())
+
+					Eventually(gotRequest).Should(BeClosed())
+				})
 			})
 		})
 	})

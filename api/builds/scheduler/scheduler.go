@@ -48,6 +48,10 @@ func (scheduler *Scheduler) Schedule(build *builds.Build) error {
 }
 
 func (scheduler *Scheduler) completeBuild(build builds.Build, ok bool, err error) {
+	if build.Callback == "" {
+		return
+	}
+
 	if err != nil {
 		build.Status = "errored"
 	} else if ok {
@@ -56,7 +60,7 @@ func (scheduler *Scheduler) completeBuild(build builds.Build, ok bool, err error
 		build.Status = "failed"
 	}
 
-	destination, err := url.Parse(build.Callback)
+	destination, err := url.ParseRequestURI(build.Callback)
 	if err != nil {
 		// this should be prevented by validation upfront
 		panic("invalid build callback URL: " + build.Callback)
