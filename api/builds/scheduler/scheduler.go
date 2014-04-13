@@ -47,29 +47,23 @@ func (scheduler *Scheduler) Schedule(build *builds.Build) error {
 	return nil
 }
 
-func (scheduler *Scheduler) completeBuild(build builds.Build, ok bool, err error) {
+func (scheduler *Scheduler) completeBuild(build builds.Build, succeeded bool, errored error) {
 	if build.Callback == "" {
 		return
 	}
 
-	if err != nil {
+	if errored != nil {
 		build.Status = "errored"
-	} else if ok {
+	} else if succeeded {
 		build.Status = "succeeded"
 	} else {
 		build.Status = "failed"
 	}
 
-	destination, err := url.ParseRequestURI(build.Callback)
-	if err != nil {
-		// this should be prevented by validation upfront
-		panic("invalid build callback URL: " + build.Callback)
-	}
+	// this should always successfully parse (it's done via validation)
+	destination, _ := url.ParseRequestURI(build.Callback)
 
-	payload, err := json.Marshal(build)
-	if err != nil {
-		panic("failed to marshal build: " + err.Error())
-	}
+	payload, _ := json.Marshal(build)
 
 	scheduler.httpClient.Do(&http.Request{
 		Method: "PUT",
