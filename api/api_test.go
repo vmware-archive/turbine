@@ -71,6 +71,15 @@ var _ = Describe("API", func() {
 			Ω(response.StatusCode).Should(Equal(http.StatusCreated))
 		})
 
+		It("returns the build", func() {
+			var returnedBuild builds.Build
+
+			err := json.NewDecoder(response.Body).Decode(&returnedBuild)
+			Ω(err).ShouldNot(HaveOccurred())
+
+			Ω(returnedBuild).Should(Equal(*build))
+		})
+
 		It("schedules the build", func() {
 			Ω(scheduler.Scheduled()).Should(ContainElement(build))
 		})

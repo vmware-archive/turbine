@@ -37,7 +37,7 @@ func (handler *Handler) post(url *url.URL, header http.Header, build *Build) (in
 		return http.StatusServiceUnavailable, nil, nil, err
 	}
 
-	return http.StatusCreated, nil, &Build{}, nil
+	return http.StatusCreated, nil, build, nil
 }
 
 func (handler *Handler) validateBuild(build *Build) error {
