@@ -2,6 +2,7 @@ package imagefetcher_test
 
 import (
 	"errors"
+	"os"
 
 	"github.com/fsouza/go-dockerclient"
 	. "github.com/onsi/ginkgo"
@@ -31,7 +32,8 @@ var _ = Describe("Imagefetcher", func() {
 
 		Ω(dockerImageClient.PulledImages()).Should(ContainElement(fakedocker.PulledImage{
 			PullImageOptions: docker.PullImageOptions{
-				Repository: "some-name",
+				Repository:   "some-name",
+				OutputStream: os.Stderr,
 			},
 		}))
 
