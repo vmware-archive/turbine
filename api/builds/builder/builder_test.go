@@ -3,7 +3,9 @@ package builder_test
 import (
 	"errors"
 
+	"github.com/cloudfoundry-incubator/gordon"
 	"github.com/cloudfoundry-incubator/gordon/fake_gordon"
+	"github.com/cloudfoundry-incubator/gordon/warden"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -21,6 +23,18 @@ var _ = Describe("Builder", func() {
 
 	var build *builds.Build
 
+	primedStream := func(payloads ...*warden.ProcessPayload) <-chan *warden.ProcessPayload {
+		stream := make(chan *warden.ProcessPayload, len(payloads))
+
+		for _, payload := range payloads {
+			stream <- payload
+		}
+
+		close(stream)
+
+		return stream
+	}
+
 	BeforeEach(func() {
 		sourceFetcher = fakesourcefetcher.New()
 		imageFetcher = fakeimagefetcher.New()
@@ -30,11 +44,21 @@ var _ = Describe("Builder", func() {
 		build = &builds.Build{
 			Image: "some-image-name",
 
+			Script: "./bin/test",
+
 			Source: builds.BuildSource{
 				Type: "raw",
 				URI:  "http://example.com/foo.tar.gz",
 			},
 		}
+
+		exitStatus := uint32(0)
+
+		successfulStream := primedStream(&warden.ProcessPayload{
+			ExitStatus: &exitStatus,
+		})
+
+		wardenClient.SetRunReturnValues(42, successfulStream, nil)
 	})
 
 	It("fetches the build image and uses it for the container rootfs", func() {
@@ -63,8 +87,87 @@ var _ = Describe("Builder", func() {
 		Ω(wardenClient.ThingsCopiedIn()).Should(ContainElement(&fake_gordon.CopiedIn{
 			Handle: handle,
 			Src:    "/path/on/disk/",
-			Dst:    "/tmp/build/",
+			Dst:    "./",
 		}))
+	})
+
+	It("runs the build's script in the container", func() {
+		_, err := builder.Build(build)
+		Ω(err).ShouldNot(HaveOccurred())
+
+		handle := wardenClient.Created()[0].Handle
+
+		Ω(wardenClient.ScriptsThatRan()).Should(ContainElement(&fake_gordon.RunningScript{
+			Handle: handle,
+			Script: "./bin/test",
+		}))
+	})
+
+	Context("when running the build's script fails", func() {
+		disaster := errors.New("oh no!")
+
+		BeforeEach(func() {
+			wardenClient.WhenRunning(
+				"",
+				"./bin/test",
+				gordon.ResourceLimits{},
+				func() (uint32, <-chan *warden.ProcessPayload, error) {
+					return 0, nil, disaster
+				},
+			)
+		})
+
+		It("returns true", func() {
+			succeeded, err := builder.Build(build)
+			Ω(err).Should(Equal(disaster))
+			Ω(succeeded).Should(BeFalse())
+		})
+	})
+
+	Context("when the build's script exits 0", func() {
+		BeforeEach(func() {
+			wardenClient.WhenRunning(
+				"",
+				"./bin/test",
+				gordon.ResourceLimits{},
+				func() (uint32, <-chan *warden.ProcessPayload, error) {
+					exitStatus := uint32(0)
+
+					return 42, primedStream(&warden.ProcessPayload{
+						ExitStatus: &exitStatus,
+					}), nil
+				},
+			)
+		})
+
+		It("returns true", func() {
+			succeeded, err := builder.Build(build)
+			Ω(err).ShouldNot(HaveOccurred())
+			Ω(succeeded).Should(BeTrue())
+		})
+	})
+
+	Context("when the build's script exits nonzero", func() {
+		BeforeEach(func() {
+			wardenClient.WhenRunning(
+				"",
+				"./bin/test",
+				gordon.ResourceLimits{},
+				func() (uint32, <-chan *warden.ProcessPayload, error) {
+					exitStatus := uint32(42)
+
+					return 42, primedStream(&warden.ProcessPayload{
+						ExitStatus: &exitStatus,
+					}), nil
+				},
+			)
+		})
+
+		It("returns true", func() {
+			succeeded, err := builder.Build(build)
+			Ω(err).ShouldNot(HaveOccurred())
+			Ω(succeeded).Should(BeFalse())
+		})
 	})
 
 	Context("when fetching the image fails", func() {

@@ -15,8 +15,6 @@ type ImageFetcher interface {
 	Fetch(name string) (id string, err error)
 }
 
-const buildLocation = "/tmp/build"
-
 type Builder struct {
 	sourceFetcher SourceFetcher
 	imageFetcher  ImageFetcher
@@ -55,10 +53,23 @@ func (builder *Builder) Build(build *builds.Build) (bool, error) {
 
 	handle := createResponse.GetHandle()
 
-	_, err = builder.wardenClient.CopyIn(handle, fetchedSource+"/", buildLocation+"/")
+	_, err = builder.wardenClient.CopyIn(handle, fetchedSource+"/", "./")
 	if err != nil {
 		return false, err
 	}
 
-	return true, nil
+	_, stream, err := builder.wardenClient.Run(handle, build.Script, gordon.ResourceLimits{})
+	if err != nil {
+		return false, err
+	}
+
+	succeeded := false
+
+	for chunk := range stream {
+		if chunk.ExitStatus != nil {
+			succeeded = chunk.GetExitStatus() == 0
+		}
+	}
+
+	return succeeded, nil
 }
