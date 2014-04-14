@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"os"
 
@@ -51,8 +50,6 @@ var wardenAddr = flag.String(
 func main() {
 	logger := log.New(os.Stdout, "", 0)
 	logger.Println("Booting...")
-
-	fmt.Println(*dockerEndpoint)
 
 	dockerClient, err := docker.NewClient(*dockerEndpoint)
 	if err != nil {
