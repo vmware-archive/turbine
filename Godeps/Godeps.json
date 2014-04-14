@@ -6,6 +6,22 @@
 	],
 	"Deps": [
 		{
+			"ImportPath": "code.google.com/p/gogoprotobuf/proto",
+			"Rev": "dc9b8350fb4568b6562900df872672f378242552"
+		},
+		{
+			"ImportPath": "github.com/cloudfoundry-incubator/garden/backend",
+			"Rev": "d367997878f75ee4ac6b379a209c457afdca37af"
+		},
+		{
+			"ImportPath": "github.com/cloudfoundry-incubator/gordon",
+			"Rev": "4bca97b7a9962483cf63b2453852244ab8e0db75"
+		},
+		{
+			"ImportPath": "github.com/nu7hatch/gouuid",
+			"Rev": "179d4d0c4d8d407a32af483c2354df1d2c91e6c3"
+		},
+		{
 			"ImportPath": "github.com/onsi/ginkgo",
 			"Rev": "3632cbe0b58a9005513942e9d4c4920e375d6778"
 		},
