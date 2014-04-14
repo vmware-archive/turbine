@@ -48,6 +48,8 @@ var wardenAddr = flag.String(
 )
 
 func main() {
+	flag.Parse()
+
 	logger := log.New(os.Stdout, "", 0)
 	logger.Println("Booting...")
 
