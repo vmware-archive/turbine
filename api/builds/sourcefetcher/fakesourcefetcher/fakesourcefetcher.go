@@ -1,4 +1,4 @@
-package fakefetcher
+package fakesourcefetcher
 
 import (
 	"sync"

@@ -3,6 +3,9 @@ package builds
 type Build struct {
 	Guid string `json:"guid"`
 
+	Image  string `json:"image"`
+	Script string `json:"script"`
+
 	Callback string `json:"callback"`
 
 	Source BuildSource `json:"source"`
