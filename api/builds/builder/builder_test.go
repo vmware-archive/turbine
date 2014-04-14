@@ -50,25 +50,21 @@ var _ = Describe("Builder", func() {
 		Ω(createdContainers[0].RootFSPath).Should(Equal("image:some-image-id"))
 	})
 
-	It("fetches the build source", func() {
+	It("fetches the build source and copies it in to the container", func() {
+		sourceFetcher.FetchResult = "/path/on/disk"
+
 		_, err := builder.Build(build)
 		Ω(err).ShouldNot(HaveOccurred())
 
 		Ω(sourceFetcher.Fetched()).Should(ContainElement(build.Source))
-	})
 
-	Context("when creating the container fails", func() {
-		disaster := errors.New("oh no!")
+		handle := wardenClient.Created()[0].Handle
 
-		BeforeEach(func() {
-			wardenClient.CreateError = disaster
-		})
-
-		It("returns the error", func() {
-			succeeded, err := builder.Build(build)
-			Ω(err).Should(Equal(disaster))
-			Ω(succeeded).Should(BeFalse())
-		})
+		Ω(wardenClient.ThingsCopiedIn()).Should(ContainElement(&fake_gordon.CopiedIn{
+			Handle: handle,
+			Src:    "/path/on/disk/",
+			Dst:    "/tmp/build/",
+		}))
 	})
 
 	Context("when fetching the image fails", func() {
@@ -85,11 +81,39 @@ var _ = Describe("Builder", func() {
 		})
 	})
 
+	Context("when creating the container fails", func() {
+		disaster := errors.New("oh no!")
+
+		BeforeEach(func() {
+			wardenClient.CreateError = disaster
+		})
+
+		It("returns the error", func() {
+			succeeded, err := builder.Build(build)
+			Ω(err).Should(Equal(disaster))
+			Ω(succeeded).Should(BeFalse())
+		})
+	})
+
 	Context("when fetching the source fails", func() {
 		disaster := errors.New("oh no!")
 
 		BeforeEach(func() {
 			sourceFetcher.FetchError = disaster
+		})
+
+		It("returns the error", func() {
+			succeeded, err := builder.Build(build)
+			Ω(err).Should(Equal(disaster))
+			Ω(succeeded).Should(BeFalse())
+		})
+	})
+
+	Context("when copying the source in to the container fails", func() {
+		disaster := errors.New("oh no!")
+
+		BeforeEach(func() {
+			wardenClient.SetCopyInErr(disaster)
 		})
 
 		It("returns the error", func() {

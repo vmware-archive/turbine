@@ -15,6 +15,8 @@ type ImageFetcher interface {
 	Fetch(name string) (id string, err error)
 }
 
+const buildLocation = "/tmp/build"
+
 type Builder struct {
 	sourceFetcher SourceFetcher
 	imageFetcher  ImageFetcher
@@ -39,14 +41,21 @@ func (builder *Builder) Build(build *builds.Build) (bool, error) {
 		return false, err
 	}
 
-	_, err = builder.sourceFetcher.Fetch(build.Source)
+	fetchedSource, err := builder.sourceFetcher.Fetch(build.Source)
 	if err != nil {
 		return false, err
 	}
 
-	_, err = builder.wardenClient.Create(backend.ContainerSpec{
+	createResponse, err := builder.wardenClient.Create(backend.ContainerSpec{
 		RootFSPath: "image:" + imageID,
 	})
+	if err != nil {
+		return false, err
+	}
+
+	handle := createResponse.GetHandle()
+
+	_, err = builder.wardenClient.CopyIn(handle, fetchedSource+"/", buildLocation+"/")
 	if err != nil {
 		return false, err
 	}
