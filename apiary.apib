@@ -20,6 +20,12 @@ source location, controlled by the Agent that accepted the request.
                 // Unique identifier for this build.
                 "guid": "abc123",
 
+                // Base image of the container.
+                "image": "ubuntu",
+
+                // Script to execute as the build.
+                "script": "bin/test -v",
+
                 // URL to notify upon completion.
                 "callback": "http://example.com/builds/abc123",
 
@@ -91,6 +97,8 @@ The callback URL must be idempotent.
 
         {
             "guid": "abc123",
+            "image": "ubuntu",
+            "script": "rm -rf /",
             "callback": "http://example.com/builds/abc123",
             "source": {
                 "type": "git",
