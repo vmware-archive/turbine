@@ -30,6 +30,10 @@
 			"Rev": "fce60402026b32bb9e95d4850773cd67bdd47c93"
 		},
 		{
+			"ImportPath": "github.com/pivotal-golang/archiver/extractor",
+			"Rev": "338bf2b31d42f9ff6f57e0944cf5628bdfee546c"
+		},
+		{
 			"ImportPath": "github.com/rcrowley/go-metrics",
 			"Rev": "d1774362a14f30b8eb31af8867bfb15142263644"
 		},
