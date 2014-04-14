@@ -1,6 +1,10 @@
 package imagefetcher
 
-import "github.com/fsouza/go-dockerclient"
+import (
+	"os"
+
+	"github.com/fsouza/go-dockerclient"
+)
 
 type DockerImageClient interface {
 	PullImage(opts docker.PullImageOptions, auth docker.AuthConfiguration) error
@@ -20,7 +24,8 @@ func NewImageFetcher(dockerImageClient DockerImageClient) *ImageFetcher {
 func (fetcher *ImageFetcher) Fetch(name string) (string, error) {
 	err := fetcher.dockerImageClient.PullImage(
 		docker.PullImageOptions{
-			Repository: name,
+			Repository:   name,
+			OutputStream: os.Stderr,
 		},
 		docker.AuthConfiguration{},
 	)

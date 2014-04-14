@@ -2,6 +2,7 @@ package builds
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"net/url"
 
@@ -31,6 +32,8 @@ func (handler *Handler) post(url *url.URL, header http.Header, build *Build) (in
 	if err != nil {
 		return http.StatusBadRequest, nil, nil, err
 	}
+
+	log.Println("scheduling", build.Guid)
 
 	err = handler.scheduler.Schedule(build)
 	if err != nil {

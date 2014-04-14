@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"sync"
@@ -40,6 +41,8 @@ func (scheduler *Scheduler) Schedule(build *builds.Build) error {
 	go func() {
 		defer scheduler.runningBuilds.Done()
 
+		log.Println("building", build.Guid)
+
 		ok, err := scheduler.builder.Build(build)
 		scheduler.completeBuild(*build, ok, err)
 	}()
@@ -48,16 +51,18 @@ func (scheduler *Scheduler) Schedule(build *builds.Build) error {
 }
 
 func (scheduler *Scheduler) completeBuild(build builds.Build, succeeded bool, errored error) {
-	if build.Callback == "" {
-		return
-	}
-
 	if errored != nil {
 		build.Status = "errored"
 	} else if succeeded {
 		build.Status = "succeeded"
 	} else {
 		build.Status = "failed"
+	}
+
+	log.Println("completed:", build.Guid, build.Status, errored)
+
+	if build.Callback == "" {
+		return
 	}
 
 	// this should always successfully parse (it's done via validation)
