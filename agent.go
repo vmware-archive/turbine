@@ -11,10 +11,10 @@ import (
 	"github.com/rcrowley/go-tigertonic"
 
 	"github.com/room101-ci/agent/api"
-	"github.com/room101-ci/agent/api/builds/builder"
-	"github.com/room101-ci/agent/api/builds/imagefetcher"
-	"github.com/room101-ci/agent/api/builds/scheduler"
-	"github.com/room101-ci/agent/api/builds/sourcefetcher"
+	"github.com/room101-ci/agent/builder"
+	"github.com/room101-ci/agent/imagefetcher"
+	"github.com/room101-ci/agent/scheduler"
+	"github.com/room101-ci/agent/sourcefetcher"
 )
 
 var listenAddr = flag.String(

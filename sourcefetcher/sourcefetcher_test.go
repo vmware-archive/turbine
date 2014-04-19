@@ -15,7 +15,7 @@ import (
 	"github.com/pivotal-golang/archiver/extractor/fake_extractor"
 
 	"github.com/room101-ci/agent/api/builds"
-	. "github.com/room101-ci/agent/api/builds/sourcefetcher"
+	. "github.com/room101-ci/agent/sourcefetcher"
 	"github.com/room101-ci/agent/testhelpers/archiver"
 )
 

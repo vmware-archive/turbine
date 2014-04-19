@@ -13,7 +13,7 @@ import (
 
 	"github.com/room101-ci/agent/api"
 	"github.com/room101-ci/agent/api/builds"
-	"github.com/room101-ci/agent/api/builds/scheduler/fakescheduler"
+	"github.com/room101-ci/agent/scheduler/fakescheduler"
 )
 
 var _ = Describe("API", func() {

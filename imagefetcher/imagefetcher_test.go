@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	. "github.com/room101-ci/agent/api/builds/imagefetcher"
+	. "github.com/room101-ci/agent/imagefetcher"
 
 	"github.com/room101-ci/agent/testhelpers/fakedocker"
 )

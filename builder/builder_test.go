@@ -10,9 +10,9 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/room101-ci/agent/api/builds"
-	. "github.com/room101-ci/agent/api/builds/builder"
-	"github.com/room101-ci/agent/api/builds/imagefetcher/fakeimagefetcher"
-	"github.com/room101-ci/agent/api/builds/sourcefetcher/fakesourcefetcher"
+	. "github.com/room101-ci/agent/builder"
+	"github.com/room101-ci/agent/imagefetcher/fakeimagefetcher"
+	"github.com/room101-ci/agent/sourcefetcher/fakesourcefetcher"
 )
 
 var _ = Describe("Builder", func() {
