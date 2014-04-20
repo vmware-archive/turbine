@@ -6,7 +6,7 @@ import (
 
 	"github.com/rcrowley/go-tigertonic"
 
-	"github.com/room101-ci/agent/api/builds"
+	"github.com/winston-ci/prole/api/builds"
 )
 
 func New(logger *log.Logger, buildScheduler builds.Scheduler) http.Handler {

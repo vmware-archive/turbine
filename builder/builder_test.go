@@ -3,28 +3,28 @@ package builder_test
 import (
 	"errors"
 
-	"github.com/cloudfoundry-incubator/gordon"
-	"github.com/cloudfoundry-incubator/gordon/fake_gordon"
-	"github.com/cloudfoundry-incubator/gordon/warden"
+	"github.com/cloudfoundry-incubator/garden/client/connection/fake_connection"
+	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
+	"github.com/cloudfoundry-incubator/garden/warden"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/room101-ci/agent/api/builds"
-	. "github.com/room101-ci/agent/builder"
-	"github.com/room101-ci/agent/imagefetcher/fakeimagefetcher"
-	"github.com/room101-ci/agent/sourcefetcher/fakesourcefetcher"
+	"github.com/winston-ci/prole/api/builds"
+	. "github.com/winston-ci/prole/builder"
+	"github.com/winston-ci/prole/imagefetcher/fakeimagefetcher"
+	"github.com/winston-ci/prole/sourcefetcher/fakesourcefetcher"
 )
 
 var _ = Describe("Builder", func() {
 	var sourceFetcher *fakesourcefetcher.Fetcher
 	var imageFetcher *fakeimagefetcher.Fetcher
-	var wardenClient *fake_gordon.FakeGordon
+	var wardenClient *fake_warden_client.FakeClient
 	var builder *Builder
 
 	var build *builds.Build
 
-	primedStream := func(payloads ...*warden.ProcessPayload) <-chan *warden.ProcessPayload {
-		stream := make(chan *warden.ProcessPayload, len(payloads))
+	primedStream := func(payloads ...warden.ProcessStream) <-chan warden.ProcessStream {
+		stream := make(chan warden.ProcessStream, len(payloads))
 
 		for _, payload := range payloads {
 			stream <- payload
@@ -38,7 +38,7 @@ var _ = Describe("Builder", func() {
 	BeforeEach(func() {
 		sourceFetcher = fakesourcefetcher.New()
 		imageFetcher = fakeimagefetcher.New()
-		wardenClient = fake_gordon.New()
+		wardenClient = fake_warden_client.New()
 		builder = NewBuilder(sourceFetcher, imageFetcher, wardenClient)
 
 		build = &builds.Build{
@@ -54,11 +54,17 @@ var _ = Describe("Builder", func() {
 
 		exitStatus := uint32(0)
 
-		successfulStream := primedStream(&warden.ProcessPayload{
+		successfulStream := primedStream(warden.ProcessStream{
 			ExitStatus: &exitStatus,
 		})
 
-		wardenClient.SetRunReturnValues(42, successfulStream, nil)
+		wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+			return 42, successfulStream, nil
+		}
+
+		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
+			return "some-handle", nil
+		}
 	})
 
 	It("fetches the build image and uses it for the container rootfs", func() {
@@ -69,7 +75,7 @@ var _ = Describe("Builder", func() {
 
 		Ω(imageFetcher.Fetched()).Should(ContainElement("some-image-name"))
 
-		createdContainers := wardenClient.Created()
+		createdContainers := wardenClient.Connection.Created()
 		Ω(createdContainers).Should(HaveLen(1))
 		Ω(createdContainers[0].RootFSPath).Should(Equal("image:some-image-id"))
 	})
@@ -82,12 +88,9 @@ var _ = Describe("Builder", func() {
 
 		Ω(sourceFetcher.Fetched()).Should(ContainElement(build.Source))
 
-		handle := wardenClient.Created()[0].Handle
-
-		Ω(wardenClient.ThingsCopiedIn()).Should(ContainElement(&fake_gordon.CopiedIn{
-			Handle: handle,
-			Src:    "/path/on/disk/",
-			Dst:    "./",
+		Ω(wardenClient.Connection.CopiedIn("some-handle")).Should(ContainElement(fake_connection.CopyInSpec{
+			Source:      "/path/on/disk/",
+			Destination: "./",
 		}))
 	})
 
@@ -95,10 +98,7 @@ var _ = Describe("Builder", func() {
 		_, err := builder.Build(build)
 		Ω(err).ShouldNot(HaveOccurred())
 
-		handle := wardenClient.Created()[0].Handle
-
-		Ω(wardenClient.ScriptsThatRan()).Should(ContainElement(&fake_gordon.RunningScript{
-			Handle: handle,
+		Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
 			Script: "./bin/test",
 		}))
 	})
@@ -107,14 +107,9 @@ var _ = Describe("Builder", func() {
 		disaster := errors.New("oh no!")
 
 		BeforeEach(func() {
-			wardenClient.WhenRunning(
-				"",
-				"./bin/test",
-				gordon.ResourceLimits{},
-				func() (uint32, <-chan *warden.ProcessPayload, error) {
-					return 0, nil, disaster
-				},
-			)
+			wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+				return 0, nil, disaster
+			}
 		})
 
 		It("returns true", func() {
@@ -126,18 +121,13 @@ var _ = Describe("Builder", func() {
 
 	Context("when the build's script exits 0", func() {
 		BeforeEach(func() {
-			wardenClient.WhenRunning(
-				"",
-				"./bin/test",
-				gordon.ResourceLimits{},
-				func() (uint32, <-chan *warden.ProcessPayload, error) {
-					exitStatus := uint32(0)
+			wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+				exitStatus := uint32(0)
 
-					return 42, primedStream(&warden.ProcessPayload{
-						ExitStatus: &exitStatus,
-					}), nil
-				},
-			)
+				return 42, primedStream(warden.ProcessStream{
+					ExitStatus: &exitStatus,
+				}), nil
+			}
 		})
 
 		It("returns true", func() {
@@ -149,18 +139,13 @@ var _ = Describe("Builder", func() {
 
 	Context("when the build's script exits nonzero", func() {
 		BeforeEach(func() {
-			wardenClient.WhenRunning(
-				"",
-				"./bin/test",
-				gordon.ResourceLimits{},
-				func() (uint32, <-chan *warden.ProcessPayload, error) {
-					exitStatus := uint32(42)
+			wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+				exitStatus := uint32(2)
 
-					return 42, primedStream(&warden.ProcessPayload{
-						ExitStatus: &exitStatus,
-					}), nil
-				},
-			)
+				return 42, primedStream(warden.ProcessStream{
+					ExitStatus: &exitStatus,
+				}), nil
+			}
 		})
 
 		It("returns true", func() {
@@ -188,7 +173,9 @@ var _ = Describe("Builder", func() {
 		disaster := errors.New("oh no!")
 
 		BeforeEach(func() {
-			wardenClient.CreateError = disaster
+			wardenClient.Connection.WhenCreating = func(spec warden.ContainerSpec) (string, error) {
+				return "", disaster
+			}
 		})
 
 		It("returns the error", func() {
@@ -216,7 +203,9 @@ var _ = Describe("Builder", func() {
 		disaster := errors.New("oh no!")
 
 		BeforeEach(func() {
-			wardenClient.SetCopyInErr(disaster)
+			wardenClient.Connection.WhenCopyingIn = func(handle string, src, dst string) error {
+				return disaster
+			}
 		})
 
 		It("returns the error", func() {

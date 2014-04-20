@@ -3,7 +3,7 @@ package fakesourcefetcher
 import (
 	"sync"
 
-	"github.com/room101-ci/agent/api/builds"
+	"github.com/winston-ci/prole/api/builds"
 )
 
 type Fetcher struct {

@@ -1,10 +1,9 @@
 package builder
 
 import (
-	"github.com/cloudfoundry-incubator/garden/backend"
-	"github.com/cloudfoundry-incubator/gordon"
+	"github.com/cloudfoundry-incubator/garden/warden"
 
-	"github.com/room101-ci/agent/api/builds"
+	"github.com/winston-ci/prole/api/builds"
 )
 
 type SourceFetcher interface {
@@ -18,13 +17,13 @@ type ImageFetcher interface {
 type Builder struct {
 	sourceFetcher SourceFetcher
 	imageFetcher  ImageFetcher
-	wardenClient  gordon.Client
+	wardenClient  warden.Client
 }
 
 func NewBuilder(
 	sourceFetcher SourceFetcher,
 	imageFetcher ImageFetcher,
-	wardenClient gordon.Client,
+	wardenClient warden.Client,
 ) *Builder {
 	return &Builder{
 		sourceFetcher: sourceFetcher,
@@ -44,21 +43,19 @@ func (builder *Builder) Build(build *builds.Build) (bool, error) {
 		return false, err
 	}
 
-	createResponse, err := builder.wardenClient.Create(backend.ContainerSpec{
+	container, err := builder.wardenClient.Create(warden.ContainerSpec{
 		RootFSPath: "image:" + imageID,
 	})
 	if err != nil {
 		return false, err
 	}
 
-	handle := createResponse.GetHandle()
-
-	_, err = builder.wardenClient.CopyIn(handle, fetchedSource+"/", "./")
+	err = container.CopyIn(fetchedSource+"/", "./")
 	if err != nil {
 		return false, err
 	}
 
-	_, stream, err := builder.wardenClient.Run(handle, build.Script, gordon.ResourceLimits{})
+	_, stream, err := container.Run(warden.ProcessSpec{Script: build.Script})
 	if err != nil {
 		return false, err
 	}
@@ -67,7 +64,7 @@ func (builder *Builder) Build(build *builds.Build) (bool, error) {
 
 	for chunk := range stream {
 		if chunk.ExitStatus != nil {
-			succeeded = chunk.GetExitStatus() == 0
+			succeeded = *chunk.ExitStatus == 0
 		}
 	}
 

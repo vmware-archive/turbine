@@ -8,9 +8,9 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	. "github.com/room101-ci/agent/imagefetcher"
+	. "github.com/winston-ci/prole/imagefetcher"
 
-	"github.com/room101-ci/agent/testhelpers/fakedocker"
+	"github.com/winston-ci/prole/testhelpers/fakedocker"
 )
 
 var _ = Describe("Imagefetcher", func() {

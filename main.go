@@ -5,16 +5,17 @@ import (
 	"log"
 	"os"
 
-	"github.com/cloudfoundry-incubator/gordon"
+	WardenClient "github.com/cloudfoundry-incubator/garden/client"
+	WardenConnection "github.com/cloudfoundry-incubator/garden/client/connection"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/pivotal-golang/archiver/extractor"
 	"github.com/rcrowley/go-tigertonic"
 
-	"github.com/room101-ci/agent/api"
-	"github.com/room101-ci/agent/builder"
-	"github.com/room101-ci/agent/imagefetcher"
-	"github.com/room101-ci/agent/scheduler"
-	"github.com/room101-ci/agent/sourcefetcher"
+	"github.com/winston-ci/prole/api"
+	"github.com/winston-ci/prole/builder"
+	"github.com/winston-ci/prole/imagefetcher"
+	"github.com/winston-ci/prole/scheduler"
+	"github.com/winston-ci/prole/sourcefetcher"
 )
 
 var listenAddr = flag.String(
@@ -58,7 +59,7 @@ func main() {
 		logger.Fatalln("could not initialize docker client:", err)
 	}
 
-	wardenClient := gordon.NewClient(&gordon.ConnectionInfo{
+	wardenClient := WardenClient.New(&WardenConnection.Info{
 		Network: *wardenNetwork,
 		Addr:    *wardenAddr,
 	})

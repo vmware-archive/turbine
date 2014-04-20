@@ -11,9 +11,9 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/room101-ci/agent/api"
-	"github.com/room101-ci/agent/api/builds"
-	"github.com/room101-ci/agent/scheduler/fakescheduler"
+	"github.com/winston-ci/prole/api"
+	"github.com/winston-ci/prole/api/builds"
+	"github.com/winston-ci/prole/scheduler/fakescheduler"
 )
 
 var _ = Describe("API", func() {
@@ -50,7 +50,7 @@ var _ = Describe("API", func() {
 				Guid: "abc",
 				Source: builds.BuildSource{
 					Type: "git",
-					URI:  "https://github.com/room101-ci/agent.git",
+					URI:  "https://github.com/winston-ci/prole.git",
 					Ref:  "deadbeef",
 				},
 			}

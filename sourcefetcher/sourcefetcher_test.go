@@ -14,9 +14,9 @@ import (
 	Extractor "github.com/pivotal-golang/archiver/extractor"
 	"github.com/pivotal-golang/archiver/extractor/fake_extractor"
 
-	"github.com/room101-ci/agent/api/builds"
-	. "github.com/room101-ci/agent/sourcefetcher"
-	"github.com/room101-ci/agent/testhelpers/archiver"
+	"github.com/winston-ci/prole/api/builds"
+	. "github.com/winston-ci/prole/sourcefetcher"
+	"github.com/winston-ci/prole/testhelpers/archiver"
 )
 
 var _ = Describe("SourceFetcher", func() {

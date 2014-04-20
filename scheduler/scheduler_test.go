@@ -8,9 +8,9 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
 
-	"github.com/room101-ci/agent/api/builds"
-	"github.com/room101-ci/agent/builder/fakebuilder"
-	. "github.com/room101-ci/agent/scheduler"
+	"github.com/winston-ci/prole/api/builds"
+	"github.com/winston-ci/prole/builder/fakebuilder"
+	. "github.com/winston-ci/prole/scheduler"
 )
 
 var _ = Describe("Scheduler", func() {

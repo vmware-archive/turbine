@@ -1,6 +1,6 @@
 = Room 101 Agent
 
-image:https://travis-ci.org/room101-ci/agent.svg?branch=master["Build Status", link="https://travis-ci.org/room101-ci/agent"]
-image:https://coveralls.io/repos/room101-ci/agent/badge.png["Coverage Status", link="https://coveralls.io/r/room101-ci/agent"]
+image:https://travis-ci.org/winston-ci/prole.svg?branch=master["Build Status", link="https://travis-ci.org/winston-ci/prole"]
+image:https://coveralls.io/repos/winston-ci/prole/badge.png["Coverage Status", link="https://coveralls.io/r/winston-ci/prole"]
 
 * http://docs.room101agent.apiary.io/[API]
