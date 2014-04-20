@@ -1,5 +1,5 @@
 {
-	"ImportPath": "github.com/room101-ci/agent",
+	"ImportPath": "github.com/winston-ci/prole",
 	"GoVersion": "go1.2.1",
 	"Packages": [
 		"./..."
@@ -10,12 +10,21 @@
 			"Rev": "dc9b8350fb4568b6562900df872672f378242552"
 		},
 		{
-			"ImportPath": "github.com/cloudfoundry-incubator/garden/backend",
-			"Rev": "d367997878f75ee4ac6b379a209c457afdca37af"
+			"ImportPath": "code.google.com/p/goprotobuf/proto",
+			"Comment": "go.r60-136",
+			"Rev": "48b0cac3bc4a820ca87a28b44026c4166e3e1f07"
 		},
 		{
-			"ImportPath": "github.com/cloudfoundry-incubator/gordon",
-			"Rev": "4bca97b7a9962483cf63b2453852244ab8e0db75"
+			"ImportPath": "github.com/cloudfoundry-incubator/garden/client",
+			"Rev": "1cf11d8a3fb117b33f8d6b2ffbdecf10ec4526d9"
+		},
+		{
+			"ImportPath": "github.com/cloudfoundry-incubator/garden/protocol",
+			"Rev": "1cf11d8a3fb117b33f8d6b2ffbdecf10ec4526d9"
+		},
+		{
+			"ImportPath": "github.com/cloudfoundry-incubator/garden/warden",
+			"Rev": "1cf11d8a3fb117b33f8d6b2ffbdecf10ec4526d9"
 		},
 		{
 			"ImportPath": "github.com/fsouza/go-dockerclient",
@@ -23,16 +32,12 @@
 			"Rev": "3814303c8a449216e5d504ae92c3115d19e878e1"
 		},
 		{
-			"ImportPath": "github.com/nu7hatch/gouuid",
-			"Rev": "179d4d0c4d8d407a32af483c2354df1d2c91e6c3"
-		},
-		{
 			"ImportPath": "github.com/onsi/ginkgo",
-			"Rev": "3632cbe0b58a9005513942e9d4c4920e375d6778"
+			"Rev": "462cb7e31b222093d2fd2f4f0cbbce324f6ab3be"
 		},
 		{
 			"ImportPath": "github.com/onsi/gomega",
-			"Rev": "fce60402026b32bb9e95d4850773cd67bdd47c93"
+			"Rev": "f1c0de3870567f8828e4d040e5a8aeed8afff3f5"
 		},
 		{
 			"ImportPath": "github.com/pivotal-golang/archiver/extractor",
