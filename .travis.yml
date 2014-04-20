@@ -6,7 +6,7 @@ go:
 
 env:
   global:
-    secure: ZBqQnFYuf0qyL4kg5nF6kKy/wpgdp2/Fcxx43/hktulNI9jjxs/XUm22Jzy00jgAJImoxTFzd6EVR5AAX84pcwHrozAu5ZAX6lmuDmvKn0aFQONZLx+S6KP8rmPGbbjJHP5wSpNfMONNrzaAsQ2+aKaiNYqOfYJ4MgcMsAL4nTE=
+    secure: BMAPnCjzk75tPbyTNeLMroIJ0K3dfjQ8YzYSCVk8Qprgh88YT8U9slIx0/aer3Z692qZq+y5cwZmubv6lIZDmbUue073/eXSH70NaAPIFqdmcK+YoTcc3vNDfAx4oaVJa1jAjdSbb6I5airqq8B/W4CD3OYHR0pC5G/XHzzSDg8=
 
 before_install:
 - export PATH=$HOME/gopath/bin:$PATH
