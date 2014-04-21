@@ -16,35 +16,27 @@ type ImageFetcher interface {
 
 type Builder struct {
 	sourceFetcher SourceFetcher
-	imageFetcher  ImageFetcher
 	wardenClient  warden.Client
 }
 
 func NewBuilder(
 	sourceFetcher SourceFetcher,
-	imageFetcher ImageFetcher,
 	wardenClient warden.Client,
 ) *Builder {
 	return &Builder{
 		sourceFetcher: sourceFetcher,
-		imageFetcher:  imageFetcher,
 		wardenClient:  wardenClient,
 	}
 }
 
 func (builder *Builder) Build(build *builds.Build) (bool, error) {
-	imageID, err := builder.imageFetcher.Fetch(build.Image)
-	if err != nil {
-		return false, err
-	}
-
 	fetchedSource, err := builder.sourceFetcher.Fetch(build.Source)
 	if err != nil {
 		return false, err
 	}
 
 	container, err := builder.wardenClient.Create(warden.ContainerSpec{
-		RootFSPath: "image:" + imageID,
+		RootFSPath: "image:" + build.Image,
 	})
 	if err != nil {
 		return false, err

@@ -11,13 +11,11 @@ import (
 
 	"github.com/winston-ci/prole/api/builds"
 	. "github.com/winston-ci/prole/builder"
-	"github.com/winston-ci/prole/imagefetcher/fakeimagefetcher"
 	"github.com/winston-ci/prole/sourcefetcher/fakesourcefetcher"
 )
 
 var _ = Describe("Builder", func() {
 	var sourceFetcher *fakesourcefetcher.Fetcher
-	var imageFetcher *fakeimagefetcher.Fetcher
 	var wardenClient *fake_warden_client.FakeClient
 	var builder *Builder
 
@@ -37,9 +35,8 @@ var _ = Describe("Builder", func() {
 
 	BeforeEach(func() {
 		sourceFetcher = fakesourcefetcher.New()
-		imageFetcher = fakeimagefetcher.New()
 		wardenClient = fake_warden_client.New()
-		builder = NewBuilder(sourceFetcher, imageFetcher, wardenClient)
+		builder = NewBuilder(sourceFetcher, wardenClient)
 
 		build = &builds.Build{
 			Image: "some-image-name",
@@ -65,19 +62,6 @@ var _ = Describe("Builder", func() {
 		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
 			return "some-handle", nil
 		}
-	})
-
-	It("fetches the build image and uses it for the container rootfs", func() {
-		imageFetcher.FetchResult = "some-image-id"
-
-		_, err := builder.Build(build)
-		Ω(err).ShouldNot(HaveOccurred())
-
-		Ω(imageFetcher.Fetched()).Should(ContainElement("some-image-name"))
-
-		createdContainers := wardenClient.Connection.Created()
-		Ω(createdContainers).Should(HaveLen(1))
-		Ω(createdContainers[0].RootFSPath).Should(Equal("image:some-image-id"))
 	})
 
 	It("fetches the build source and copies it in to the container", func() {
@@ -151,20 +135,6 @@ var _ = Describe("Builder", func() {
 		It("returns true", func() {
 			succeeded, err := builder.Build(build)
 			Ω(err).ShouldNot(HaveOccurred())
-			Ω(succeeded).Should(BeFalse())
-		})
-	})
-
-	Context("when fetching the image fails", func() {
-		disaster := errors.New("oh no!")
-
-		BeforeEach(func() {
-			imageFetcher.FetchError = disaster
-		})
-
-		It("returns the error", func() {
-			succeeded, err := builder.Build(build)
-			Ω(err).Should(Equal(disaster))
 			Ω(succeeded).Should(BeFalse())
 		})
 	})
