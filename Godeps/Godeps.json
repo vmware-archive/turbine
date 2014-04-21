@@ -16,15 +16,15 @@
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/client",
-			"Rev": "1cf11d8a3fb117b33f8d6b2ffbdecf10ec4526d9"
+			"Rev": "f3b05d869d89d84092a8e9019370d218bb560c8a"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/protocol",
-			"Rev": "1cf11d8a3fb117b33f8d6b2ffbdecf10ec4526d9"
+			"Rev": "f3b05d869d89d84092a8e9019370d218bb560c8a"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/warden",
-			"Rev": "1cf11d8a3fb117b33f8d6b2ffbdecf10ec4526d9"
+			"Rev": "f3b05d869d89d84092a8e9019370d218bb560c8a"
 		},
 		{
 			"ImportPath": "github.com/fsouza/go-dockerclient",
