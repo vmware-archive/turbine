@@ -5,8 +5,11 @@ import (
 	"log"
 	"os"
 
+	"github.com/cloudfoundry-incubator/executor/log_streamer"
+	"github.com/cloudfoundry-incubator/executor/log_streamer_factory"
 	WardenClient "github.com/cloudfoundry-incubator/garden/client"
 	WardenConnection "github.com/cloudfoundry-incubator/garden/client/connection"
+	"github.com/cloudfoundry-incubator/runtime-schema/models"
 	"github.com/pivotal-golang/archiver/extractor"
 	"github.com/rcrowley/go-tigertonic"
 
@@ -40,6 +43,18 @@ var wardenAddr = flag.String(
 	"warden API connection address",
 )
 
+var loggregatorServer = flag.String(
+	"loggregatorServer",
+	"",
+	"loggregator server to emit logs to",
+)
+
+var loggregatorSecret = flag.String(
+	"loggregatorSecret",
+	"",
+	"secret for the loggregator server",
+)
+
 func main() {
 	flag.Parse()
 
@@ -54,12 +69,21 @@ func main() {
 	extractor := extractor.NewDetectable()
 	sourceFetcher := sourcefetcher.NewSourceFetcher(*tmpdir, extractor)
 
-	builder := builder.NewBuilder(sourceFetcher, wardenClient)
+	var logStreamerFactory log_streamer_factory.LogStreamerFactory
+	if *loggregatorServer != "" {
+		logStreamerFactory = log_streamer_factory.New(*loggregatorServer, *loggregatorSecret)
+	} else {
+		logStreamerFactory = func(models.LogConfig) log_streamer.LogStreamer {
+			return log_streamer.NoopStreamer{}
+		}
+	}
+
+	builder := builder.NewBuilder(sourceFetcher, wardenClient, logStreamerFactory)
 
 	handler := api.New(logger, scheduler.NewScheduler(builder))
 
 	server := tigertonic.NewServer(*listenAddr, handler)
 
-	err = server.ListenAndServe()
+	err := server.ListenAndServe()
 	logger.Fatalln("listen error:", err)
 }

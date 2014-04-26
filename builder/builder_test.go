@@ -3,9 +3,12 @@ package builder_test
 import (
 	"errors"
 
+	"github.com/cloudfoundry-incubator/executor/log_streamer"
+	"github.com/cloudfoundry-incubator/executor/log_streamer/fake_log_streamer"
 	"github.com/cloudfoundry-incubator/garden/client/connection/fake_connection"
 	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
 	"github.com/cloudfoundry-incubator/garden/warden"
+	"github.com/cloudfoundry-incubator/runtime-schema/models"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -17,6 +20,7 @@ import (
 var _ = Describe("Builder", func() {
 	var sourceFetcher *fakesourcefetcher.Fetcher
 	var wardenClient *fake_warden_client.FakeClient
+	var logStreamer *fake_log_streamer.FakeLogStreamer
 	var builder *Builder
 
 	var build *builds.Build
@@ -36,7 +40,11 @@ var _ = Describe("Builder", func() {
 	BeforeEach(func() {
 		sourceFetcher = fakesourcefetcher.New()
 		wardenClient = fake_warden_client.New()
-		builder = NewBuilder(sourceFetcher, wardenClient)
+		logStreamer = fake_log_streamer.New()
+
+		builder = NewBuilder(sourceFetcher, wardenClient, func(models.LogConfig) log_streamer.LogStreamer {
+			return logStreamer
+		})
 
 		build = &builds.Build{
 			Image: "some-image-name",
@@ -85,6 +93,35 @@ var _ = Describe("Builder", func() {
 		Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
 			Script: "./bin/test",
 		}))
+	})
+
+	It("emits the build's output", func() {
+		wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+			exitStatus := uint32(0)
+
+			successfulStream := primedStream(
+				warden.ProcessStream{
+					Source: warden.ProcessStreamSourceStdout,
+					Data:   []byte("stdout\n"),
+				},
+				warden.ProcessStream{
+					Source: warden.ProcessStreamSourceStderr,
+					Data:   []byte("stderr\n"),
+				},
+				warden.ProcessStream{
+					ExitStatus: &exitStatus,
+				},
+			)
+
+			return 42, successfulStream, nil
+		}
+
+		_, err := builder.Build(build)
+		Ω(err).ShouldNot(HaveOccurred())
+
+		Ω(logStreamer.StdoutBuffer.String()).Should(Equal("stdout\n"))
+		Ω(logStreamer.StderrBuffer.String()).Should(Equal("stderr\n"))
+		Ω(logStreamer.Flushed).Should(BeTrue())
 	})
 
 	Context("when running the build's script fails", func() {
