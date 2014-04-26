@@ -15,6 +15,14 @@
 			"Rev": "48b0cac3bc4a820ca87a28b44026c4166e3e1f07"
 		},
 		{
+			"ImportPath": "github.com/cloudfoundry-incubator/executor/log_streamer",
+			"Rev": "e91eb6c695cd77db1c6f2d00cf27a18de075c3a6"
+		},
+		{
+			"ImportPath": "github.com/cloudfoundry-incubator/executor/log_streamer_factory",
+			"Rev": "e91eb6c695cd77db1c6f2d00cf27a18de075c3a6"
+		},
+		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/client",
 			"Rev": "f3b05d869d89d84092a8e9019370d218bb560c8a"
 		},
@@ -25,6 +33,39 @@
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/warden",
 			"Rev": "f3b05d869d89d84092a8e9019370d218bb560c8a"
+		},
+		{
+			"ImportPath": "github.com/cloudfoundry-incubator/runtime-schema/models",
+			"Rev": "8021b389b4a8314c8cf891e3affe5f4a1e821eae"
+		},
+		{
+			"ImportPath": "github.com/cloudfoundry/gosteno",
+			"Comment": "scotty_09012012-38-g969c2c5",
+			"Rev": "969c2c565f5f1638b45702f3a07f6c39013bf375"
+		},
+		{
+			"ImportPath": "github.com/cloudfoundry/loggregatorlib/cfcomponent/instrumentation",
+			"Rev": "70752874d80017c6a727a7fa065e4c07df998baf"
+		},
+		{
+			"ImportPath": "github.com/cloudfoundry/loggregatorlib/cfcomponent/localip",
+			"Rev": "70752874d80017c6a727a7fa065e4c07df998baf"
+		},
+		{
+			"ImportPath": "github.com/cloudfoundry/loggregatorlib/emitter",
+			"Rev": "70752874d80017c6a727a7fa065e4c07df998baf"
+		},
+		{
+			"ImportPath": "github.com/cloudfoundry/loggregatorlib/loggregatorclient",
+			"Rev": "70752874d80017c6a727a7fa065e4c07df998baf"
+		},
+		{
+			"ImportPath": "github.com/cloudfoundry/loggregatorlib/logmessage",
+			"Rev": "70752874d80017c6a727a7fa065e4c07df998baf"
+		},
+		{
+			"ImportPath": "github.com/cloudfoundry/loggregatorlib/signature",
+			"Rev": "70752874d80017c6a727a7fa065e4c07df998baf"
 		},
 		{
 			"ImportPath": "github.com/fsouza/go-dockerclient",
