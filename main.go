@@ -54,7 +54,7 @@ func main() {
 	extractor := extractor.NewDetectable()
 	sourceFetcher := sourcefetcher.NewSourceFetcher(*tmpdir, extractor)
 
-	builder := builder.NewBuilder(sourceFetcher, imageFetcher, wardenClient)
+	builder := builder.NewBuilder(sourceFetcher, wardenClient)
 
 	handler := api.New(logger, scheduler.NewScheduler(builder))
 
