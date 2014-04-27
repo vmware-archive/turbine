@@ -74,7 +74,9 @@ func (builder *Builder) Build(build *builds.Build) (bool, error) {
 
 	for chunk := range stream {
 		if chunk.ExitStatus != nil {
+			logStreamer.Flush()
 			succeeded = *chunk.ExitStatus == 0
+			break
 		}
 
 		switch chunk.Source {
@@ -83,8 +85,6 @@ func (builder *Builder) Build(build *builds.Build) (bool, error) {
 		case warden.ProcessStreamSourceStderr:
 			logStreamer.Stderr().Write(chunk.Data)
 		}
-
-		logStreamer.Flush()
 	}
 
 	return succeeded, nil
