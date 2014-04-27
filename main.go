@@ -20,7 +20,7 @@ import (
 )
 
 var listenAddr = flag.String(
-	"listen",
+	"listenAddr",
 	"0.0.0.0:4637",
 	"listening address",
 )
