@@ -54,6 +54,7 @@ var _ = Describe("Builder", func() {
 			Source: builds.BuildSource{
 				Type: "raw",
 				URI:  "http://example.com/foo.tar.gz",
+				Path: "some/source/path",
 			},
 		}
 
@@ -82,7 +83,7 @@ var _ = Describe("Builder", func() {
 
 		Ω(wardenClient.Connection.CopiedIn("some-handle")).Should(ContainElement(fake_connection.CopyInSpec{
 			Source:      "/path/on/disk/",
-			Destination: "./",
+			Destination: "some/source/path/",
 		}))
 	})
 

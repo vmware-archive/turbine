@@ -56,7 +56,7 @@ func (builder *Builder) Build(build *builds.Build) (bool, error) {
 
 	log.Println("copying in")
 
-	err = container.CopyIn(fetchedSource+"/", "./")
+	err = container.CopyIn(fetchedSource+"/", build.Source.Path+"/")
 	if err != nil {
 		return false, err
 	}
