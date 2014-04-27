@@ -59,7 +59,6 @@ func main() {
 	flag.Parse()
 
 	logger := log.New(os.Stdout, "", 0)
-	logger.Println("Booting...")
 
 	wardenClient := WardenClient.New(&WardenConnection.Info{
 		Network: *wardenNetwork,
