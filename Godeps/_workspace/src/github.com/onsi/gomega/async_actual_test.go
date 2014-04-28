@@ -2,8 +2,8 @@ package gomega
 
 import (
 	"errors"
-	. "github.com/onsi/ginkgo"
 	"time"
+	. "github.com/onsi/ginkgo"
 )
 
 func init() {
@@ -275,6 +275,40 @@ func init() {
 				Ω(func() {
 					newAsyncActual(asyncActualTypeEventually, func() (int, error) { return 0, nil }, fakeFailHandler, 0, 0, 1)
 				}).ShouldNot(Panic())
+			})
+		})
+
+		Describe("bailing early", func() {
+			Context("when actual is a value", func() {
+				It("Eventually should bail out and fail early if the matcher says to", func() {
+					c := make(chan bool)
+					close(c)
+
+					t := time.Now()
+					failures := interceptFailures(func() {
+						Eventually(c, 0.1).Should(Receive())
+					})
+					Ω(time.Since(t)).Should(BeNumerically("<", 90*time.Millisecond))
+
+					Ω(failures).Should(HaveLen(1))
+				})
+			})
+
+			Context("when actual is a function", func() {
+				It("should never bail early", func() {
+					c := make(chan bool)
+					close(c)
+
+					t := time.Now()
+					failures := interceptFailures(func() {
+						Eventually(func() chan bool {
+							return c
+						}, 0.1).Should(Receive())
+					})
+					Ω(time.Since(t)).Should(BeNumerically(">=", 90*time.Millisecond))
+
+					Ω(failures).Should(HaveLen(1))
+				})
 			})
 		})
 	})

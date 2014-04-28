@@ -15,57 +15,16 @@
 			"Rev": "48b0cac3bc4a820ca87a28b44026c4166e3e1f07"
 		},
 		{
-			"ImportPath": "github.com/cloudfoundry-incubator/executor/log_streamer",
-			"Rev": "e91eb6c695cd77db1c6f2d00cf27a18de075c3a6"
-		},
-		{
-			"ImportPath": "github.com/cloudfoundry-incubator/executor/log_streamer_factory",
-			"Rev": "e91eb6c695cd77db1c6f2d00cf27a18de075c3a6"
-		},
-		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/client",
-			"Rev": "f3b05d869d89d84092a8e9019370d218bb560c8a"
+			"Rev": "f0b1d8adc5ec814060f1a946dc58a529496d4c6c"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/protocol",
-			"Rev": "f3b05d869d89d84092a8e9019370d218bb560c8a"
+			"Rev": "f0b1d8adc5ec814060f1a946dc58a529496d4c6c"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/warden",
-			"Rev": "f3b05d869d89d84092a8e9019370d218bb560c8a"
-		},
-		{
-			"ImportPath": "github.com/cloudfoundry-incubator/runtime-schema/models",
-			"Rev": "8021b389b4a8314c8cf891e3affe5f4a1e821eae"
-		},
-		{
-			"ImportPath": "github.com/cloudfoundry/gosteno",
-			"Comment": "scotty_09012012-38-g969c2c5",
-			"Rev": "969c2c565f5f1638b45702f3a07f6c39013bf375"
-		},
-		{
-			"ImportPath": "github.com/cloudfoundry/loggregatorlib/cfcomponent/instrumentation",
-			"Rev": "70752874d80017c6a727a7fa065e4c07df998baf"
-		},
-		{
-			"ImportPath": "github.com/cloudfoundry/loggregatorlib/cfcomponent/localip",
-			"Rev": "70752874d80017c6a727a7fa065e4c07df998baf"
-		},
-		{
-			"ImportPath": "github.com/cloudfoundry/loggregatorlib/emitter",
-			"Rev": "70752874d80017c6a727a7fa065e4c07df998baf"
-		},
-		{
-			"ImportPath": "github.com/cloudfoundry/loggregatorlib/loggregatorclient",
-			"Rev": "70752874d80017c6a727a7fa065e4c07df998baf"
-		},
-		{
-			"ImportPath": "github.com/cloudfoundry/loggregatorlib/logmessage",
-			"Rev": "70752874d80017c6a727a7fa065e4c07df998baf"
-		},
-		{
-			"ImportPath": "github.com/cloudfoundry/loggregatorlib/signature",
-			"Rev": "70752874d80017c6a727a7fa065e4c07df998baf"
+			"Rev": "f0b1d8adc5ec814060f1a946dc58a529496d4c6c"
 		},
 		{
 			"ImportPath": "github.com/fsouza/go-dockerclient",
@@ -73,24 +32,28 @@
 			"Rev": "3814303c8a449216e5d504ae92c3115d19e878e1"
 		},
 		{
+			"ImportPath": "github.com/gorilla/websocket",
+			"Rev": "1e6e1281b05fe5eaaf3300bdedb8e75880b9c6fd"
+		},
+		{
 			"ImportPath": "github.com/onsi/ginkgo",
-			"Rev": "462cb7e31b222093d2fd2f4f0cbbce324f6ab3be"
+			"Rev": "6d349e912f98605cd6b032a6e0a24c90c2d3bf47"
 		},
 		{
 			"ImportPath": "github.com/onsi/gomega",
-			"Rev": "f1c0de3870567f8828e4d040e5a8aeed8afff3f5"
+			"Rev": "af40dc423678b84288e18d0b993770cf9d599a68"
 		},
 		{
 			"ImportPath": "github.com/pivotal-golang/archiver/extractor",
-			"Rev": "338bf2b31d42f9ff6f57e0944cf5628bdfee546c"
+			"Rev": "384be1849829591a6f355be67f65e3a574206791"
 		},
 		{
 			"ImportPath": "github.com/rcrowley/go-metrics",
-			"Rev": "d1774362a14f30b8eb31af8867bfb15142263644"
+			"Rev": "fc430a45dc3146cc9c9047d5c363d4eb652c1337"
 		},
 		{
 			"ImportPath": "github.com/rcrowley/go-tigertonic",
-			"Rev": "86e8a7d9c595d926bfd999d7a4a43af79f9671ef"
+			"Rev": "e0fd38546138767920b7371a34e1be95ca19bfb6"
 		}
 	]
 }
