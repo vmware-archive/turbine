@@ -2,15 +2,17 @@ package builder_test
 
 import (
 	"errors"
+	"log"
+	"net/http"
 
-	"github.com/cloudfoundry-incubator/executor/log_streamer"
-	"github.com/cloudfoundry-incubator/executor/log_streamer/fake_log_streamer"
 	"github.com/cloudfoundry-incubator/garden/client/connection/fake_connection"
 	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
 	"github.com/cloudfoundry-incubator/garden/warden"
-	"github.com/cloudfoundry-incubator/runtime-schema/models"
+	"github.com/gorilla/websocket"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gbytes"
+	"github.com/onsi/gomega/ghttp"
 
 	"github.com/winston-ci/prole/api/builds"
 	. "github.com/winston-ci/prole/builder"
@@ -20,7 +22,6 @@ import (
 var _ = Describe("Builder", func() {
 	var sourceFetcher *fakesourcefetcher.Fetcher
 	var wardenClient *fake_warden_client.FakeClient
-	var logStreamer *fake_log_streamer.FakeLogStreamer
 	var builder *Builder
 
 	var build *builds.Build
@@ -40,11 +41,8 @@ var _ = Describe("Builder", func() {
 	BeforeEach(func() {
 		sourceFetcher = fakesourcefetcher.New()
 		wardenClient = fake_warden_client.New()
-		logStreamer = fake_log_streamer.New()
 
-		builder = NewBuilder(sourceFetcher, wardenClient, func(models.LogConfig) log_streamer.LogStreamer {
-			return logStreamer
-		})
+		builder = NewBuilder(sourceFetcher, wardenClient)
 
 		build = &builds.Build{
 			Image: "some-image-name",
@@ -96,33 +94,68 @@ var _ = Describe("Builder", func() {
 		}))
 	})
 
-	It("emits the build's output", func() {
-		wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-			exitStatus := uint32(0)
+	Context("when a logs url is configured", func() {
+		It("emits the build's output via websockets", func() {
+			wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+				exitStatus := uint32(0)
 
-			successfulStream := primedStream(
-				warden.ProcessStream{
-					Source: warden.ProcessStreamSourceStdout,
-					Data:   []byte("stdout\n"),
+				successfulStream := primedStream(
+					warden.ProcessStream{
+						Source: warden.ProcessStreamSourceStdout,
+						Data:   []byte("stdout\n"),
+					},
+					warden.ProcessStream{
+						Source: warden.ProcessStreamSourceStderr,
+						Data:   []byte("stderr\n"),
+					},
+					warden.ProcessStream{
+						ExitStatus: &exitStatus,
+					},
+				)
+
+				return 42, successfulStream, nil
+			}
+
+			websocketEndpoint := ghttp.NewServer()
+
+			buf := gbytes.NewBuffer()
+
+			var upgrader = websocket.Upgrader{
+				ReadBufferSize:  1024,
+				WriteBufferSize: 1024,
+				CheckOrigin: func(r *http.Request) bool {
+					// allow all connections
+					return true
 				},
-				warden.ProcessStream{
-					Source: warden.ProcessStreamSourceStderr,
-					Data:   []byte("stderr\n"),
-				},
-				warden.ProcessStream{
-					ExitStatus: &exitStatus,
+			}
+
+			websocketEndpoint.AppendHandlers(
+				func(w http.ResponseWriter, r *http.Request) {
+					conn, err := upgrader.Upgrade(w, r, nil)
+					if err != nil {
+						log.Println(err)
+						return
+					}
+
+					for {
+						_, msg, err := conn.ReadMessage()
+						if err != nil {
+							break
+						}
+
+						buf.Write(msg)
+					}
 				},
 			)
 
-			return 42, successfulStream, nil
-		}
+			build.LogsURL = "ws://" + websocketEndpoint.HTTPTestServer.Listener.Addr().String()
 
-		_, err := builder.Build(build)
-		Ω(err).ShouldNot(HaveOccurred())
+			_, err := builder.Build(build)
+			Ω(err).ShouldNot(HaveOccurred())
 
-		Ω(logStreamer.StdoutBuffer.String()).Should(Equal("stdout\n"))
-		Ω(logStreamer.StderrBuffer.String()).Should(Equal("stderr\n"))
-		Ω(logStreamer.Flushed).Should(BeTrue())
+			Eventually(buf).Should(gbytes.Say("stdout\n"))
+			Eventually(buf).Should(gbytes.Say("stderr\n"))
+		})
 	})
 
 	Context("when running the build's script fails", func() {

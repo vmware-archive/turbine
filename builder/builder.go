@@ -3,8 +3,8 @@ package builder
 import (
 	"log"
 
-	"github.com/cloudfoundry-incubator/executor/log_streamer_factory"
 	"github.com/cloudfoundry-incubator/garden/warden"
+	"github.com/gorilla/websocket"
 
 	"github.com/winston-ci/prole/api/builds"
 )
@@ -18,25 +18,32 @@ type ImageFetcher interface {
 }
 
 type Builder struct {
-	sourceFetcher      SourceFetcher
-	wardenClient       warden.Client
-	logStreamerFactory log_streamer_factory.LogStreamerFactory
+	sourceFetcher SourceFetcher
+	wardenClient  warden.Client
 }
 
 func NewBuilder(
 	sourceFetcher SourceFetcher,
 	wardenClient warden.Client,
-	logStreamerFactory log_streamer_factory.LogStreamerFactory,
 ) *Builder {
 	return &Builder{
-		sourceFetcher:      sourceFetcher,
-		wardenClient:       wardenClient,
-		logStreamerFactory: logStreamerFactory,
+		sourceFetcher: sourceFetcher,
+		wardenClient:  wardenClient,
 	}
 }
 
 func (builder *Builder) Build(build *builds.Build) (bool, error) {
-	logStreamer := builder.logStreamerFactory(build.LogConfig)
+	var logsEndpoint *websocket.Conn
+
+	if build.LogsURL != "" {
+		conn, _, err := websocket.DefaultDialer.Dial(build.LogsURL, nil)
+		log.Println("dialed to logs:", err)
+		if err != nil {
+			return false, err
+		}
+
+		logsEndpoint = conn
+	}
 
 	log.Println("fetching source")
 
@@ -74,16 +81,16 @@ func (builder *Builder) Build(build *builds.Build) (bool, error) {
 
 	for chunk := range stream {
 		if chunk.ExitStatus != nil {
-			logStreamer.Flush()
+			if logsEndpoint != nil {
+				logsEndpoint.Close()
+			}
+
 			succeeded = *chunk.ExitStatus == 0
 			break
 		}
 
-		switch chunk.Source {
-		case warden.ProcessStreamSourceStdout:
-			logStreamer.Stdout().Write(chunk.Data)
-		case warden.ProcessStreamSourceStderr:
-			logStreamer.Stderr().Write(chunk.Data)
+		if logsEndpoint != nil {
+			logsEndpoint.WriteMessage(websocket.BinaryMessage, chunk.Data)
 		}
 	}
 
