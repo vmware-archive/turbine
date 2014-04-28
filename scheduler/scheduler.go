@@ -72,7 +72,7 @@ func (scheduler *Scheduler) completeBuild(build builds.Build, succeeded bool, er
 
 	payload, _ := json.Marshal(build)
 
-	scheduler.httpClient.Do(&http.Request{
+	res, err := scheduler.httpClient.Do(&http.Request{
 		Method: "PUT",
 		URL:    destination,
 
@@ -84,4 +84,10 @@ func (scheduler *Scheduler) completeBuild(build builds.Build, succeeded bool, er
 
 		Body: ioutil.NopCloser(bytes.NewBuffer(payload)),
 	})
+	if err != nil {
+		log.Println("failed to submit result:", err)
+		return
+	}
+
+	res.Body.Close()
 }
