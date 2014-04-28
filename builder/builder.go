@@ -36,11 +36,14 @@ func (builder *Builder) Build(build *builds.Build) (bool, error) {
 	var logsEndpoint *websocket.Conn
 
 	if build.LogsURL != "" {
-		conn, _, err := websocket.DefaultDialer.Dial(build.LogsURL, nil)
+		conn, resp, err := websocket.DefaultDialer.Dial(build.LogsURL, nil)
 		log.Println("dialed to logs:", err)
 		if err != nil {
 			return false, err
 		}
+
+		defer conn.Close()
+		defer resp.Body.Close()
 
 		logsEndpoint = conn
 	}
@@ -81,10 +84,6 @@ func (builder *Builder) Build(build *builds.Build) (bool, error) {
 
 	for chunk := range stream {
 		if chunk.ExitStatus != nil {
-			if logsEndpoint != nil {
-				logsEndpoint.Close()
-			}
-
 			succeeded = *chunk.ExitStatus == 0
 			break
 		}
