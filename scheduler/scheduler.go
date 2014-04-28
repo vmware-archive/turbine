@@ -28,7 +28,9 @@ func NewScheduler(builder Builder) *Scheduler {
 		builder: builder,
 
 		httpClient: &http.Client{
-			Transport: &http.Transport{},
+			Transport: &http.Transport{
+				DisableKeepAlives: true,
+			},
 		},
 
 		runningBuilds: new(sync.WaitGroup),

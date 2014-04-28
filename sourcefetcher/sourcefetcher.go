@@ -24,7 +24,9 @@ func NewSourceFetcher(tmpdir string, extractor extractor.Extractor) *SourceFetch
 		extractor: extractor,
 
 		httpClient: &http.Client{
-			Transport: &http.Transport{},
+			Transport: &http.Transport{
+				DisableKeepAlives: true,
+			},
 		},
 	}
 }
