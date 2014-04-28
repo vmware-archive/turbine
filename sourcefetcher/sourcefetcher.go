@@ -37,6 +37,8 @@ func (fetcher *SourceFetcher) Fetch(source builds.BuildSource) (string, error) {
 		return "", err
 	}
 
+	defer response.Body.Close()
+
 	tempFile, err := ioutil.TempFile(fetcher.tmpdir, "fetched-file")
 	if err != nil {
 		return "", err
