@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"os"
+
 	WardenClient "github.com/cloudfoundry-incubator/garden/client"
 	WardenConnection "github.com/cloudfoundry-incubator/garden/client/connection"
 	"github.com/pivotal-golang/archiver/extractor"
