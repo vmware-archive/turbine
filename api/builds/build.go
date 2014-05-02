@@ -3,17 +3,14 @@ package builds
 type Build struct {
 	Guid string `json:"guid"`
 
-	LogsURL string `json:"logs_url"`
+	Image  string      `json:"image"`
+	Env    [][2]string `json:"env"`
+	Script string      `json:"script"`
 
-	Image  string `json:"image"`
-	Script string `json:"script"`
-
+	LogsURL  string `json:"logs_url"`
 	Callback string `json:"callback"`
 
 	Source BuildSource `json:"source"`
-
-	Parameters       map[string]string `json:"parameters"`
-	SecureParameters map[string]string `json:"secure_parameters"`
 
 	Status string `json:"status"`
 }

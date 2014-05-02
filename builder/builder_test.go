@@ -46,7 +46,10 @@ var _ = Describe("Builder", func() {
 
 		build = &builds.Build{
 			Image: "some-image-name",
-
+			Env: [][2]string{
+				{"FOO", "bar"},
+				{"BAZ", "buzz"},
+			},
 			Script: "./bin/test",
 
 			Source: builds.BuildSource{
@@ -91,6 +94,10 @@ var _ = Describe("Builder", func() {
 
 		Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
 			Script: "./bin/test",
+			EnvironmentVariables: []warden.EnvironmentVariable{
+				{"FOO", "bar"},
+				{"BAZ", "buzz"},
+			},
 		}))
 	})
 

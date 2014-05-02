@@ -73,7 +73,18 @@ func (builder *Builder) Build(build *builds.Build) (bool, error) {
 		logsEndpoint.WriteMessage(websocket.TextMessage, []byte("starting...\n"))
 	}
 
-	_, stream, err := container.Run(warden.ProcessSpec{Script: build.Script})
+	env := make([]warden.EnvironmentVariable, len(build.Env))
+	for i, e := range build.Env {
+		env[i] = warden.EnvironmentVariable{
+			Key:   e[0],
+			Value: e[1],
+		}
+	}
+
+	_, stream, err := container.Run(warden.ProcessSpec{
+		Script:               build.Script,
+		EnvironmentVariables: env,
+	})
 	if err != nil {
 		return false, err
 	}
