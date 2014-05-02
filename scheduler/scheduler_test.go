@@ -38,14 +38,9 @@ var _ = Describe("Scheduler", func() {
 					Ref:  "deadbeef",
 				},
 
-				Parameters: map[string]string{
-					"FOO":  "bar",
-					"FIZZ": "buzz",
-				},
-
-				SecureParameters: map[string]string{
-					"USERNAME": "some-username",
-					"PASSWORD": "secret",
+				Env: [][2]string{
+					{"FOO", "bar"},
+					{"FIZZ", "buzz"},
 				},
 			}
 		})
