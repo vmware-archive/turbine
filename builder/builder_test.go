@@ -153,6 +153,8 @@ var _ = Describe("Builder", func() {
 			_, err := builder.Build(build)
 			Ω(err).ShouldNot(HaveOccurred())
 
+			Eventually(buf).Should(gbytes.Say("creating container from some-image-name...\n"))
+			Eventually(buf).Should(gbytes.Say("starting...\n"))
 			Eventually(buf).Should(gbytes.Say("stdout\n"))
 			Eventually(buf).Should(gbytes.Say("stderr\n"))
 		})
