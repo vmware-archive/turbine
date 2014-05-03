@@ -49,9 +49,10 @@ var _ = Describe("API", func() {
 			build = &builds.Build{
 				Guid: "abc",
 				Source: builds.BuildSource{
-					Type: "git",
-					URI:  "https://github.com/winston-ci/prole.git",
-					Ref:  "deadbeef",
+					Type:   "git",
+					URI:    "https://github.com/winston-ci/prole.git",
+					Branch: "master",
+					Ref:    "deadbeef",
 				},
 			}
 

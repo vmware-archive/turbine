@@ -7,6 +7,7 @@ import (
 
 	WardenClient "github.com/cloudfoundry-incubator/garden/client"
 	WardenConnection "github.com/cloudfoundry-incubator/garden/client/connection"
+	"github.com/cloudfoundry/gunk/command_runner/linux_command_runner"
 	"github.com/pivotal-golang/archiver/extractor"
 	"github.com/rcrowley/go-tigertonic"
 
@@ -51,7 +52,7 @@ func main() {
 	})
 
 	extractor := extractor.NewDetectable()
-	sourceFetcher := sourcefetcher.NewSourceFetcher(*tmpdir, extractor)
+	sourceFetcher := sourcefetcher.NewSourceFetcher(*tmpdir, extractor, linux_command_runner.New(true))
 
 	builder := builder.NewBuilder(sourceFetcher, wardenClient)
 

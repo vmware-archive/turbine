@@ -16,8 +16,9 @@ type Build struct {
 }
 
 type BuildSource struct {
-	Type string `json:"type"`
-	URI  string `json:"uri"`
-	Ref  string `json:"ref"`
-	Path string `json:"path"`
+	Type   string `json:"type"`
+	URI    string `json:"uri"`
+	Branch string `json:"branch"`
+	Ref    string `json:"ref"`
+	Path   string `json:"path"`
 }

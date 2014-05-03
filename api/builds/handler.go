@@ -48,6 +48,10 @@ func (handler *Handler) validateBuild(build *Build) error {
 		return errors.New("missing build guid")
 	}
 
+	if build.Source.Type == "git" && build.Source.Branch == "" {
+		return errors.New("missing build source branch")
+	}
+
 	if build.Source.Type == "git" && build.Source.Ref == "" {
 		return errors.New("missing build source ref")
 	}

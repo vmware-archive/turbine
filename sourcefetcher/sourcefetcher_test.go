@@ -6,8 +6,11 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 
+	"github.com/cloudfoundry/gunk/command_runner/fake_command_runner"
+	. "github.com/cloudfoundry/gunk/command_runner/fake_command_runner/matchers"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
@@ -22,6 +25,7 @@ import (
 var _ = Describe("SourceFetcher", func() {
 	var tmpdir string
 	var extractor Extractor.Extractor
+	var commandRunner *fake_command_runner.FakeCommandRunner
 	var sourceFetcher *SourceFetcher
 
 	var server *ghttp.Server
@@ -35,10 +39,12 @@ var _ = Describe("SourceFetcher", func() {
 		server = ghttp.NewServer()
 
 		extractor = Extractor.NewDetectable()
+
+		commandRunner = fake_command_runner.New()
 	})
 
 	JustBeforeEach(func() {
-		sourceFetcher = NewSourceFetcher(tmpdir, extractor)
+		sourceFetcher = NewSourceFetcher(tmpdir, extractor, commandRunner)
 	})
 
 	Describe("fetching a raw source", func() {
@@ -121,6 +127,92 @@ var _ = Describe("SourceFetcher", func() {
 					_, err := sourceFetcher.Fetch(source)
 					Ω(err).Should(Equal(disaster))
 				})
+			})
+		})
+	})
+
+	Describe("fetching a git source", func() {
+		var source builds.BuildSource
+
+		gitPath, _ := exec.LookPath("git")
+		if gitPath == "" {
+			gitPath = "git"
+		}
+
+		BeforeEach(func() {
+			source = builds.BuildSource{
+				Type:   "git",
+				URI:    "git://example.com/some/repo.git",
+				Branch: "some-branch",
+			}
+		})
+
+		It("clones it shallowly to a tmpdir, and checks out the ref", func() {
+			fetched, err := sourceFetcher.Fetch(source)
+			Ω(err).ShouldNot(HaveOccurred())
+
+			Ω(commandRunner).Should(HaveExecutedSerially(
+				fake_command_runner.CommandSpec{
+					Path: gitPath,
+					Args: []string{
+						"git", "clone",
+						"--depth", "10",
+						"--branch", source.Branch,
+						source.URI,
+						fetched,
+					},
+				},
+				fake_command_runner.CommandSpec{
+					Path: gitPath,
+					Args: []string{"git", "checkout", source.Ref},
+					Dir:  fetched,
+				},
+			))
+		})
+
+		Context("when cloning fails", func() {
+			disaster := errors.New("oh no!")
+
+			BeforeEach(func() {
+				commandRunner.WhenRunning(
+					fake_command_runner.CommandSpec{
+						Path: gitPath,
+					}, func(cmd *exec.Cmd) error {
+						if cmd.Args[1] == "clone" {
+							return disaster
+						} else {
+							return nil
+						}
+					},
+				)
+			})
+
+			It("returns the error", func() {
+				_, err := sourceFetcher.Fetch(source)
+				Ω(err).Should(Equal(disaster))
+			})
+		})
+
+		Context("when checking out fails", func() {
+			disaster := errors.New("oh no!")
+
+			BeforeEach(func() {
+				commandRunner.WhenRunning(
+					fake_command_runner.CommandSpec{
+						Path: gitPath,
+					}, func(cmd *exec.Cmd) error {
+						if cmd.Args[1] == "checkout" {
+							return disaster
+						} else {
+							return nil
+						}
+					},
+				)
+			})
+
+			It("returns the error", func() {
+				_, err := sourceFetcher.Fetch(source)
+				Ω(err).Should(Equal(disaster))
 			})
 		})
 	})
