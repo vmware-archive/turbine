@@ -21,6 +21,8 @@ type Connection interface {
 
 	Disconnected() <-chan struct{}
 
+	Capacity() (warden.Capacity, error)
+
 	Create(spec warden.ContainerSpec) (string, error)
 	List(properties warden.Properties) ([]string, error)
 	Destroy(handle string) error
@@ -108,6 +110,21 @@ func (c *connection) Close() {
 
 func (c *connection) Disconnected() <-chan struct{} {
 	return c.disconnected
+}
+
+func (c *connection) Capacity() (warden.Capacity, error) {
+	req := &protocol.CapacityRequest{}
+	res := &protocol.CapacityResponse{}
+
+	err := c.roundTrip(req, res)
+	if err != nil {
+		return warden.Capacity{}, err
+	}
+
+	return warden.Capacity{
+		MemoryInBytes: res.GetMemoryInBytes(),
+		DiskInBytes:   res.GetDiskInBytes(),
+	}, nil
 }
 
 func (c *connection) Create(spec warden.ContainerSpec) (string, error) {
@@ -208,8 +225,9 @@ func (c *connection) Destroy(handle string) error {
 func (c *connection) Run(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
 	err := c.sendMessage(
 		&protocol.RunRequest{
-			Handle: proto.String(handle),
-			Script: proto.String(spec.Script),
+			Handle:     proto.String(handle),
+			Script:     proto.String(spec.Script),
+			Privileged: proto.Bool(spec.Privileged),
 			Rlimits: &protocol.ResourceLimits{
 				As:         spec.Limits.As,
 				Core:       spec.Limits.Core,
@@ -482,6 +500,11 @@ func (c *connection) Info(handle string) (warden.ContainerInfo, error) {
 		processIDs = append(processIDs, uint32(pid))
 	}
 
+	properties := warden.Properties{}
+	for _, prop := range res.GetProperties() {
+		properties[prop.GetKey()] = prop.GetValue()
+	}
+
 	bandwidthStat := res.GetBandwidthStat()
 	cpuStat := res.GetCpuStat()
 	diskStat := res.GetDiskStat()
@@ -497,6 +520,8 @@ func (c *connection) Info(handle string) (warden.ContainerInfo, error) {
 		ContainerPath: res.GetContainerPath(),
 
 		ProcessIDs: processIDs,
+
+		Properties: properties,
 
 		BandwidthStat: warden.ContainerBandwidthStat{
 			InRate:   bandwidthStat.GetInRate(),

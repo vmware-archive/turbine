@@ -108,6 +108,36 @@ var _ = Describe("Connection", func() {
 		}
 	})
 
+	Describe("Getting capacity", func() {
+		Context("when the response is successful", func() {
+			BeforeEach(func() {
+				wardenMessages = append(wardenMessages,
+					&protocol.CapacityResponse{
+						MemoryInBytes: proto.Uint64(1111),
+						DiskInBytes:   proto.Uint64(2222),
+					},
+				)
+			})
+
+			It("should return the server's capacity", func() {
+				capacity, err := connection.Capacity()
+				Ω(err).ShouldNot(HaveOccurred())
+
+				Ω(capacity.MemoryInBytes).Should(BeNumerically("==", 1111))
+				Ω(capacity.DiskInBytes).Should(BeNumerically("==", 2222))
+
+				assertWriteBufferContains(&protocol.CapacityRequest{})
+			})
+		})
+
+		Context("when a connection error occurs", func() {
+			It("should return an error", func() {
+				_, err := connection.Capacity()
+				Ω(err).Should(HaveOccurred())
+			})
+		})
+	})
+
 	Describe("Creating", func() {
 		BeforeEach(func() {
 			wardenMessages = append(wardenMessages,
@@ -423,8 +453,8 @@ var _ = Describe("Connection", func() {
 
 					Properties: []*protocol.Property{
 						{
-							Key:   proto.String("proto-key"),
-							Value: proto.String("proto-value"),
+							Key:   proto.String("prop-key"),
+							Value: proto.String("prop-value"),
 						},
 					},
 
@@ -490,6 +520,10 @@ var _ = Describe("Connection", func() {
 			Ω(info.ContainerIP).Should(Equal("container-ip"))
 			Ω(info.ContainerPath).Should(Equal("container-path"))
 			Ω(info.ProcessIDs).Should(Equal([]uint32{1, 2}))
+
+			Ω(info.Properties).Should(Equal(warden.Properties{
+				"prop-key": "prop-value",
+			}))
 
 			Ω(info.MemoryStat).Should(Equal(warden.ContainerMemoryStat{
 				Cache:                   1,
@@ -637,16 +671,18 @@ var _ = Describe("Connection", func() {
 
 			It("should start the process and stream output", func(done Done) {
 				pid, stream, err := connection.Run("foo-handle", warden.ProcessSpec{
-					Script: "lol",
-					Limits: resourceLimits,
+					Script:     "lol",
+					Privileged: true,
+					Limits:     resourceLimits,
 				})
 
 				Ω(err).ShouldNot(HaveOccurred())
 				Ω(pid).Should(BeNumerically("==", 42))
 
 				assertWriteBufferContains(&protocol.RunRequest{
-					Handle: proto.String("foo-handle"),
-					Script: proto.String("lol"),
+					Handle:     proto.String("foo-handle"),
+					Script:     proto.String("lol"),
+					Privileged: proto.Bool(true),
 					Rlimits: &protocol.ResourceLimits{
 						As:         proto.Uint64(1),
 						Core:       proto.Uint64(2),
@@ -702,9 +738,10 @@ var _ = Describe("Connection", func() {
 				Ω(pid).Should(BeNumerically("==", 42))
 
 				assertWriteBufferContains(&protocol.RunRequest{
-					Handle:  proto.String("foo-handle"),
-					Script:  proto.String("echo hi"),
-					Rlimits: &protocol.ResourceLimits{},
+					Handle:     proto.String("foo-handle"),
+					Script:     proto.String("echo hi"),
+					Privileged: proto.Bool(false),
+					Rlimits:    &protocol.ResourceLimits{},
 				})
 
 				writeBuffer.Reset()
@@ -718,9 +755,10 @@ var _ = Describe("Connection", func() {
 				Ω(pid).Should(BeNumerically("==", 43))
 
 				assertWriteBufferContains(&protocol.RunRequest{
-					Handle:  proto.String("foo-handle"),
-					Script:  proto.String("echo bye"),
-					Rlimits: &protocol.ResourceLimits{},
+					Handle:     proto.String("foo-handle"),
+					Script:     proto.String("echo bye"),
+					Privileged: proto.Bool(false),
+					Rlimits:    &protocol.ResourceLimits{},
 				})
 			})
 		})
