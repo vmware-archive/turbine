@@ -15,6 +15,10 @@
 			"Rev": "556b9de4249f50f311584f75324a45e426324a19"
 		},
 		{
+			"ImportPath": "github.com/bmizerany/pat",
+			"Rev": "51b7af73e39f6dc59846b22d56ca886d105ef0c3"
+		},
+		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/client",
 			"Rev": "2161dc19db43246cdd804483b36bbba984c8a0e4"
 		},
@@ -47,12 +51,8 @@
 			"Rev": "384be1849829591a6f355be67f65e3a574206791"
 		},
 		{
-			"ImportPath": "github.com/rcrowley/go-metrics",
-			"Rev": "c3fec5ef7b304a4347c498236aff4ed3234c1898"
-		},
-		{
-			"ImportPath": "github.com/rcrowley/go-tigertonic",
-			"Rev": "9c7da6098d413ee516597840922f025785267ef6"
+			"ImportPath": "github.com/tedsuo/router",
+			"Rev": "ff4992c52c392a38d24b14144508fc7447a1c8e6"
 		}
 	]
 }
