@@ -15,7 +15,7 @@ import (
 
 var _ = Describe("Scheduler", func() {
 	var builder *fakebuilder.Builder
-	var scheduler *Scheduler
+	var scheduler Scheduler
 
 	BeforeEach(func() {
 		builder = fakebuilder.New()
@@ -24,12 +24,12 @@ var _ = Describe("Scheduler", func() {
 
 	Describe("Schedule", func() {
 		var server *ghttp.Server
-		var build *builds.Build
+		var build builds.Build
 
 		BeforeEach(func() {
 			server = ghttp.NewServer()
 
-			build = &builds.Build{
+			build = builds.Build{
 				Guid: "abc",
 
 				Source: builds.BuildSource{
@@ -80,7 +80,7 @@ var _ = Describe("Scheduler", func() {
 				BeforeEach(func() {
 					builder.BuildResult = true
 
-					succeededBuild := *build
+					succeededBuild := build
 					succeededBuild.Status = "succeeded"
 
 					gotRequest = handleBuild(succeededBuild)
@@ -100,7 +100,7 @@ var _ = Describe("Scheduler", func() {
 				BeforeEach(func() {
 					builder.BuildResult = false
 
-					failedBuild := *build
+					failedBuild := build
 					failedBuild.Status = "failed"
 
 					gotRequest = handleBuild(failedBuild)
@@ -120,7 +120,7 @@ var _ = Describe("Scheduler", func() {
 				BeforeEach(func() {
 					builder.BuildError = errors.New("oh no!")
 
-					erroredBuild := *build
+					erroredBuild := build
 					erroredBuild.Status = "errored"
 
 					gotRequest = handleBuild(erroredBuild)

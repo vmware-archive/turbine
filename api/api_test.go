@@ -34,11 +34,11 @@ var _ = Describe("API", func() {
 	})
 
 	Describe("POST /builds", func() {
-		var build *builds.Build
+		var build builds.Build
 		var requestBody string
 		var response *http.Response
 
-		buildPayload := func(build *builds.Build) string {
+		buildPayload := func(build builds.Build) string {
 			payload, err := json.Marshal(build)
 			Ω(err).ShouldNot(HaveOccurred())
 
@@ -46,7 +46,7 @@ var _ = Describe("API", func() {
 		}
 
 		BeforeEach(func() {
-			build = &builds.Build{
+			build = builds.Build{
 				Guid: "abc",
 				Source: builds.BuildSource{
 					Type:   "git",
@@ -80,7 +80,7 @@ var _ = Describe("API", func() {
 			err := json.NewDecoder(response.Body).Decode(&returnedBuild)
 			Ω(err).ShouldNot(HaveOccurred())
 
-			Ω(returnedBuild).Should(Equal(*build))
+			Ω(returnedBuild).Should(Equal(build))
 		})
 
 		It("schedules the build", func() {

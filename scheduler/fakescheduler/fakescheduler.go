@@ -7,7 +7,7 @@ import (
 )
 
 type FakeScheduler struct {
-	scheduled     []*builds.Build
+	scheduled     []builds.Build
 	ScheduleError error
 
 	sync.RWMutex
@@ -17,7 +17,7 @@ func New() *FakeScheduler {
 	return &FakeScheduler{}
 }
 
-func (scheduler *FakeScheduler) Schedule(build *builds.Build) error {
+func (scheduler *FakeScheduler) Schedule(build builds.Build) error {
 	if scheduler.ScheduleError != nil {
 		return scheduler.ScheduleError
 	}
@@ -31,10 +31,10 @@ func (scheduler *FakeScheduler) Schedule(build *builds.Build) error {
 	return nil
 }
 
-func (scheduler *FakeScheduler) Scheduled() []*builds.Build {
+func (scheduler *FakeScheduler) Scheduled() []builds.Build {
 	scheduler.RLock()
 
-	scheduled := make([]*builds.Build, len(scheduler.scheduled))
+	scheduled := make([]builds.Build, len(scheduler.scheduled))
 	copy(scheduled, scheduler.scheduled)
 
 	scheduler.RUnlock()

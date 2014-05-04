@@ -7,6 +7,10 @@ import (
 	"github.com/winston-ci/prole/api/builds"
 )
 
+type Builder interface {
+	Build(builds.Build) (bool, error)
+}
+
 type SourceFetcher interface {
 	Fetch(source builds.BuildSource) (directory string, err error)
 }
@@ -15,7 +19,7 @@ type ImageFetcher interface {
 	Fetch(name string) (id string, err error)
 }
 
-type Builder struct {
+type builder struct {
 	sourceFetcher SourceFetcher
 	wardenClient  warden.Client
 }
@@ -23,14 +27,14 @@ type Builder struct {
 func NewBuilder(
 	sourceFetcher SourceFetcher,
 	wardenClient warden.Client,
-) *Builder {
-	return &Builder{
+) Builder {
+	return &builder{
 		sourceFetcher: sourceFetcher,
 		wardenClient:  wardenClient,
 	}
 }
 
-func (builder *Builder) Build(build *builds.Build) (bool, error) {
+func (builder *builder) Build(build builds.Build) (bool, error) {
 	var logsEndpoint *websocket.Conn
 
 	if build.LogsURL != "" {

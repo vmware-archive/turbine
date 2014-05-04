@@ -10,21 +10,22 @@ import (
 	"sync"
 
 	"github.com/winston-ci/prole/api/builds"
+	"github.com/winston-ci/prole/builder"
 )
 
-type Builder interface {
-	Build(*builds.Build) (bool, error)
+type Scheduler interface {
+	Schedule(builds.Build) error
 }
 
-type Scheduler struct {
-	builder       Builder
+type scheduler struct {
+	builder       builder.Builder
 	runningBuilds *sync.WaitGroup
 
 	httpClient *http.Client
 }
 
-func NewScheduler(builder Builder) *Scheduler {
-	return &Scheduler{
+func NewScheduler(builder builder.Builder) Scheduler {
+	return &scheduler{
 		builder: builder,
 
 		httpClient: &http.Client{
@@ -37,7 +38,7 @@ func NewScheduler(builder Builder) *Scheduler {
 	}
 }
 
-func (scheduler *Scheduler) Schedule(build *builds.Build) error {
+func (scheduler *scheduler) Schedule(build builds.Build) error {
 	scheduler.runningBuilds.Add(1)
 
 	go func() {
@@ -46,13 +47,13 @@ func (scheduler *Scheduler) Schedule(build *builds.Build) error {
 		log.Println("building", build.Guid)
 
 		ok, err := scheduler.builder.Build(build)
-		scheduler.completeBuild(*build, ok, err)
+		scheduler.completeBuild(build, ok, err)
 	}()
 
 	return nil
 }
 
-func (scheduler *Scheduler) completeBuild(build builds.Build, succeeded bool, errored error) {
+func (scheduler *scheduler) completeBuild(build builds.Build, succeeded bool, errored error) {
 	if errored != nil {
 		build.Status = "errored"
 	} else if succeeded {

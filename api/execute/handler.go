@@ -1,4 +1,4 @@
-package builds
+package execute
 
 import (
 	"encoding/json"
@@ -6,24 +6,23 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+
+	"github.com/winston-ci/prole/api/builds"
+	"github.com/winston-ci/prole/scheduler"
 )
 
-type Scheduler interface {
-	Schedule(*Build) error
+type handler struct {
+	scheduler scheduler.Scheduler
 }
 
-type Handler struct {
-	scheduler Scheduler
-}
-
-func NewHandler(scheduler Scheduler) *Handler {
-	return &Handler{
+func NewHandler(scheduler scheduler.Scheduler) http.Handler {
+	return &handler{
 		scheduler: scheduler,
 	}
 }
 
-func (handler *Handler) PostHandler(w http.ResponseWriter, r *http.Request) {
-	var build *Build
+func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var build builds.Build
 	err := json.NewDecoder(r.Body).Decode(&build)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -48,7 +47,7 @@ func (handler *Handler) PostHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(build)
 }
 
-func (handler *Handler) validateBuild(build *Build) error {
+func (handler *handler) validateBuild(build builds.Build) error {
 	if build.Guid == "" {
 		return errors.New("missing build guid")
 	}

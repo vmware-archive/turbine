@@ -7,7 +7,7 @@ import (
 )
 
 type Builder struct {
-	built       []*builds.Build
+	built       []builds.Build
 	BuildResult bool
 	BuildError  error
 
@@ -18,7 +18,7 @@ func New() *Builder {
 	return &Builder{}
 }
 
-func (builder *Builder) Build(build *builds.Build) (bool, error) {
+func (builder *Builder) Build(build builds.Build) (bool, error) {
 	if builder.BuildError != nil {
 		return false, builder.BuildError
 	}
@@ -30,10 +30,10 @@ func (builder *Builder) Build(build *builds.Build) (bool, error) {
 	return builder.BuildResult, nil
 }
 
-func (builder *Builder) Built() []*builds.Build {
+func (builder *Builder) Built() []builds.Build {
 	builder.RLock()
 
-	built := make([]*builds.Build, len(builder.built))
+	built := make([]builds.Build, len(builder.built))
 	copy(built, builder.built)
 
 	builder.RUnlock()

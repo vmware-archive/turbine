@@ -22,9 +22,9 @@ import (
 var _ = Describe("Builder", func() {
 	var sourceFetcher *fakesourcefetcher.Fetcher
 	var wardenClient *fake_warden_client.FakeClient
-	var builder *Builder
+	var builder Builder
 
-	var build *builds.Build
+	var build builds.Build
 
 	primedStream := func(payloads ...warden.ProcessStream) <-chan warden.ProcessStream {
 		stream := make(chan warden.ProcessStream, len(payloads))
@@ -44,7 +44,7 @@ var _ = Describe("Builder", func() {
 
 		builder = NewBuilder(sourceFetcher, wardenClient)
 
-		build = &builds.Build{
+		build = builds.Build{
 			Image: "some-image-name",
 			Env: [][2]string{
 				{"FOO", "bar"},
