@@ -1,26 +1,20 @@
 package api
 
 import (
-	"log"
 	"net/http"
 
-	"github.com/rcrowley/go-tigertonic"
+	"github.com/tedsuo/router"
 
 	"github.com/winston-ci/prole/api/builds"
+	"github.com/winston-ci/prole/routes"
 )
 
-func New(logger *log.Logger, buildScheduler builds.Scheduler) http.Handler {
-	mux := tigertonic.NewTrieServeMux()
+func New(scheduler builds.Scheduler) (http.Handler, error) {
+	builds := builds.NewHandler(scheduler)
 
-	builds := builds.NewHandler(buildScheduler)
+	handlers := map[string]http.Handler{
+		routes.ExecuteBuild: http.HandlerFunc(builds.PostHandler),
+	}
 
-	mux.Handle("POST", "/builds", logged(logger, builds.PostHandler()))
-
-	return mux
-}
-
-func logged(logger *log.Logger, handler http.Handler) http.Handler {
-	logged := tigertonic.Logged(handler, nil)
-	logged.Logger = logger
-	return logged
+	return router.NewRouter(routes.Routes, handlers)
 }

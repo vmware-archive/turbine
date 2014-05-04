@@ -1,12 +1,11 @@
 package builds
 
 import (
+	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
 	"net/url"
-
-	"github.com/rcrowley/go-tigertonic"
 )
 
 type Scheduler interface {
@@ -23,24 +22,30 @@ func NewHandler(scheduler Scheduler) *Handler {
 	}
 }
 
-func (handler *Handler) PostHandler() http.Handler {
-	return tigertonic.Marshaled(handler.post)
-}
-
-func (handler *Handler) post(url *url.URL, header http.Header, build *Build) (int, http.Header, *Build, error) {
-	err := handler.validateBuild(build)
+func (handler *Handler) PostHandler(w http.ResponseWriter, r *http.Request) {
+	var build *Build
+	err := json.NewDecoder(r.Body).Decode(&build)
 	if err != nil {
-		return http.StatusBadRequest, nil, nil, err
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	err = handler.validateBuild(build)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
 
 	log.Println("scheduling", build.Guid)
 
 	err = handler.scheduler.Schedule(build)
 	if err != nil {
-		return http.StatusServiceUnavailable, nil, nil, err
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
 	}
 
-	return http.StatusCreated, nil, build, nil
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(build)
 }
 
 func (handler *Handler) validateBuild(build *Build) error {

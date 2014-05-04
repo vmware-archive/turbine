@@ -3,13 +3,13 @@ package main
 import (
 	"flag"
 	"log"
+	"net/http"
 	"os"
 
 	WardenClient "github.com/cloudfoundry-incubator/garden/client"
 	WardenConnection "github.com/cloudfoundry-incubator/garden/client/connection"
 	"github.com/cloudfoundry/gunk/command_runner/linux_command_runner"
 	"github.com/pivotal-golang/archiver/extractor"
-	"github.com/rcrowley/go-tigertonic"
 
 	"github.com/winston-ci/prole/api"
 	"github.com/winston-ci/prole/builder"
@@ -52,14 +52,19 @@ func main() {
 	})
 
 	extractor := extractor.NewDetectable()
-	sourceFetcher := sourcefetcher.NewSourceFetcher(*tmpdir, extractor, linux_command_runner.New(true))
+	sourceFetcher := sourcefetcher.NewSourceFetcher(
+		*tmpdir,
+		extractor,
+		linux_command_runner.New(true),
+	)
 
 	builder := builder.NewBuilder(sourceFetcher, wardenClient)
 
-	handler := api.New(logger, scheduler.NewScheduler(builder))
+	handler, err := api.New(scheduler.NewScheduler(builder))
+	if err != nil {
+		log.Fatalln("failed to initialize handler:", err)
+	}
 
-	server := tigertonic.NewServer(*listenAddr, handler)
-
-	err := server.ListenAndServe()
+	err = http.ListenAndServe(*listenAddr, handler)
 	logger.Fatalln("listen error:", err)
 }

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"net/http/httptest"
 
@@ -25,7 +24,8 @@ var _ = Describe("API", func() {
 	BeforeEach(func() {
 		scheduler = fakescheduler.New()
 
-		handler := api.New(log.New(GinkgoWriter, "test", 0), scheduler)
+		handler, err := api.New(scheduler)
+		Ω(err).ShouldNot(HaveOccurred())
 
 		server = httptest.NewServer(handler)
 		client = &http.Client{
