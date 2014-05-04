@@ -134,11 +134,6 @@ var _ = Describe("SourceFetcher", func() {
 	Describe("fetching a git source", func() {
 		var source builds.BuildSource
 
-		gitPath, _ := exec.LookPath("git")
-		if gitPath == "" {
-			gitPath = "git"
-		}
-
 		BeforeEach(func() {
 			source = builds.BuildSource{
 				Type:   "git",
@@ -153,9 +148,9 @@ var _ = Describe("SourceFetcher", func() {
 
 			Ω(commandRunner).Should(HaveExecutedSerially(
 				fake_command_runner.CommandSpec{
-					Path: gitPath,
+					Path: "git",
 					Args: []string{
-						"git", "clone",
+						"clone",
 						"--depth", "10",
 						"--branch", source.Branch,
 						source.URI,
@@ -163,8 +158,8 @@ var _ = Describe("SourceFetcher", func() {
 					},
 				},
 				fake_command_runner.CommandSpec{
-					Path: gitPath,
-					Args: []string{"git", "checkout", source.Ref},
+					Path: "git",
+					Args: []string{"checkout", source.Ref},
 					Dir:  fetched,
 				},
 			))
@@ -176,9 +171,9 @@ var _ = Describe("SourceFetcher", func() {
 			BeforeEach(func() {
 				commandRunner.WhenRunning(
 					fake_command_runner.CommandSpec{
-						Path: gitPath,
+						Path: "git",
 					}, func(cmd *exec.Cmd) error {
-						if cmd.Args[1] == "clone" {
+						if cmd.Args[0] == "clone" {
 							return disaster
 						} else {
 							return nil
@@ -199,9 +194,9 @@ var _ = Describe("SourceFetcher", func() {
 			BeforeEach(func() {
 				commandRunner.WhenRunning(
 					fake_command_runner.CommandSpec{
-						Path: gitPath,
+						Path: "git",
 					}, func(cmd *exec.Cmd) error {
-						if cmd.Args[1] == "checkout" {
+						if cmd.Args[0] == "checkout" {
 							return disaster
 						} else {
 							return nil

@@ -83,21 +83,27 @@ func (fetcher *SourceFetcher) Fetch(source builds.BuildSource) (string, error) {
 			return "", err
 		}
 
-		clone := exec.Command(
-			"git", "clone",
-			"--depth", "10",
-			"--branch", source.Branch,
-			source.URI,
-			tempDir,
-		)
+		clone := &exec.Cmd{
+			Path: "git",
+			Args: []string{
+				"clone",
+				"--depth", "10",
+				"--branch", source.Branch,
+				source.URI,
+				tempDir,
+			},
+		}
 
 		err = fetcher.commandRunner.Run(clone)
 		if err != nil {
 			return "", err
 		}
 
-		checkout := exec.Command("git", "checkout", source.Ref)
-		checkout.Dir = tempDir
+		checkout := &exec.Cmd{
+			Path: "git",
+			Args: []string{"checkout", source.Ref},
+			Dir:  tempDir,
+		}
 
 		err = fetcher.commandRunner.Run(checkout)
 		if err != nil {
