@@ -97,17 +97,6 @@ var _ = Describe("API", func() {
 			})
 		})
 
-		Context("when guid is omitted", func() {
-			BeforeEach(func() {
-				build.Guid = ""
-				requestBody = buildPayload(build)
-			})
-
-			It("returns 400", func() {
-				Ω(response.StatusCode).Should(Equal(http.StatusBadRequest))
-			})
-		})
-
 		Context("when ref is not given for a git source", func() {
 			BeforeEach(func() {
 				build.Source.Type = "git"
