@@ -51,6 +51,10 @@
 			"Rev": "f5533d435ebfcf4fa0463202dc0e966b983618b8"
 		},
 		{
+			"ImportPath": "github.com/pivotal-golang/archiver/compressor",
+			"Rev": "e46831b67d1f71fe27f85b6b4224e2cf55efea8a"
+		},
+		{
 			"ImportPath": "github.com/pivotal-golang/archiver/extractor",
 			"Rev": "e46831b67d1f71fe27f85b6b4224e2cf55efea8a"
 		},
