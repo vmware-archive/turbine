@@ -2,6 +2,9 @@ package client_test
 
 import (
 	"errors"
+	"io"
+	"io/ioutil"
+	"strings"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -106,60 +109,67 @@ var _ = Describe("Container", func() {
 		})
 	})
 
-	Describe("CopyIn", func() {
-		It("sends a copy in request", func() {
-			err := container.CopyIn("from", "to")
+	Describe("StreamIn", func() {
+		It("sends a stream in request", func() {
+			reader, w := io.Pipe()
+			fakeConnection.WhenStreamingIn = func(handle string, dst string) (io.WriteCloser, error) {
+				Ω(dst).Should(Equal("to"))
+				return w, nil
+			}
+
+			writer, err := container.StreamIn("to")
 			Ω(err).ShouldNot(HaveOccurred())
 
-			Ω(fakeConnection.CopiedIn("some-handle")).Should(ContainElement(
-				fake_connection.CopyInSpec{
-					Source:      "from",
-					Destination: "to",
-				},
-			))
+			go func() {
+				writer.Write([]byte("stuff"))
+				writer.Close()
+			}()
+
+			content, err := ioutil.ReadAll(reader)
+			Ω(err).ShouldNot(HaveOccurred())
+			Ω(string(content)).Should(Equal("stuff"))
 		})
 
-		Context("when copying in fails", func() {
+		Context("when streaming in fails", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
-				fakeConnection.WhenCopyingIn = func(handle string, src, dst string) error {
-					return disaster
+				fakeConnection.WhenStreamingIn = func(handle string, dst string) (io.WriteCloser, error) {
+					return nil, disaster
 				}
 			})
 
 			It("returns the error", func() {
-				err := container.CopyIn("from", "to")
+				_, err := container.StreamIn("to")
 				Ω(err).Should(Equal(disaster))
 			})
 		})
 	})
 
-	Describe("CopyOut", func() {
-		It("sends a copy in request", func() {
-			err := container.CopyOut("from", "to", "bob")
-			Ω(err).ShouldNot(HaveOccurred())
+	Describe("StreamOut", func() {
+		It("sends a stream out request", func() {
+			fakeConnection.WhenStreamingOut = func(handle string, src string) (io.Reader, error) {
+				Ω(src).Should(Equal("from"))
+				return strings.NewReader("kewl"), nil
+			}
 
-			Ω(fakeConnection.CopiedOut("some-handle")).Should(ContainElement(
-				fake_connection.CopyOutSpec{
-					Source:      "from",
-					Destination: "to",
-					Owner:       "bob",
-				},
-			))
+			reader, err := container.StreamOut("from")
+			bytes, err := ioutil.ReadAll(reader)
+			Ω(err).ShouldNot(HaveOccurred())
+			Ω(string(bytes)).Should(Equal("kewl"))
 		})
 
-		Context("when copying in fails", func() {
+		Context("when streaming out fails", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
-				fakeConnection.WhenCopyingOut = func(handle string, src, dst, owner string) error {
-					return disaster
+				fakeConnection.WhenStreamingOut = func(handle string, src string) (io.Reader, error) {
+					return nil, disaster
 				}
 			})
 
 			It("returns the error", func() {
-				err := container.CopyOut("from", "to", "bob")
+				_, err := container.StreamOut("from")
 				Ω(err).Should(Equal(disaster))
 			})
 		})

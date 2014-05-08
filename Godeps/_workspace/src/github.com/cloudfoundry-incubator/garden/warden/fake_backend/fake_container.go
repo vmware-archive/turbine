@@ -1,11 +1,13 @@
 package fake_backend
 
 import (
+	"bytes"
 	"io"
 	"sync"
 	"time"
 
 	"github.com/nu7hatch/gouuid"
+	"github.com/onsi/gomega/gbytes"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
 )
@@ -25,11 +27,12 @@ type FakeContainer struct {
 
 	CleanedUp bool
 
-	CopyInError error
-	CopiedIn    [][]string
+	StreamInError error
+	StreamedIn    []StreamInSpec
 
-	CopyOutError error
-	CopiedOut    [][]string
+	StreamOutError  error
+	StreamOutBuffer *bytes.Buffer
+	StreamedOut     []string
 
 	RunError         error
 	RunningProcessID uint32
@@ -92,6 +95,12 @@ type StopSpec struct {
 	Killed bool
 }
 
+type StreamInSpec struct {
+	InStream     *gbytes.Buffer
+	DestPath     string
+	CloseTracker *CloseTracker
+}
+
 func NewFakeContainer(spec warden.ContainerSpec) *FakeContainer {
 	idUUID, err := uuid.NewV4()
 	if err != nil {
@@ -108,6 +117,8 @@ func NewFakeContainer(spec warden.ContainerSpec) *FakeContainer {
 		id: id,
 
 		Spec: spec,
+
+		StreamOutBuffer: new(bytes.Buffer),
 
 		stopMutex:     new(sync.RWMutex),
 		snapshotMutex: new(sync.RWMutex),
@@ -189,24 +200,23 @@ func (c *FakeContainer) Info() (warden.ContainerInfo, error) {
 	return c.ReportedInfo, nil
 }
 
-func (c *FakeContainer) CopyIn(src, dst string) error {
-	if c.CopyInError != nil {
-		return c.CopyInError
-	}
+func (c *FakeContainer) StreamIn(dst string) (io.WriteCloser, error) {
+	buffer := gbytes.NewBuffer()
 
-	c.CopiedIn = append(c.CopiedIn, []string{src, dst})
+	closeTracker := NewCloseTracker(nil, buffer)
 
-	return nil
+	c.StreamedIn = append(c.StreamedIn, StreamInSpec{
+		InStream:     buffer,
+		DestPath:     dst,
+		CloseTracker: closeTracker,
+	})
+
+	return closeTracker, c.StreamInError
 }
 
-func (c *FakeContainer) CopyOut(src, dst, owner string) error {
-	if c.CopyOutError != nil {
-		return c.CopyOutError
-	}
-
-	c.CopiedOut = append(c.CopiedOut, []string{src, dst, owner})
-
-	return nil
+func (c *FakeContainer) StreamOut(srcPath string) (io.Reader, error) {
+	c.StreamedOut = append(c.StreamedOut, srcPath)
+	return c.StreamOutBuffer, c.StreamOutError
 }
 
 func (c *FakeContainer) LimitBandwidth(limits warden.BandwidthLimits) error {

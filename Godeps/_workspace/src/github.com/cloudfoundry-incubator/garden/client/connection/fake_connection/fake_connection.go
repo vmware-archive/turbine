@@ -1,9 +1,12 @@
 package fake_connection
 
 import (
+	"bytes"
+	"io"
 	"sync"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
+	"github.com/onsi/gomega/gbytes"
 )
 
 type FakeConnection struct {
@@ -29,11 +32,11 @@ type FakeConnection struct {
 
 	WhenGettingInfo func(handle string) (warden.ContainerInfo, error)
 
-	copiedIn      map[string][]CopyInSpec
-	WhenCopyingIn func(handle string, src, dst string) error
+	streamedIn      map[string][]StreamInSpec
+	WhenStreamingIn func(handle string, dst string) (io.WriteCloser, error)
 
-	copiedOut      map[string][]CopyOutSpec
-	WhenCopyingOut func(handle string, src, dst, owner string) error
+	streamedOut      map[string][]StreamOutSpec
+	WhenStreamingOut func(handle string, src string) (io.Reader, error)
 
 	limitedBandwidth      map[string][]warden.BandwidthLimits
 	WhenLimitingBandwidth func(handle string, limits warden.BandwidthLimits) (warden.BandwidthLimits, error)
@@ -65,15 +68,14 @@ type StopSpec struct {
 	Kill       bool
 }
 
-type CopyInSpec struct {
-	Source      string
+type StreamInSpec struct {
 	Destination string
+	WriteBuffer *gbytes.Buffer
 }
 
-type CopyOutSpec struct {
-	Source      string
-	Destination string
-	Owner       string
+type StreamOutSpec struct {
+	Source     string
+	ReadBuffer *bytes.Buffer
 }
 
 type NetInSpec struct {
@@ -94,8 +96,8 @@ func New() *FakeConnection {
 
 		stopped: make(map[string][]StopSpec),
 
-		copiedIn:  make(map[string][]CopyInSpec),
-		copiedOut: make(map[string][]CopyOutSpec),
+		streamedIn:  make(map[string][]StreamInSpec),
+		streamedOut: make(map[string][]StreamOutSpec),
 
 		limitedBandwidth: make(map[string][]warden.BandwidthLimits),
 		limitedCPU:       make(map[string][]warden.CPULimits),
@@ -226,49 +228,51 @@ func (connection *FakeConnection) Info(handle string) (warden.ContainerInfo, err
 	return warden.ContainerInfo{}, nil
 }
 
-func (connection *FakeConnection) CopyIn(handle string, src, dst string) error {
+func (connection *FakeConnection) StreamIn(handle string, dstPath string) (io.WriteCloser, error) {
+	buffer := gbytes.NewBuffer()
+
 	connection.lock.Lock()
-	connection.copiedIn[handle] = append(connection.copiedIn[handle], CopyInSpec{
-		Source:      src,
-		Destination: dst,
+	connection.streamedIn[handle] = append(connection.streamedIn[handle], StreamInSpec{
+		Destination: dstPath,
+		WriteBuffer: buffer,
 	})
 	connection.lock.Unlock()
 
-	if connection.WhenCopyingIn != nil {
-		return connection.WhenCopyingIn(handle, src, dst)
+	if connection.WhenStreamingIn != nil {
+		return connection.WhenStreamingIn(handle, dstPath)
 	}
 
-	return nil
+	return buffer, nil
 }
 
-func (connection *FakeConnection) CopiedIn(handle string) []CopyInSpec {
+func (connection *FakeConnection) StreamedIn(handle string) []StreamInSpec {
 	connection.lock.RLock()
 	defer connection.lock.RUnlock()
 
-	return connection.copiedIn[handle]
+	return connection.streamedIn[handle]
 }
 
-func (connection *FakeConnection) CopyOut(handle string, src, dst, owner string) error {
+func (connection *FakeConnection) StreamOut(handle string, srcPath string) (io.Reader, error) {
+	buffer := new(bytes.Buffer)
 	connection.lock.Lock()
-	connection.copiedOut[handle] = append(connection.copiedOut[handle], CopyOutSpec{
-		Source:      src,
-		Destination: dst,
-		Owner:       owner,
+	connection.streamedOut[handle] = append(connection.streamedOut[handle], StreamOutSpec{
+		Source:     srcPath,
+		ReadBuffer: buffer,
 	})
 	connection.lock.Unlock()
 
-	if connection.WhenCopyingOut != nil {
-		return connection.WhenCopyingOut(handle, src, dst, owner)
+	if connection.WhenStreamingOut != nil {
+		return connection.WhenStreamingOut(handle, srcPath)
 	}
 
-	return nil
+	return buffer, nil
 }
 
-func (connection *FakeConnection) CopiedOut(handle string) []CopyOutSpec {
+func (connection *FakeConnection) StreamedOut(handle string) []StreamOutSpec {
 	connection.lock.RLock()
 	defer connection.lock.RUnlock()
 
-	return connection.copiedOut[handle]
+	return connection.streamedOut[handle]
 }
 
 func (connection *FakeConnection) LimitBandwidth(handle string, limits warden.BandwidthLimits) (warden.BandwidthLimits, error) {

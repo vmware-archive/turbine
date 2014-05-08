@@ -3,6 +3,7 @@ package connection_test
 import (
 	"bufio"
 	"bytes"
+	"io/ioutil"
 	"net"
 	"time"
 
@@ -11,8 +12,8 @@ import (
 	. "github.com/onsi/gomega"
 
 	. "github.com/cloudfoundry-incubator/garden/client/connection"
-	"github.com/cloudfoundry-incubator/garden/message_reader"
 	protocol "github.com/cloudfoundry-incubator/garden/protocol"
+	"github.com/cloudfoundry-incubator/garden/transport"
 	"github.com/cloudfoundry-incubator/garden/warden"
 )
 
@@ -50,7 +51,7 @@ var _ = Describe("Connection", func() {
 		reader := bufio.NewReader(bytes.NewBuffer(writeBuffer.Bytes()))
 
 		for _, msg := range messages {
-			req, err := message_reader.ReadRequest(reader)
+			req, err := transport.ReadRequest(reader)
 			Ω(err).ShouldNot(HaveOccurred())
 
 			Ω(req).Should(Equal(msg))
@@ -580,42 +581,74 @@ var _ = Describe("Connection", func() {
 		})
 	})
 
-	Describe("Copying in", func() {
+	Describe("Streaming in", func() {
 		BeforeEach(func() {
 			wardenMessages = append(wardenMessages,
-				&protocol.CopyInResponse{},
+				&protocol.StreamInResponse{},
 			)
 		})
 
-		It("should tell warden to copy in", func() {
-			err := connection.CopyIn("foo-handle", "/foo", "/bar")
+		It("tells warden to stream, and then streams the content as a series of chunks", func() {
+			writer, err := connection.StreamIn("foo-handle", "/bar")
 			Ω(err).ShouldNot(HaveOccurred())
 
-			assertWriteBufferContains(&protocol.CopyInRequest{
-				Handle:  proto.String("foo-handle"),
-				SrcPath: proto.String("/foo"),
-				DstPath: proto.String("/bar"),
-			})
+			_, err = writer.Write([]byte("chunk-1"))
+			Ω(err).ShouldNot(HaveOccurred())
+
+			_, err = writer.Write([]byte("chunk-2"))
+			Ω(err).ShouldNot(HaveOccurred())
+
+			writer.Close()
+
+			assertWriteBufferContains(
+				&protocol.StreamInRequest{
+					Handle:  proto.String("foo-handle"),
+					DstPath: proto.String("/bar"),
+				},
+				&protocol.StreamChunk{
+					Content: []byte("chunk-1"),
+				},
+				&protocol.StreamChunk{
+					Content: []byte("chunk-2"),
+				},
+				&protocol.StreamChunk{
+					EOF: proto.Bool(true),
+				},
+			)
 		})
 	})
 
-	Describe("Copying out", func() {
+	Describe("Streaming Out", func() {
 		BeforeEach(func() {
 			wardenMessages = append(wardenMessages,
-				&protocol.CopyOutResponse{},
+				&protocol.StreamOutResponse{},
+				&protocol.StreamChunk{
+					Content: []byte("hell"),
+				},
+				&protocol.StreamChunk{
+					Content: []byte("o-"),
+				},
+				&protocol.StreamChunk{
+					Content: []byte("world!"),
+				},
+				&protocol.StreamChunk{
+					EOF: proto.Bool(true),
+				},
 			)
 		})
 
-		It("should tell warden to copy out", func() {
-			err := connection.CopyOut("foo-handle", "/foo", "/bar", "bartholofoo")
+		It("asks warden for the given file, then reads its content as a series of chunks", func() {
+			reader, err := connection.StreamOut("foo-handle", "/bar")
 			Ω(err).ShouldNot(HaveOccurred())
 
-			assertWriteBufferContains(&protocol.CopyOutRequest{
+			assertWriteBufferContains(&protocol.StreamOutRequest{
 				Handle:  proto.String("foo-handle"),
-				SrcPath: proto.String("/foo"),
-				DstPath: proto.String("/bar"),
-				Owner:   proto.String("bartholofoo"),
+				SrcPath: proto.String("/bar"),
 			})
+
+			readBytes, err := ioutil.ReadAll(reader)
+			Ω(err).ShouldNot(HaveOccurred())
+			Ω(readBytes).Should(Equal([]byte("hello-world!")))
 		})
 	})
 
@@ -633,7 +666,7 @@ var _ = Describe("Connection", func() {
 			err := connection.Destroy("foo-handle")
 			Ω(err).ShouldNot(HaveOccurred())
 
-			Ω(connection.Disconnected()).Should(BeClosed())
+			Eventually(connection.Disconnected()).Should(BeClosed())
 		})
 	})
 

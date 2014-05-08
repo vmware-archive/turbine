@@ -1,5 +1,9 @@
 package warden
 
+import (
+	"io"
+)
+
 type Container interface {
 	Handle() string
 
@@ -7,8 +11,8 @@ type Container interface {
 
 	Info() (ContainerInfo, error)
 
-	CopyIn(srcPath, dstPath string) error
-	CopyOut(srcPath, dstPath, owner string) error
+	StreamIn(dstPath string) (io.WriteCloser, error)
+	StreamOut(srcPath string) (io.Reader, error)
 
 	LimitBandwidth(limits BandwidthLimits) error
 	CurrentBandwidthLimits() (BandwidthLimits, error)
