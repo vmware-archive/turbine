@@ -3,6 +3,7 @@ package builder
 import (
 	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/gorilla/websocket"
+	"github.com/pivotal-golang/archiver/compressor"
 
 	"github.com/winston-ci/prole/api/builds"
 )
@@ -68,7 +69,12 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 		return false, err
 	}
 
-	err = container.CopyIn(fetchedSource+"/", build.Source.Path+"/")
+	streamIn, err := container.StreamIn(build.Source.Path)
+	if err != nil {
+		return false, err
+	}
+
+	err = compressor.WriteTar(fetchedSource+"/", streamIn)
 	if err != nil {
 		return false, err
 	}

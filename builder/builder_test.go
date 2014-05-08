@@ -1,11 +1,15 @@
 package builder_test
 
 import (
+	"archive/tar"
+	"bytes"
 	"errors"
+	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"path/filepath"
 
-	"github.com/cloudfoundry-incubator/garden/client/connection/fake_connection"
 	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
 	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/gorilla/websocket"
@@ -72,20 +76,36 @@ var _ = Describe("Builder", func() {
 		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
 			return "some-handle", nil
 		}
+
+		tmpdir, err := ioutil.TempDir("", "stream-in-dir")
+		Ω(err).ShouldNot(HaveOccurred())
+
+		err = ioutil.WriteFile(filepath.Join(tmpdir, "some-file"), []byte("some-data"), 0644)
+		Ω(err).ShouldNot(HaveOccurred())
+
+		sourceFetcher.FetchResult = tmpdir
 	})
 
-	It("fetches the build source and copies it in to the container", func() {
-		sourceFetcher.FetchResult = "/path/on/disk"
-
+	It("fetches the build source and streams it in to the container", func() {
 		_, err := builder.Build(build)
 		Ω(err).ShouldNot(HaveOccurred())
 
 		Ω(sourceFetcher.Fetched()).Should(ContainElement(build.Source))
 
-		Ω(wardenClient.Connection.CopiedIn("some-handle")).Should(ContainElement(fake_connection.CopyInSpec{
-			Source:      "/path/on/disk/",
-			Destination: "some/source/path/",
-		}))
+		streamed := wardenClient.Connection.StreamedIn("some-handle")
+		Ω(streamed).ShouldNot(BeEmpty())
+
+		Ω(streamed[0].Destination).Should(Equal("some/source/path"))
+
+		tarReader := tar.NewReader(bytes.NewBuffer(streamed[0].WriteBuffer.Contents()))
+
+		hdr, err := tarReader.Next()
+		Ω(err).ShouldNot(HaveOccurred())
+		Ω(hdr.Name).Should(Equal("./"))
+
+		hdr, err = tarReader.Next()
+		Ω(err).ShouldNot(HaveOccurred())
+		Ω(hdr.Name).Should(Equal("some-file"))
 	})
 
 	It("runs the build's script in the container", func() {
@@ -197,6 +217,7 @@ var _ = Describe("Builder", func() {
 		It("returns true", func() {
 			succeeded, err := builder.Build(build)
 			Ω(err).ShouldNot(HaveOccurred())
+
 			Ω(succeeded).Should(BeTrue())
 		})
 	})
@@ -253,8 +274,8 @@ var _ = Describe("Builder", func() {
 		disaster := errors.New("oh no!")
 
 		BeforeEach(func() {
-			wardenClient.Connection.WhenCopyingIn = func(handle string, src, dst string) error {
-				return disaster
+			wardenClient.Connection.WhenStreamingIn = func(handle string, dst string) (io.WriteCloser, error) {
+				return nil, disaster
 			}
 		})
 
