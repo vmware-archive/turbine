@@ -7,9 +7,9 @@ import (
 )
 
 type Fetcher struct {
-	fetched     []builds.BuildSource
-	FetchResult string
-	FetchError  error
+	fetched      []builds.BuildSource
+	WhenFetching func(builds.BuildSource) (string, error)
+	FetchError   error
 
 	sync.RWMutex
 }
@@ -23,11 +23,22 @@ func (fetcher *Fetcher) Fetch(source builds.BuildSource) (string, error) {
 		return "", fetcher.FetchError
 	}
 
+	result := ""
+
+	if fetcher.WhenFetching != nil {
+		src, err := fetcher.WhenFetching(source)
+		if err != nil {
+			return "", err
+		}
+
+		result = src
+	}
+
 	fetcher.Lock()
 	fetcher.fetched = append(fetcher.fetched, source)
 	fetcher.Unlock()
 
-	return fetcher.FetchResult, nil
+	return result, nil
 }
 
 func (fetcher *Fetcher) Fetched() []builds.BuildSource {

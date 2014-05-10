@@ -48,12 +48,14 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler *handler) validateBuild(build builds.Build) error {
-	if build.Source.Type == "git" && build.Source.Branch == "" {
-		return errors.New("missing build source branch")
-	}
+	for _, source := range build.Sources {
+		if source.Type == "git" && source.Branch == "" {
+			return errors.New("missing build source branch")
+		}
 
-	if build.Source.Type == "git" && build.Source.Ref == "" {
-		return errors.New("missing build source ref")
+		if source.Type == "git" && source.Ref == "" {
+			return errors.New("missing build source ref")
+		}
 	}
 
 	if build.Callback != "" {

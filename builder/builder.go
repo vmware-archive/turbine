@@ -2,6 +2,7 @@ package builder
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,21 +29,23 @@ type ImageFetcher interface {
 
 type ConfigFile struct {
 	Image  string   `yaml:"image"`
-	Path   string   `yaml:"path"`
 	Env    []string `yaml:"env"`
 	Script string   `yaml:"script"`
 }
 
 type builder struct {
+	tmpdir        string
 	sourceFetcher SourceFetcher
 	wardenClient  warden.Client
 }
 
 func NewBuilder(
+	tmpdir string,
 	sourceFetcher SourceFetcher,
 	wardenClient warden.Client,
 ) Builder {
 	return &builder{
+		tmpdir:        tmpdir,
 		sourceFetcher: sourceFetcher,
 		wardenClient:  wardenClient,
 	}
@@ -63,13 +66,41 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 		logsEndpoint = conn
 	}
 
-	fetchedSource, err := builder.sourceFetcher.Fetch(build.Source)
+	if logsEndpoint != nil {
+		logsEndpoint.WriteMessage(
+			websocket.TextMessage,
+			[]byte("creating container from "+build.Image+"...\n"),
+		)
+	}
+
+	buildSrc, err := ioutil.TempDir(builder.tmpdir, "build-src")
 	if err != nil {
 		return false, err
 	}
 
+	defer os.RemoveAll(buildSrc)
+
+	for _, source := range build.Sources {
+		fetchedSource, err := builder.sourceFetcher.Fetch(source)
+		if err != nil {
+			return false, err
+		}
+
+		tmpdest := filepath.Join(buildSrc, source.Path)
+
+		err = os.MkdirAll(filepath.Dir(tmpdest), 0755)
+		if err != nil {
+			return false, err
+		}
+
+		err = os.Rename(fetchedSource, tmpdest)
+		if err != nil {
+			return false, err
+		}
+	}
+
 	if build.ConfigPath != "" {
-		configFile, err := os.Open(filepath.Join(fetchedSource, build.ConfigPath))
+		configFile, err := os.Open(filepath.Join(buildSrc, build.ConfigPath))
 		if err != nil {
 			return false, err
 		}
@@ -84,7 +115,6 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 
 		build.Image = config.Image
 		build.Script = config.Script
-		build.Source.Path = config.Path
 		build.Env = [][2]string{}
 
 		for _, env := range config.Env {
@@ -97,13 +127,6 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 		}
 	}
 
-	if logsEndpoint != nil {
-		logsEndpoint.WriteMessage(
-			websocket.TextMessage,
-			[]byte("creating container from "+build.Image+"...\n"),
-		)
-	}
-
 	container, err := builder.wardenClient.Create(warden.ContainerSpec{
 		RootFSPath: "image:" + build.Image,
 	})
@@ -111,12 +134,12 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 		return false, err
 	}
 
-	streamIn, err := container.StreamIn(build.Source.Path)
+	streamIn, err := container.StreamIn("/var/build/src")
 	if err != nil {
 		return false, err
 	}
 
-	err = compressor.WriteTar(fetchedSource+"/", streamIn)
+	err = compressor.WriteTar(buildSrc+"/", streamIn)
 	if err != nil {
 		return false, err
 	}
@@ -134,7 +157,8 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 	}
 
 	_, stream, err := container.Run(warden.ProcessSpec{
-		Script:               build.Script,
+		Script: "cd /var/build/src\n" + build.Script,
+
 		EnvironmentVariables: env,
 	})
 	if err != nil {

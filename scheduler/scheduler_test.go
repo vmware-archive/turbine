@@ -32,10 +32,12 @@ var _ = Describe("Scheduler", func() {
 			build = builds.Build{
 				Guid: "abc",
 
-				Source: builds.BuildSource{
-					Type: "git",
-					URI:  "http://10.10.2.20:56789/foo.git",
-					Ref:  "deadbeef",
+				Sources: []builds.BuildSource{
+					{
+						Type: "git",
+						URI:  "http://10.10.2.20:56789/foo.git",
+						Ref:  "deadbeef",
+					},
 				},
 
 				Env: [][2]string{

@@ -25,9 +25,11 @@ import (
 )
 
 var _ = Describe("Builder", func() {
+	var builder Builder
+
+	var tmpdir string
 	var sourceFetcher *fakesourcefetcher.Fetcher
 	var wardenClient *fake_warden_client.FakeClient
-	var builder Builder
 
 	var build builds.Build
 
@@ -44,10 +46,14 @@ var _ = Describe("Builder", func() {
 	}
 
 	BeforeEach(func() {
+		var err error
+
+		tmpdir, err = ioutil.TempDir("", "builder-tmpdir")
+		Ω(err).ShouldNot(HaveOccurred())
 		sourceFetcher = fakesourcefetcher.New()
 		wardenClient = fake_warden_client.New()
 
-		builder = NewBuilder(sourceFetcher, wardenClient)
+		builder = NewBuilder(tmpdir, sourceFetcher, wardenClient)
 
 		build = builds.Build{
 			Image: "some-image-name",
@@ -58,10 +64,17 @@ var _ = Describe("Builder", func() {
 			},
 			Script: "./bin/test",
 
-			Source: builds.BuildSource{
-				Type: "raw",
-				URI:  "http://example.com/foo.tar.gz",
-				Path: "some/source/path",
+			Sources: []builds.BuildSource{
+				{
+					Type: "raw",
+					URI:  "http://example.com/foo.tar.gz",
+					Path: "some/source/path",
+				},
+				{
+					Type: "raw",
+					URI:  "http://example.com/bar.tar.gz",
+					Path: "another/source/path",
+				},
 			},
 		}
 
@@ -79,17 +92,19 @@ var _ = Describe("Builder", func() {
 			return "some-handle", nil
 		}
 
-		tmpdir, err := ioutil.TempDir("", "stream-in-dir")
-		Ω(err).ShouldNot(HaveOccurred())
+		sourceFetcher.WhenFetching = func(builds.BuildSource) (string, error) {
+			srctmp, err := ioutil.TempDir("", "stream-in-dir")
+			Ω(err).ShouldNot(HaveOccurred())
 
-		err = ioutil.WriteFile(filepath.Join(tmpdir, "some-file"), []byte("some-data"), 0644)
-		Ω(err).ShouldNot(HaveOccurred())
+			err = ioutil.WriteFile(filepath.Join(srctmp, "some-file"), []byte("some-data"), 0644)
+			Ω(err).ShouldNot(HaveOccurred())
 
-		sourceFetcher.FetchResult = tmpdir
+			return srctmp, nil
+		}
 	})
 
 	AfterEach(func() {
-		os.RemoveAll(sourceFetcher.FetchResult)
+		os.RemoveAll(tmpdir)
 	})
 
 	It("creates a container with the specified image", func() {
@@ -101,26 +116,35 @@ var _ = Describe("Builder", func() {
 		Ω(created[0].RootFSPath).Should(Equal("image:some-image-name"))
 	})
 
-	It("fetches the build source and streams it in to the container", func() {
+	It("fetches the build's sources and streams them in to the container", func() {
 		_, err := builder.Build(build)
 		Ω(err).ShouldNot(HaveOccurred())
 
-		Ω(sourceFetcher.Fetched()).Should(ContainElement(build.Source))
+		Ω(sourceFetcher.Fetched()).Should(Equal(build.Sources))
 
 		streamed := wardenClient.Connection.StreamedIn("some-handle")
-		Ω(streamed).ShouldNot(BeEmpty())
+		Ω(streamed).Should(HaveLen(1))
 
-		Ω(streamed[0].Destination).Should(Equal("some/source/path"))
+		Ω(streamed[0].Destination).Should(Equal("/var/build/src"))
 
 		tarReader := tar.NewReader(bytes.NewBuffer(streamed[0].WriteBuffer.Contents()))
 
-		hdr, err := tarReader.Next()
-		Ω(err).ShouldNot(HaveOccurred())
-		Ω(hdr.Name).Should(Equal("./"))
+		headerNames := []string{}
 
-		hdr, err = tarReader.Next()
-		Ω(err).ShouldNot(HaveOccurred())
-		Ω(hdr.Name).Should(Equal("some-file"))
+		for {
+			hdr, err := tarReader.Next()
+			if err != nil {
+				break
+			}
+
+			headerNames = append(headerNames, hdr.Name)
+		}
+
+		Ω(headerNames).Should(ContainElement("./"))
+		Ω(headerNames).Should(ContainElement("some/source/path/"))
+		Ω(headerNames).Should(ContainElement("some/source/path/some-file"))
+		Ω(headerNames).Should(ContainElement("another/source/path/"))
+		Ω(headerNames).Should(ContainElement("another/source/path/some-file"))
 	})
 
 	It("runs the build's script in the container", func() {
@@ -128,7 +152,8 @@ var _ = Describe("Builder", func() {
 		Ω(err).ShouldNot(HaveOccurred())
 
 		Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
-			Script: "./bin/test",
+			Script: `cd /var/build/src
+./bin/test`,
 			EnvironmentVariables: []warden.EnvironmentVariable{
 				{"FOO", "bar"},
 				{"BAZ", "buzz"},
@@ -136,10 +161,19 @@ var _ = Describe("Builder", func() {
 		}))
 	})
 
+	It("cleans up the fetched sources", func() {
+		_, err := builder.Build(build)
+		Ω(err).ShouldNot(HaveOccurred())
+
+		entries, err := ioutil.ReadDir(tmpdir)
+		Ω(err).ShouldNot(HaveOccurred())
+		Ω(entries).Should(BeEmpty())
+	})
+
 	Context("when a config path is specified", func() {
 		BeforeEach(func() {
 			buildWithConfigPath := build
-			buildWithConfigPath.ConfigPath = "config/path.yml"
+			buildWithConfigPath.ConfigPath = "some/source/path/config/path.yml"
 
 			build = buildWithConfigPath
 		})
@@ -152,23 +186,30 @@ var _ = Describe("Builder", func() {
 			})
 
 			JustBeforeEach(func() {
-				err := os.Mkdir(filepath.Join(sourceFetcher.FetchResult, "config"), 0755)
-				Ω(err).ShouldNot(HaveOccurred())
+				prevFetching := sourceFetcher.WhenFetching
 
-				err = ioutil.WriteFile(
-					filepath.Join(sourceFetcher.FetchResult, "config", "path.yml"),
-					[]byte(contents),
-					0644,
-				)
-				Ω(err).ShouldNot(HaveOccurred())
+				sourceFetcher.WhenFetching = func(source builds.BuildSource) (string, error) {
+					tmpdir, err := prevFetching(source)
+					Ω(err).ShouldNot(HaveOccurred())
+
+					err = os.Mkdir(filepath.Join(tmpdir, "config"), 0755)
+					Ω(err).ShouldNot(HaveOccurred())
+
+					err = ioutil.WriteFile(
+						filepath.Join(tmpdir, "config", "path.yml"),
+						[]byte(contents),
+						0644,
+					)
+					Ω(err).ShouldNot(HaveOccurred())
+
+					return tmpdir, nil
+				}
 			})
 
 			Context("and the content is valid YAML", func() {
 				BeforeEach(func() {
 					contents = `---
 image: some-reconfigured-image
-
-path: some-reconfigured-path
 
 script: some-reconfigured-script
 
@@ -187,12 +228,8 @@ env:
 					Ω(created).Should(HaveLen(1))
 					Ω(created[0].RootFSPath).Should(Equal("image:some-reconfigured-image"))
 
-					streamedIn := wardenClient.Connection.StreamedIn("some-handle")
-					Ω(streamedIn).Should(HaveLen(1))
-					Ω(streamedIn[0].Destination).Should(Equal("some-reconfigured-path"))
-
 					Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
-						Script: "some-reconfigured-script",
+						Script: "cd /var/build/src\nsome-reconfigured-script",
 						EnvironmentVariables: []warden.EnvironmentVariable{
 							{"FOO", "1"},
 							{"BAR", "2"},

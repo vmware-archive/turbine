@@ -48,11 +48,13 @@ var _ = Describe("API", func() {
 		BeforeEach(func() {
 			build = builds.Build{
 				Guid: "abc",
-				Source: builds.BuildSource{
-					Type:   "git",
-					URI:    "https://github.com/winston-ci/prole.git",
-					Branch: "master",
-					Ref:    "deadbeef",
+				Sources: []builds.BuildSource{
+					{
+						Type:   "git",
+						URI:    "https://github.com/winston-ci/prole.git",
+						Branch: "master",
+						Ref:    "deadbeef",
+					},
 				},
 			}
 
@@ -99,8 +101,8 @@ var _ = Describe("API", func() {
 
 		Context("when ref is not given for a git source", func() {
 			BeforeEach(func() {
-				build.Source.Type = "git"
-				build.Source.Ref = ""
+				build.Sources[0].Type = "git"
+				build.Sources[0].Ref = ""
 				requestBody = buildPayload(build)
 			})
 
