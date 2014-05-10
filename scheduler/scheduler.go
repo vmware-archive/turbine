@@ -44,7 +44,7 @@ func (scheduler *scheduler) Schedule(build builds.Build) error {
 	go func() {
 		defer scheduler.runningBuilds.Done()
 
-		log.Println("building", build.Guid)
+		log.Printf("building: %#v\n", build)
 
 		ok, err := scheduler.builder.Build(build)
 		scheduler.completeBuild(build, ok, err)
@@ -62,7 +62,7 @@ func (scheduler *scheduler) completeBuild(build builds.Build, succeeded bool, er
 		build.Status = "failed"
 	}
 
-	log.Println("completed:", build.Guid, build.Status, errored)
+	log.Println("completed:", build.Status, errored)
 
 	if build.Callback == "" {
 		return
