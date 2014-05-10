@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 
 	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
@@ -50,6 +51,7 @@ var _ = Describe("Builder", func() {
 
 		build = builds.Build{
 			Image: "some-image-name",
+
 			Env: [][2]string{
 				{"FOO", "bar"},
 				{"BAZ", "buzz"},
@@ -86,6 +88,19 @@ var _ = Describe("Builder", func() {
 		sourceFetcher.FetchResult = tmpdir
 	})
 
+	AfterEach(func() {
+		os.RemoveAll(sourceFetcher.FetchResult)
+	})
+
+	It("creates a container with the specified image", func() {
+		_, err := builder.Build(build)
+		Ω(err).ShouldNot(HaveOccurred())
+
+		created := wardenClient.Connection.Created()
+		Ω(created).Should(HaveLen(1))
+		Ω(created[0].RootFSPath).Should(Equal("image:some-image-name"))
+	})
+
 	It("fetches the build source and streams it in to the container", func() {
 		_, err := builder.Build(build)
 		Ω(err).ShouldNot(HaveOccurred())
@@ -119,6 +134,110 @@ var _ = Describe("Builder", func() {
 				{"BAZ", "buzz"},
 			},
 		}))
+	})
+
+	Context("when a config path is specified", func() {
+		BeforeEach(func() {
+			buildWithConfigPath := build
+			buildWithConfigPath.ConfigPath = "config/path.yml"
+
+			build = buildWithConfigPath
+		})
+
+		Context("and the path exists in the fetched source", func() {
+			var contents string
+
+			BeforeEach(func() {
+				contents = ""
+			})
+
+			JustBeforeEach(func() {
+				err := os.Mkdir(filepath.Join(sourceFetcher.FetchResult, "config"), 0755)
+				Ω(err).ShouldNot(HaveOccurred())
+
+				err = ioutil.WriteFile(
+					filepath.Join(sourceFetcher.FetchResult, "config", "path.yml"),
+					[]byte(contents),
+					0644,
+				)
+				Ω(err).ShouldNot(HaveOccurred())
+			})
+
+			Context("and the content is valid YAML", func() {
+				BeforeEach(func() {
+					contents = `---
+image: some-reconfigured-image
+
+path: some-reconfigured-path
+
+script: some-reconfigured-script
+
+env:
+  - FOO=1
+  - BAR=2
+  - BAZ=3
+`
+				})
+
+				It("loads it and uses it to reconfigure the build", func() {
+					_, err := builder.Build(build)
+					Ω(err).ShouldNot(HaveOccurred())
+
+					created := wardenClient.Connection.Created()
+					Ω(created).Should(HaveLen(1))
+					Ω(created[0].RootFSPath).Should(Equal("image:some-reconfigured-image"))
+
+					streamedIn := wardenClient.Connection.StreamedIn("some-handle")
+					Ω(streamedIn).Should(HaveLen(1))
+					Ω(streamedIn[0].Destination).Should(Equal("some-reconfigured-path"))
+
+					Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
+						Script: "some-reconfigured-script",
+						EnvironmentVariables: []warden.EnvironmentVariable{
+							{"FOO", "1"},
+							{"BAR", "2"},
+							{"BAZ", "3"},
+						},
+					}))
+				})
+
+				Context("but the env is malformed", func() {
+					BeforeEach(func() {
+						contents = `---
+image: some-reconfigured-image
+
+script: some-reconfigured-script
+
+env:
+  - FOO
+`
+					})
+
+					It("returns an error", func() {
+						_, err := builder.Build(build)
+						Ω(err).Should(HaveOccurred())
+					})
+				})
+			})
+
+			Context("and the contents are invalid", func() {
+				BeforeEach(func() {
+					contents = `ß`
+				})
+
+				It("returns an error", func() {
+					_, err := builder.Build(build)
+					Ω(err).Should(HaveOccurred())
+				})
+			})
+		})
+
+		Context("and the path does not exist", func() {
+			It("returns an error", func() {
+				_, err := builder.Build(build)
+				Ω(err).Should(HaveOccurred())
+			})
+		})
 	})
 
 	Context("when a logs url is configured", func() {

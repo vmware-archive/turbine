@@ -1,7 +1,13 @@
 package builder
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/cloudfoundry-incubator/garden/warden"
+	"github.com/fraenkel/candiedyaml"
 	"github.com/gorilla/websocket"
 	"github.com/pivotal-golang/archiver/compressor"
 
@@ -18,6 +24,13 @@ type SourceFetcher interface {
 
 type ImageFetcher interface {
 	Fetch(name string) (id string, err error)
+}
+
+type ConfigFile struct {
+	Image  string   `yaml:"image"`
+	Path   string   `yaml:"path"`
+	Env    []string `yaml:"env"`
+	Script string   `yaml:"script"`
 }
 
 type builder struct {
@@ -53,6 +66,35 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 	fetchedSource, err := builder.sourceFetcher.Fetch(build.Source)
 	if err != nil {
 		return false, err
+	}
+
+	if build.ConfigPath != "" {
+		configFile, err := os.Open(filepath.Join(fetchedSource, build.ConfigPath))
+		if err != nil {
+			return false, err
+		}
+
+		defer configFile.Close()
+
+		var config ConfigFile
+		err = candiedyaml.NewDecoder(configFile).Decode(&config)
+		if err != nil {
+			return false, err
+		}
+
+		build.Image = config.Image
+		build.Script = config.Script
+		build.Source.Path = config.Path
+		build.Env = [][2]string{}
+
+		for _, env := range config.Env {
+			segs := strings.SplitN(env, "=", 2)
+			if len(segs) != 2 {
+				return false, fmt.Errorf("invalid env string: %q", env)
+			}
+
+			build.Env = append(build.Env, [2]string{segs[0], segs[1]})
+		}
 	}
 
 	if logsEndpoint != nil {
