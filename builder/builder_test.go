@@ -323,12 +323,16 @@ env:
 
 					for {
 						_, msg, err := conn.ReadMessage()
-						if err != nil {
+						if err == io.EOF {
 							break
 						}
 
+						Ω(err).ShouldNot(HaveOccurred())
+
 						buf.Write(msg)
 					}
+
+					buf.Close()
 				},
 			)
 

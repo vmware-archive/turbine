@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/fraenkel/candiedyaml"
@@ -175,6 +176,11 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 	for chunk := range stream {
 		if chunk.ExitStatus != nil {
 			succeeded = *chunk.ExitStatus == 0
+
+			if logsEndpoint != nil {
+				logsEndpoint.WriteControl(websocket.CloseMessage, nil, time.Time{})
+			}
+
 			break
 		}
 
