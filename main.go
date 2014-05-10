@@ -58,7 +58,7 @@ func main() {
 		linux_command_runner.New(true),
 	)
 
-	builder := builder.NewBuilder(sourceFetcher, wardenClient)
+	builder := builder.NewBuilder(*tmpdir, sourceFetcher, wardenClient)
 
 	handler, err := api.New(scheduler.NewScheduler(builder))
 	if err != nil {
