@@ -125,7 +125,8 @@ var _ = Describe("Builder", func() {
 		streamed := wardenClient.Connection.StreamedIn("some-handle")
 		Ω(streamed).Should(HaveLen(1))
 
-		Ω(streamed[0].Destination).Should(Equal("/var/build/src"))
+		Ω(streamed[0].Destination).Should(Equal("/tmp/build/src"))
+		Ω(streamed[0].WriteBuffer.Closed()).Should(BeTrue())
 
 		tarReader := tar.NewReader(bytes.NewBuffer(streamed[0].WriteBuffer.Contents()))
 
@@ -152,7 +153,7 @@ var _ = Describe("Builder", func() {
 		Ω(err).ShouldNot(HaveOccurred())
 
 		Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
-			Script: `cd /var/build/src
+			Script: `cd /tmp/build/src
 ./bin/test`,
 			EnvironmentVariables: []warden.EnvironmentVariable{
 				{"FOO", "bar"},
@@ -229,7 +230,7 @@ env:
 					Ω(created[0].RootFSPath).Should(Equal("image:some-reconfigured-image"))
 
 					Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
-						Script: "cd /var/build/src\nsome-reconfigured-script",
+						Script: "cd /tmp/build/src\nsome-reconfigured-script",
 						EnvironmentVariables: []warden.EnvironmentVariable{
 							{"FOO", "1"},
 							{"BAR", "2"},

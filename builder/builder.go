@@ -134,12 +134,17 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 		return false, err
 	}
 
-	streamIn, err := container.StreamIn("/var/build/src")
+	streamIn, err := container.StreamIn("/tmp/build/src")
 	if err != nil {
 		return false, err
 	}
 
 	err = compressor.WriteTar(buildSrc+"/", streamIn)
+	if err != nil {
+		return false, err
+	}
+
+	err = streamIn.Close()
 	if err != nil {
 		return false, err
 	}
@@ -157,7 +162,7 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 	}
 
 	_, stream, err := container.Run(warden.ProcessSpec{
-		Script: "cd /var/build/src\n" + build.Script,
+		Script: "cd /tmp/build/src\n" + build.Script,
 
 		EnvironmentVariables: env,
 	})
