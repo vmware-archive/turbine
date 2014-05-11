@@ -67,13 +67,6 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 		logsEndpoint = conn
 	}
 
-	if logsEndpoint != nil {
-		logsEndpoint.WriteMessage(
-			websocket.TextMessage,
-			[]byte("creating container from "+build.Image+"...\n"),
-		)
-	}
-
 	buildSrc, err := ioutil.TempDir(builder.tmpdir, "build-src")
 	if err != nil {
 		return false, err
@@ -126,6 +119,13 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 
 			build.Env = append(build.Env, [2]string{segs[0], segs[1]})
 		}
+	}
+
+	if logsEndpoint != nil {
+		logsEndpoint.WriteMessage(
+			websocket.TextMessage,
+			[]byte("creating container from "+build.Image+"...\n"),
+		)
 	}
 
 	container, err := builder.wardenClient.Create(warden.ContainerSpec{
