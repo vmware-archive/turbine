@@ -20,19 +20,19 @@
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/client",
-			"Rev": "42bef8853892692eace9fb7e2b616ba3de1286bc"
+			"Rev": "5e74b7145160f99b0a669a6718164905689e9809"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/protocol",
-			"Rev": "42bef8853892692eace9fb7e2b616ba3de1286bc"
+			"Rev": "5e74b7145160f99b0a669a6718164905689e9809"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/transport",
-			"Rev": "42bef8853892692eace9fb7e2b616ba3de1286bc"
+			"Rev": "5e74b7145160f99b0a669a6718164905689e9809"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/warden",
-			"Rev": "42bef8853892692eace9fb7e2b616ba3de1286bc"
+			"Rev": "5e74b7145160f99b0a669a6718164905689e9809"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry/gunk/command_runner",
