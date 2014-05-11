@@ -20,19 +20,19 @@
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/client",
-			"Rev": "654c9cea125dfab08e82c95341ac02a99169ed4e"
+			"Rev": "42bef8853892692eace9fb7e2b616ba3de1286bc"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/protocol",
-			"Rev": "654c9cea125dfab08e82c95341ac02a99169ed4e"
+			"Rev": "42bef8853892692eace9fb7e2b616ba3de1286bc"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/transport",
-			"Rev": "654c9cea125dfab08e82c95341ac02a99169ed4e"
+			"Rev": "42bef8853892692eace9fb7e2b616ba3de1286bc"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/warden",
-			"Rev": "654c9cea125dfab08e82c95341ac02a99169ed4e"
+			"Rev": "42bef8853892692eace9fb7e2b616ba3de1286bc"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry/gunk/command_runner",
@@ -44,7 +44,7 @@
 		},
 		{
 			"ImportPath": "github.com/gorilla/websocket",
-			"Rev": "1e6e1281b05fe5eaaf3300bdedb8e75880b9c6fd"
+			"Rev": "10a95d14a3a215f5e2045d3dbbcd29f1ab209586"
 		},
 		{
 			"ImportPath": "github.com/onsi/ginkgo",
@@ -64,7 +64,7 @@
 		},
 		{
 			"ImportPath": "github.com/tedsuo/router",
-			"Rev": "ada055cfc6606433b96d99fd9ac65cf24cefee7f"
+			"Rev": "e148496de27fab9f10ef07f3be00471fa59f58b9"
 		}
 	]
 }
