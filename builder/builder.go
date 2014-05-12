@@ -163,6 +163,8 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 	}
 
 	_, stream, err := container.Run(warden.ProcessSpec{
+		Privileged: build.Privileged,
+
 		Script: "cd /tmp/build/src\n" + build.Script,
 
 		EnvironmentVariables: env,

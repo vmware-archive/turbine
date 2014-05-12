@@ -171,6 +171,30 @@ var _ = Describe("Builder", func() {
 		Ω(entries).Should(BeEmpty())
 	})
 
+	Context("when privileged is true", func() {
+		BeforeEach(func() {
+			privilegedBuild := build
+			privilegedBuild.Privileged = true
+
+			build = privilegedBuild
+		})
+
+		It("runs the build privileged", func() {
+			_, err := builder.Build(build)
+			Ω(err).ShouldNot(HaveOccurred())
+
+			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
+				Script: `cd /tmp/build/src
+./bin/test`,
+				Privileged: true,
+				EnvironmentVariables: []warden.EnvironmentVariable{
+					{"FOO", "bar"},
+					{"BAZ", "buzz"},
+				},
+			}))
+		})
+	})
+
 	Context("when a config path is specified", func() {
 		BeforeEach(func() {
 			buildWithConfigPath := build
