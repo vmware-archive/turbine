@@ -16,12 +16,6 @@ import (
 
 var ErrUnknownSourceType = errors.New("unknown source type")
 
-type InputConfig struct {
-	Source    builds.BuildSource `json:"source"`
-	ConfigTag []byte             `json:"config"`
-	Payload   []byte             `json:"payload"`
-}
-
 type ErrResourceFetchFailed struct {
 	Stdout     []byte
 	Stderr     []byte
@@ -52,10 +46,10 @@ func NewSourceFetcher(
 	}
 }
 
-func (fetcher *SourceFetcher) Fetch(source builds.BuildSource, payload []byte) (builds.BuildConfig, io.Reader, error) {
+func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.BuildConfig, io.Reader, error) {
 	var buildConfig builds.BuildConfig
 
-	resourceType, found := fetcher.resourceTypes.Lookup(source.Type)
+	resourceType, found := fetcher.resourceTypes.Lookup(input.Type)
 	if !found {
 		return buildConfig, nil, ErrUnknownSourceType
 	}
@@ -67,7 +61,7 @@ func (fetcher *SourceFetcher) Fetch(source builds.BuildSource, payload []byte) (
 		return buildConfig, nil, err
 	}
 
-	err = fetcher.injectInputConfig(container, payload)
+	err = fetcher.injectInputConfig(container, *input.Version)
 	if err != nil {
 		return buildConfig, nil, err
 	}
@@ -84,7 +78,7 @@ func (fetcher *SourceFetcher) Fetch(source builds.BuildSource, payload []byte) (
 		return buildConfig, nil, err
 	}
 
-	buildConfig, err = fetcher.extractBuildConfig(container, source.ConfigPath)
+	buildConfig, err = fetcher.extractBuildConfig(container, input.ConfigPath)
 	if err != nil {
 		return buildConfig, nil, err
 	}

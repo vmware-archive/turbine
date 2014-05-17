@@ -1,5 +1,7 @@
 package builds
 
+import "encoding/json"
+
 type Build struct {
 	Guid string `json:"guid"`
 
@@ -8,7 +10,7 @@ type Build struct {
 	LogsURL  string `json:"logs_url"`
 	Callback string `json:"callback"`
 
-	Sources []BuildSource `json:"sources"`
+	Inputs []Input `json:"inputs"`
 
 	Status string `json:"status"`
 }
@@ -22,9 +24,11 @@ type BuildConfig struct {
 	Privileged bool `json:"privileged"`
 }
 
-type BuildSource struct {
+type Input struct {
 	Type string `json:"type"`
 
 	ConfigPath      string `json:"configPath"`
 	DestinationPath string `json:"destinationPath"`
+
+	Version *json.RawMessage `json:"version"`
 }

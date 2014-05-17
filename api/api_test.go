@@ -48,7 +48,7 @@ var _ = Describe("API", func() {
 		BeforeEach(func() {
 			build = builds.Build{
 				Guid: "abc",
-				Sources: []builds.BuildSource{
+				Inputs: []builds.Input{
 					{
 						Type: "git",
 					},

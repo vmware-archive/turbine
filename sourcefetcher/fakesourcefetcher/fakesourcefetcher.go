@@ -9,23 +9,18 @@ import (
 )
 
 type Fetcher struct {
-	fetched      []FetchedSpec
-	WhenFetching func(builds.BuildSource, []byte) (builds.BuildConfig, io.Reader, error)
+	fetched      []builds.Input
+	WhenFetching func(builds.Input) (builds.BuildConfig, io.Reader, error)
 	FetchError   error
 
 	sync.RWMutex
-}
-
-type FetchedSpec struct {
-	Source  builds.BuildSource
-	Payload []byte
 }
 
 func New() *Fetcher {
 	return &Fetcher{}
 }
 
-func (fetcher *Fetcher) Fetch(source builds.BuildSource, payload []byte) (builds.BuildConfig, io.Reader, error) {
+func (fetcher *Fetcher) Fetch(input builds.Input) (builds.BuildConfig, io.Reader, error) {
 	if fetcher.FetchError != nil {
 		return builds.BuildConfig{}, nil, fetcher.FetchError
 	}
@@ -34,7 +29,7 @@ func (fetcher *Fetcher) Fetch(source builds.BuildSource, payload []byte) (builds
 	var result io.Reader
 
 	if fetcher.WhenFetching != nil {
-		config, stream, err := fetcher.WhenFetching(source, payload)
+		config, stream, err := fetcher.WhenFetching(input)
 		if err != nil {
 			return builds.BuildConfig{}, nil, err
 		}
@@ -46,19 +41,16 @@ func (fetcher *Fetcher) Fetch(source builds.BuildSource, payload []byte) (builds
 	}
 
 	fetcher.Lock()
-	fetcher.fetched = append(fetcher.fetched, FetchedSpec{
-		Source:  source,
-		Payload: payload,
-	})
+	fetcher.fetched = append(fetcher.fetched, input)
 	fetcher.Unlock()
 
 	return buildConfig, result, nil
 }
 
-func (fetcher *Fetcher) Fetched() []FetchedSpec {
+func (fetcher *Fetcher) Fetched() []builds.Input {
 	fetcher.RLock()
 
-	fetched := make([]FetchedSpec, len(fetcher.fetched))
+	fetched := make([]builds.Input, len(fetcher.fetched))
 	copy(fetched, fetcher.fetched)
 
 	fetcher.RUnlock()

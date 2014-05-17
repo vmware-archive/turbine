@@ -54,7 +54,7 @@ var _ = Describe("Builder", func() {
 				Script: "./bin/test",
 			},
 
-			Sources: []builds.BuildSource{
+			Inputs: []builds.Input{
 				{
 					Type: "raw",
 
@@ -82,7 +82,7 @@ var _ = Describe("Builder", func() {
 			return "some-handle", nil
 		}
 
-		sourceFetcher.WhenFetching = func(builds.BuildSource, []byte) (builds.BuildConfig, io.Reader, error) {
+		sourceFetcher.WhenFetching = func(builds.Input) (builds.BuildConfig, io.Reader, error) {
 			return builds.BuildConfig{}, bytes.NewBufferString("some-data"), nil
 		}
 	})
@@ -100,11 +100,11 @@ var _ = Describe("Builder", func() {
 		sourceStream1 := bytes.NewBufferString("some-data-1")
 		sourceStream2 := bytes.NewBufferString("some-data-2")
 
-		sourceFetcher.WhenFetching = func(buildSource builds.BuildSource, payload []byte) (builds.BuildConfig, io.Reader, error) {
-			if buildSource.DestinationPath == "some/source/path" {
+		sourceFetcher.WhenFetching = func(input builds.Input) (builds.BuildConfig, io.Reader, error) {
+			if input.DestinationPath == "some/source/path" {
 				return builds.BuildConfig{}, sourceStream1, nil
 			}
-			if buildSource.DestinationPath == "another/source/path" {
+			if input.DestinationPath == "another/source/path" {
 				return builds.BuildConfig{}, sourceStream2, nil
 			}
 			panic("unknown stream")
@@ -113,22 +113,16 @@ var _ = Describe("Builder", func() {
 		_, err := builder.Build(build)
 		Ω(err).ShouldNot(HaveOccurred())
 
-		Ω(sourceFetcher.Fetched()).Should(Equal([]fakesourcefetcher.FetchedSpec{
+		Ω(sourceFetcher.Fetched()).Should(Equal([]builds.Input{
 			{
-				Source: builds.BuildSource{
-					Type:            "raw",
-					ConfigPath:      "",
-					DestinationPath: "some/source/path",
-				},
-				Payload: nil,
+				Type:            "raw",
+				ConfigPath:      "",
+				DestinationPath: "some/source/path",
 			},
 			{
-				Source: builds.BuildSource{
-					Type:            "raw",
-					ConfigPath:      "",
-					DestinationPath: "another/source/path",
-				},
-				Payload: nil,
+				Type:            "raw",
+				ConfigPath:      "",
+				DestinationPath: "another/source/path",
 			},
 		}))
 

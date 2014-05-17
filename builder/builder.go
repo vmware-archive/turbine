@@ -15,7 +15,7 @@ type Builder interface {
 }
 
 type SourceFetcher interface {
-	Fetch(source builds.BuildSource, payload []byte) (config builds.BuildConfig, tarStream io.Reader, err error)
+	Fetch(source builds.Input) (config builds.BuildConfig, tarStream io.Reader, err error)
 }
 
 type ImageFetcher interface {
@@ -52,17 +52,17 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 
 	resources := map[string]io.Reader{}
 
-	for _, source := range build.Sources {
-		buildConfig, tarStream, err := builder.sourceFetcher.Fetch(source, nil)
+	for _, input := range build.Inputs {
+		buildConfig, tarStream, err := builder.sourceFetcher.Fetch(input)
 		if err != nil {
 			return false, err
 		}
 
-		if source.ConfigPath != "" {
+		if input.ConfigPath != "" {
 			build.Config = buildConfig
 		}
 
-		resources[source.DestinationPath] = tarStream
+		resources[input.DestinationPath] = tarStream
 	}
 
 	container, err := builder.createBuildContainer(build.Config, logs)

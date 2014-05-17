@@ -3,6 +3,7 @@ package sourcefetcher_test
 import (
 	"archive/tar"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -24,18 +25,19 @@ var _ = Describe("SourceFetcher", func() {
 		wardenClient  *fake_warden_client.FakeClient
 		sourceFetcher *SourceFetcher
 
-		payload []byte
+		input builds.Input
 	)
-
-	buildSource := builds.BuildSource{
-		Type: "some-resource",
-	}
 
 	BeforeEach(func() {
 		resourceTypes = config.ResourceTypes{}
 		wardenClient = fake_warden_client.New()
 
-		payload = []byte("some-payload")
+		version := json.RawMessage("some-version")
+
+		input = builds.Input{
+			Type:    "some-resource",
+			Version: &version,
+		}
 
 		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
 			return "some-handle", nil
@@ -66,7 +68,7 @@ var _ = Describe("SourceFetcher", func() {
 		})
 
 		It("creates a container with the image configured via the source's type", func() {
-			_, _, err := sourceFetcher.Fetch(buildSource, payload)
+			_, _, err := sourceFetcher.Fetch(input)
 			Ω(err).ShouldNot(HaveOccurred())
 
 			Ω(wardenClient.Connection.Created()).Should(Equal([]warden.ContainerSpec{
@@ -85,7 +87,7 @@ var _ = Describe("SourceFetcher", func() {
 				return buffer, nil
 			}
 
-			_, _, err := sourceFetcher.Fetch(buildSource, payload)
+			_, _, err := sourceFetcher.Fetch(input)
 			Ω(err).ShouldNot(HaveOccurred())
 
 			tarReader := tar.NewReader(bytes.NewBuffer(buffer.Contents()))
@@ -98,7 +100,7 @@ var _ = Describe("SourceFetcher", func() {
 			inputConfig, err := ioutil.ReadAll(tarReader)
 			Ω(err).ShouldNot(HaveOccurred())
 
-			Ω(string(inputConfig)).Should(Equal("some-payload"))
+			Ω(string(inputConfig)).Should(Equal("some-version"))
 
 			_, err = tarReader.Next()
 			Ω(err).Should(Equal(io.EOF))
@@ -107,7 +109,7 @@ var _ = Describe("SourceFetcher", func() {
 		})
 
 		It("runs /tmp/resource/in <path> with the contents of the input config file on stdin", func() {
-			_, _, err := sourceFetcher.Fetch(buildSource, payload)
+			_, _, err := sourceFetcher.Fetch(input)
 			Ω(err).ShouldNot(HaveOccurred())
 
 			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
@@ -130,7 +132,7 @@ var _ = Describe("SourceFetcher", func() {
 				return streamOut, nil
 			}
 
-			_, fetchedStream, err := sourceFetcher.Fetch(buildSource, payload)
+			_, fetchedStream, err := sourceFetcher.Fetch(input)
 			Ω(err).ShouldNot(HaveOccurred())
 
 			contents, err := ioutil.ReadAll(fetchedStream)
@@ -140,7 +142,7 @@ var _ = Describe("SourceFetcher", func() {
 
 		Context("when a config path is specified", func() {
 			BeforeEach(func() {
-				buildSource.ConfigPath = "some/config/path.yml"
+				input.ConfigPath = "some/config/path.yml"
 			})
 
 			Context("and the config path exists", func() {
@@ -169,7 +171,7 @@ var _ = Describe("SourceFetcher", func() {
 				})
 
 				It("is parsed and returned as a Build", func() {
-					config, _, err := sourceFetcher.Fetch(buildSource, payload)
+					config, _, err := sourceFetcher.Fetch(input)
 					Ω(err).ShouldNot(HaveOccurred())
 
 					Ω(config.Image).Should(Equal("some-reconfigured-image"))
@@ -201,7 +203,7 @@ var _ = Describe("SourceFetcher", func() {
 					})
 
 					It("returns an error", func() {
-						_, _, err := sourceFetcher.Fetch(buildSource, payload)
+						_, _, err := sourceFetcher.Fetch(input)
 						Ω(err).Should(HaveOccurred())
 					})
 				})
@@ -217,7 +219,7 @@ var _ = Describe("SourceFetcher", func() {
 				})
 
 				It("returns the error", func() {
-					_, _, err := sourceFetcher.Fetch(buildSource, payload)
+					_, _, err := sourceFetcher.Fetch(input)
 					Ω(err).Should(Equal(disaster))
 				})
 			})
@@ -230,7 +232,7 @@ var _ = Describe("SourceFetcher", func() {
 				})
 
 				It("returns an error", func() {
-					_, _, err := sourceFetcher.Fetch(buildSource, payload)
+					_, _, err := sourceFetcher.Fetch(input)
 					Ω(err).Should(HaveOccurred())
 				})
 			})
@@ -245,7 +247,7 @@ var _ = Describe("SourceFetcher", func() {
 				})
 
 				It("returns the error", func() {
-					_, _, err := sourceFetcher.Fetch(buildSource, payload)
+					_, _, err := sourceFetcher.Fetch(input)
 					Ω(err).Should(Equal(disaster))
 				})
 			})
@@ -260,7 +262,7 @@ var _ = Describe("SourceFetcher", func() {
 				})
 
 				It("returns the error", func() {
-					_, _, err := sourceFetcher.Fetch(buildSource, payload)
+					_, _, err := sourceFetcher.Fetch(input)
 					Ω(err).Should(Equal(disaster))
 				})
 			})
@@ -275,7 +277,7 @@ var _ = Describe("SourceFetcher", func() {
 				})
 
 				It("returns an err containing stdout/stderr of the process", func() {
-					_, _, err := sourceFetcher.Fetch(buildSource, payload)
+					_, _, err := sourceFetcher.Fetch(input)
 					Ω(err).Should(Equal(disaster))
 				})
 			})
@@ -305,7 +307,7 @@ var _ = Describe("SourceFetcher", func() {
 				})
 
 				It("returns an err containing stdout/stderr of the process", func() {
-					_, _, err := sourceFetcher.Fetch(buildSource, payload)
+					_, _, err := sourceFetcher.Fetch(input)
 					Ω(err).Should(HaveOccurred())
 					Ω(err.Error()).Should(ContainSubstring("some-stdout-data"))
 					Ω(err.Error()).Should(ContainSubstring("some-stderr-data"))
@@ -323,7 +325,7 @@ var _ = Describe("SourceFetcher", func() {
 				})
 
 				It("returns the error", func() {
-					_, _, err := sourceFetcher.Fetch(buildSource, payload)
+					_, _, err := sourceFetcher.Fetch(input)
 					Ω(err).Should(Equal(disaster))
 				})
 			})
@@ -332,16 +334,16 @@ var _ = Describe("SourceFetcher", func() {
 
 	Context("when the source's resource type is unknown", func() {
 		It("returns ErrUnknownSourceType", func() {
-			_, _, err := sourceFetcher.Fetch(builds.BuildSource{
+			_, _, err := sourceFetcher.Fetch(builds.Input{
 				Type: "lol-butts",
-			}, payload)
+			})
 			Ω(err).Should(Equal(ErrUnknownSourceType))
 		})
 
 		It("does not create a container", func() {
-			_, _, err := sourceFetcher.Fetch(builds.BuildSource{
+			_, _, err := sourceFetcher.Fetch(builds.Input{
 				Type: "lol-butts",
-			}, payload)
+			})
 			Ω(err).Should(HaveOccurred())
 
 			Ω(wardenClient.Connection.Created()).Should(BeEmpty())

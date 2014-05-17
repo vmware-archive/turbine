@@ -32,7 +32,7 @@ var _ = Describe("Scheduler", func() {
 			build = builds.Build{
 				Guid: "abc",
 
-				Sources: []builds.BuildSource{
+				Inputs: []builds.Input{
 					{
 						Type: "git",
 					},
