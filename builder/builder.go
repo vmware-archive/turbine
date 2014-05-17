@@ -75,7 +75,7 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 		return false, err
 	}
 
-	stream, err := builder.runBuild(container, build.Config, logs)
+	stream, err := builder.runBuild(container, build.Privileged, build.Config, logs)
 	if err != nil {
 		return false, err
 	}
@@ -137,6 +137,7 @@ func (builder *builder) streamInResources(
 
 func (builder *builder) runBuild(
 	container warden.Container,
+	privileged bool,
 	buildConfig builds.Config,
 	logs io.Writer,
 ) (<-chan warden.ProcessStream, error) {
@@ -148,7 +149,7 @@ func (builder *builder) runBuild(
 	}
 
 	processSpec := warden.ProcessSpec{
-		Privileged: buildConfig.Privileged,
+		Privileged: privileged,
 
 		Script: "cd /tmp/build/src\n" + buildConfig.Script,
 

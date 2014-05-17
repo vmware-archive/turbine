@@ -154,7 +154,7 @@ var _ = Describe("Builder", func() {
 
 	Context("when privileged is true", func() {
 		BeforeEach(func() {
-			build.Config.Privileged = true
+			build.Privileged = true
 		})
 
 		It("runs the build privileged", func() {
