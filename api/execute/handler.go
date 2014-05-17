@@ -25,13 +25,17 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var build builds.Build
 	err := json.NewDecoder(r.Body).Decode(&build)
 	if err != nil {
+		log.Println("malformed request:", err)
 		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
 		return
 	}
 
 	err = handler.validateBuild(build)
 	if err != nil {
+		log.Println("invalid request:", err)
 		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
 		return
 	}
 
