@@ -12,6 +12,7 @@ import (
 
 	"github.com/winston-ci/prole/api"
 	"github.com/winston-ci/prole/api/builds"
+	"github.com/winston-ci/prole/checker/fakechecker"
 	"github.com/winston-ci/prole/scheduler/fakescheduler"
 )
 
@@ -23,8 +24,9 @@ var _ = Describe("API", func() {
 
 	BeforeEach(func() {
 		scheduler = fakescheduler.New()
+		checker := fakechecker.New()
 
-		handler, err := api.New(scheduler)
+		handler, err := api.New(scheduler, checker)
 		Ω(err).ShouldNot(HaveOccurred())
 
 		server = httptest.NewServer(handler)
