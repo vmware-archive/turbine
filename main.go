@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"log"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/winston-ci/prole/api"
 	"github.com/winston-ci/prole/builder"
+	"github.com/winston-ci/prole/config"
 	"github.com/winston-ci/prole/scheduler"
 	"github.com/winston-ci/prole/sourcefetcher"
 )
@@ -33,6 +35,12 @@ var wardenAddr = flag.String(
 	"warden API connection address",
 )
 
+var resourceTypes = flag.String(
+	"resourceTypes",
+	`{"git":"vito/git-resource"}`,
+	"map of resource type to its docker image",
+)
+
 func main() {
 	flag.Parse()
 
@@ -43,7 +51,21 @@ func main() {
 		Addr:    *wardenAddr,
 	})
 
-	sourceFetcher := sourcefetcher.NewSourceFetcher(nil, wardenClient)
+	resourceTypesMap := map[string]string{}
+	err := json.Unmarshal([]byte(*resourceTypes), &resourceTypesMap)
+	if err != nil {
+		log.Fatalln("failed to parse resource types:", err)
+	}
+
+	var resourceTypesConfig config.ResourceTypes
+	for typ, image := range resourceTypesMap {
+		resourceTypesConfig = append(resourceTypesConfig, config.ResourceType{
+			Name:  typ,
+			Image: image,
+		})
+	}
+
+	sourceFetcher := sourcefetcher.NewSourceFetcher(resourceTypesConfig, wardenClient)
 
 	builder := builder.NewBuilder(sourceFetcher, wardenClient)
 
