@@ -24,6 +24,7 @@ var _ = Describe("Builder", func() {
 	var sourceFetcher *fakesourcefetcher.Fetcher
 	var wardenClient *fake_warden_client.FakeClient
 	var builder Builder
+
 	var build builds.Build
 
 	primedStream := func(payloads ...warden.ProcessStream) <-chan warden.ProcessStream {

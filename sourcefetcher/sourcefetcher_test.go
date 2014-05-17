@@ -236,98 +236,98 @@ var _ = Describe("SourceFetcher", func() {
 					Ω(err).Should(HaveOccurred())
 				})
 			})
+		})
 
-			Context("when creating the container fails", func() {
-				disaster := errors.New("oh no!")
+		Context("when creating the container fails", func() {
+			disaster := errors.New("oh no!")
 
-				BeforeEach(func() {
-					wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
-						return "", disaster
-					}
-				})
-
-				It("returns the error", func() {
-					_, _, err := sourceFetcher.Fetch(input)
-					Ω(err).Should(Equal(disaster))
-				})
+			BeforeEach(func() {
+				wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
+					return "", disaster
+				}
 			})
 
-			Context("when streaming in fails", func() {
-				disaster := errors.New("oh no!")
+			It("returns the error", func() {
+				_, _, err := sourceFetcher.Fetch(input)
+				Ω(err).Should(Equal(disaster))
+			})
+		})
 
-				BeforeEach(func() {
-					wardenClient.Connection.WhenStreamingIn = func(_, _ string) (io.WriteCloser, error) {
-						return nil, disaster
-					}
-				})
+		Context("when streaming in fails", func() {
+			disaster := errors.New("oh no!")
 
-				It("returns the error", func() {
-					_, _, err := sourceFetcher.Fetch(input)
-					Ω(err).Should(Equal(disaster))
-				})
+			BeforeEach(func() {
+				wardenClient.Connection.WhenStreamingIn = func(_, _ string) (io.WriteCloser, error) {
+					return nil, disaster
+				}
 			})
 
-			Context("when running /tmp/resource/in fails", func() {
-				disaster := errors.New("oh no!")
+			It("returns the error", func() {
+				_, _, err := sourceFetcher.Fetch(input)
+				Ω(err).Should(Equal(disaster))
+			})
+		})
 
-				BeforeEach(func() {
-					wardenClient.Connection.WhenRunning = func(string, warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-						return 0, nil, disaster
-					}
-				})
+		Context("when running /tmp/resource/in fails", func() {
+			disaster := errors.New("oh no!")
 
-				It("returns an err containing stdout/stderr of the process", func() {
-					_, _, err := sourceFetcher.Fetch(input)
-					Ω(err).Should(Equal(disaster))
-				})
+			BeforeEach(func() {
+				wardenClient.Connection.WhenRunning = func(string, warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+					return 0, nil, disaster
+				}
 			})
 
-			Context("when /tmp/resource/in fails", func() {
-				BeforeEach(func() {
-					wardenClient.Connection.WhenRunning = func(string, warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-						stream := make(chan warden.ProcessStream, 3)
+			It("returns an err containing stdout/stderr of the process", func() {
+				_, _, err := sourceFetcher.Fetch(input)
+				Ω(err).Should(Equal(disaster))
+			})
+		})
 
-						stream <- warden.ProcessStream{
-							Source: warden.ProcessStreamSourceStdout,
-							Data:   []byte("some-stdout-data"),
-						}
+		Context("when /tmp/resource/in exits nonzero", func() {
+			BeforeEach(func() {
+				wardenClient.Connection.WhenRunning = func(string, warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+					stream := make(chan warden.ProcessStream, 3)
 
-						stream <- warden.ProcessStream{
-							Source: warden.ProcessStreamSourceStderr,
-							Data:   []byte("some-stderr-data"),
-						}
-
-						failedExitStatus := uint32(9)
-						stream <- warden.ProcessStream{
-							ExitStatus: &failedExitStatus,
-						}
-
-						return 0, stream, nil
+					stream <- warden.ProcessStream{
+						Source: warden.ProcessStreamSourceStdout,
+						Data:   []byte("some-stdout-data"),
 					}
-				})
 
-				It("returns an err containing stdout/stderr of the process", func() {
-					_, _, err := sourceFetcher.Fetch(input)
-					Ω(err).Should(HaveOccurred())
-					Ω(err.Error()).Should(ContainSubstring("some-stdout-data"))
-					Ω(err.Error()).Should(ContainSubstring("some-stderr-data"))
-					Ω(err.Error()).Should(ContainSubstring("exit status 9"))
-				})
+					stream <- warden.ProcessStream{
+						Source: warden.ProcessStreamSourceStderr,
+						Data:   []byte("some-stderr-data"),
+					}
+
+					failedExitStatus := uint32(9)
+					stream <- warden.ProcessStream{
+						ExitStatus: &failedExitStatus,
+					}
+
+					return 0, stream, nil
+				}
 			})
 
-			Context("when streaming out fails", func() {
-				disaster := errors.New("oh no!")
+			It("returns an err containing stdout/stderr of the process", func() {
+				_, _, err := sourceFetcher.Fetch(input)
+				Ω(err).Should(HaveOccurred())
+				Ω(err.Error()).Should(ContainSubstring("some-stdout-data"))
+				Ω(err.Error()).Should(ContainSubstring("some-stderr-data"))
+				Ω(err.Error()).Should(ContainSubstring("exit status 9"))
+			})
+		})
 
-				BeforeEach(func() {
-					wardenClient.Connection.WhenStreamingOut = func(_, _ string) (io.Reader, error) {
-						return nil, disaster
-					}
-				})
+		Context("when streaming out fails", func() {
+			disaster := errors.New("oh no!")
 
-				It("returns the error", func() {
-					_, _, err := sourceFetcher.Fetch(input)
-					Ω(err).Should(Equal(disaster))
-				})
+			BeforeEach(func() {
+				wardenClient.Connection.WhenStreamingOut = func(_, _ string) (io.Reader, error) {
+					return nil, disaster
+				}
+			})
+
+			It("returns the error", func() {
+				_, _, err := sourceFetcher.Fetch(input)
+				Ω(err).Should(Equal(disaster))
 			})
 		})
 	})
