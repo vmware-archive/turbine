@@ -33,7 +33,9 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	versions, err := handler.checker.Check(input)
 	if err != nil {
+		log.Println("checking failed:", err)
 		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
 		return
 	}
 
