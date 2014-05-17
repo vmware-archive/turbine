@@ -44,7 +44,7 @@ var _ = Describe("Builder", func() {
 		builder = NewBuilder(sourceFetcher, wardenClient)
 
 		build = builds.Build{
-			Config: builds.BuildConfig{
+			Config: builds.Config{
 				Image: "some-image-name",
 
 				Env: [][2]string{
@@ -82,8 +82,8 @@ var _ = Describe("Builder", func() {
 			return "some-handle", nil
 		}
 
-		sourceFetcher.WhenFetching = func(builds.Input) (builds.BuildConfig, io.Reader, error) {
-			return builds.BuildConfig{}, bytes.NewBufferString("some-data"), nil
+		sourceFetcher.WhenFetching = func(builds.Input) (builds.Config, io.Reader, error) {
+			return builds.Config{}, bytes.NewBufferString("some-data"), nil
 		}
 	})
 
@@ -100,12 +100,12 @@ var _ = Describe("Builder", func() {
 		sourceStream1 := bytes.NewBufferString("some-data-1")
 		sourceStream2 := bytes.NewBufferString("some-data-2")
 
-		sourceFetcher.WhenFetching = func(input builds.Input) (builds.BuildConfig, io.Reader, error) {
+		sourceFetcher.WhenFetching = func(input builds.Input) (builds.Config, io.Reader, error) {
 			if input.DestinationPath == "some/source/path" {
-				return builds.BuildConfig{}, sourceStream1, nil
+				return builds.Config{}, sourceStream1, nil
 			}
 			if input.DestinationPath == "another/source/path" {
-				return builds.BuildConfig{}, sourceStream2, nil
+				return builds.Config{}, sourceStream2, nil
 			}
 			panic("unknown stream")
 		}

@@ -13,8 +13,8 @@ type ConfigFile struct {
 	Script string   `yaml:"script"`
 }
 
-func (cf ConfigFile) AsBuildConfig() (builds.BuildConfig, error) {
-	buildConfig := builds.BuildConfig{
+func (cf ConfigFile) AsBuildConfig() (builds.Config, error) {
+	buildConfig := builds.Config{
 		Image:  cf.Image,
 		Script: cf.Script,
 		Env:    [][2]string{},

@@ -46,8 +46,8 @@ func NewSourceFetcher(
 	}
 }
 
-func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.BuildConfig, io.Reader, error) {
-	var buildConfig builds.BuildConfig
+func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.Config, io.Reader, error) {
+	var buildConfig builds.Config
 
 	resourceType, found := fetcher.resourceTypes.Lookup(input.Type)
 	if !found {
@@ -78,7 +78,7 @@ func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.BuildConfig, io.
 		return buildConfig, nil, err
 	}
 
-	buildConfig, err = fetcher.extractBuildConfig(container, input.ConfigPath)
+	buildConfig, err = fetcher.extractConfig(container, input.ConfigPath)
 	if err != nil {
 		return buildConfig, nil, err
 	}
@@ -151,8 +151,8 @@ func (fetcher *SourceFetcher) waitForRunToEnd(stream <-chan warden.ProcessStream
 	return nil
 }
 
-func (fetcher *SourceFetcher) extractBuildConfig(container warden.Container, configPath string) (builds.BuildConfig, error) {
-	var buildConfig builds.BuildConfig
+func (fetcher *SourceFetcher) extractConfig(container warden.Container, configPath string) (builds.Config, error) {
+	var buildConfig builds.Config
 
 	if configPath == "" {
 		return buildConfig, nil

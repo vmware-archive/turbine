@@ -38,7 +38,7 @@ var _ = Describe("Scheduler", func() {
 					},
 				},
 
-				Config: builds.BuildConfig{
+				Config: builds.Config{
 					Env: [][2]string{
 						{"FOO", "bar"},
 						{"FIZZ", "buzz"},

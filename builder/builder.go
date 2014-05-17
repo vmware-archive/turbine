@@ -15,7 +15,7 @@ type Builder interface {
 }
 
 type SourceFetcher interface {
-	Fetch(source builds.Input) (config builds.BuildConfig, tarStream io.Reader, err error)
+	Fetch(source builds.Input) (config builds.Config, tarStream io.Reader, err error)
 }
 
 type ImageFetcher interface {
@@ -99,7 +99,7 @@ func (builder *builder) logsFor(logURL string) (io.WriteCloser, error) {
 }
 
 func (builder *builder) createBuildContainer(
-	buildConfig builds.BuildConfig,
+	buildConfig builds.Config,
 	logs io.Writer,
 ) (warden.Container, error) {
 	fmt.Fprintf(logs, "creating container from %s...\n", buildConfig.Image)
@@ -137,7 +137,7 @@ func (builder *builder) streamInResources(
 
 func (builder *builder) runBuild(
 	container warden.Container,
-	buildConfig builds.BuildConfig,
+	buildConfig builds.Config,
 	logs io.Writer,
 ) (<-chan warden.ProcessStream, error) {
 	fmt.Fprintf(logs, "starting...\n")
