@@ -1,214 +1,350 @@
 package sourcefetcher_test
 
 import (
+	"archive/tar"
+	"bytes"
 	"errors"
 	"io"
 	"io/ioutil"
-	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
 
-	"github.com/cloudfoundry/gunk/command_runner/fake_command_runner"
-	. "github.com/cloudfoundry/gunk/command_runner/fake_command_runner/matchers"
+	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
+	"github.com/cloudfoundry-incubator/garden/warden"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/ghttp"
-	Extractor "github.com/pivotal-golang/archiver/extractor"
-	"github.com/pivotal-golang/archiver/extractor/fake_extractor"
+	"github.com/onsi/gomega/gbytes"
 
-	archiver "github.com/pivotal-golang/archiver/extractor/test_helper"
 	"github.com/winston-ci/prole/api/builds"
+	"github.com/winston-ci/prole/config"
 	. "github.com/winston-ci/prole/sourcefetcher"
 )
 
 var _ = Describe("SourceFetcher", func() {
-	var tmpdir string
-	var extractor Extractor.Extractor
-	var commandRunner *fake_command_runner.FakeCommandRunner
-	var sourceFetcher *SourceFetcher
+	var (
+		resourceTypes config.ResourceTypes
+		wardenClient  *fake_warden_client.FakeClient
+		sourceFetcher *SourceFetcher
 
-	var server *ghttp.Server
+		payload []byte
+	)
+
+	buildSource := builds.BuildSource{
+		Type: "some-resource",
+	}
 
 	BeforeEach(func() {
-		var err error
+		resourceTypes = config.ResourceTypes{}
+		wardenClient = fake_warden_client.New()
 
-		tmpdir, err = ioutil.TempDir("", "agent-source-fetcher")
-		Ω(err).ShouldNot(HaveOccurred())
+		payload = []byte("some-payload")
 
-		server = ghttp.NewServer()
+		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
+			return "some-handle", nil
+		}
 
-		extractor = Extractor.NewDetectable()
+		wardenClient.Connection.WhenRunning = func(string, warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+			stream := make(chan warden.ProcessStream, 1)
 
-		commandRunner = fake_command_runner.New()
+			exitStatus := uint32(0)
+			stream <- warden.ProcessStream{
+				ExitStatus: &exitStatus,
+			}
+
+			return 0, stream, nil
+		}
 	})
 
 	JustBeforeEach(func() {
-		sourceFetcher = NewSourceFetcher(tmpdir, extractor, commandRunner)
+		sourceFetcher = NewSourceFetcher(resourceTypes, wardenClient)
 	})
 
-	Describe("fetching a raw source", func() {
-		Context("when the url is a .tar.gz", func() {
-			var archivePath string
-			var source builds.BuildSource
+	Context("when the source's resource type is configured", func() {
+		BeforeEach(func() {
+			resourceTypes = append(resourceTypes, config.ResourceType{
+				Name:  "some-resource",
+				Image: "some-resource-image",
+			})
+		})
 
-			BeforeEach(func() {
-				tmpfile, err := ioutil.TempFile("", "agent-source-fetcher-tgz")
-				Ω(err).ShouldNot(HaveOccurred())
+		It("creates a container with the image configured via the source's type", func() {
+			_, _, err := sourceFetcher.Fetch(buildSource, payload)
+			Ω(err).ShouldNot(HaveOccurred())
 
-				archivePath := tmpfile.Name()
+			Ω(wardenClient.Connection.Created()).Should(Equal([]warden.ContainerSpec{
+				{
+					RootFSPath: "image:some-resource-image",
+				},
+			}))
+		})
 
-				os.Remove(archivePath)
+		It("creates a file with the input configuration", func() {
+			buffer := gbytes.NewBuffer()
 
-				archiver.CreateTarGZArchive(archivePath, []archiver.ArchiveFile{
-					{
-						Name: "some-file",
-						Body: "some-file-contents",
-					},
-				})
+			wardenClient.Connection.WhenStreamingIn = func(handle string, destination string) (io.WriteCloser, error) {
+				Ω(handle).Should(Equal("some-handle"))
+				Ω(destination).Should(Equal("/tmp/resource-artifacts/"))
+				return buffer, nil
+			}
 
-				source = builds.BuildSource{
-					Type: "raw",
-					URI:  server.URL() + "/foo.tar.gz",
+			_, _, err := sourceFetcher.Fetch(buildSource, payload)
+			Ω(err).ShouldNot(HaveOccurred())
+
+			tarReader := tar.NewReader(bytes.NewBuffer(buffer.Contents()))
+
+			hdr, err := tarReader.Next()
+			Ω(err).ShouldNot(HaveOccurred())
+			Ω(hdr.Name).Should(Equal("./input.json"))
+			Ω(hdr.Mode).Should(Equal(int64(0644)))
+
+			inputConfig, err := ioutil.ReadAll(tarReader)
+			Ω(err).ShouldNot(HaveOccurred())
+
+			Ω(string(inputConfig)).Should(Equal("some-payload"))
+
+			_, err = tarReader.Next()
+			Ω(err).Should(Equal(io.EOF))
+
+			Ω(buffer.Closed()).Should(BeTrue())
+		})
+
+		It("runs /tmp/resource/in <path> with the contents of the input config file on stdin", func() {
+			_, _, err := sourceFetcher.Fetch(buildSource, payload)
+			Ω(err).ShouldNot(HaveOccurred())
+
+			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
+				{
+					Script: "/tmp/resource/in /tmp/resource-destination < /tmp/resource-artifacts/input.json",
+				},
+			}))
+		})
+
+		It("returns the output stream of /tmp/resource-destination/", func() {
+			wardenClient.Connection.WhenStreamingOut = func(handle string, source string) (io.Reader, error) {
+				Ω(handle).Should(Equal("some-handle"))
+
+				streamOut := new(bytes.Buffer)
+
+				if source == "/tmp/resource-destination/" {
+					streamOut.WriteString("sup")
 				}
 
-				server.AppendHandlers(
-					ghttp.CombineHandlers(
-						ghttp.VerifyRequest("GET", "/foo.tar.gz"),
-						func(w http.ResponseWriter, _ *http.Request) {
-							w.WriteHeader(http.StatusOK)
+				return streamOut, nil
+			}
 
-							archive, err := os.Open(archivePath)
-							Ω(err).ShouldNot(HaveOccurred())
+			_, fetchedStream, err := sourceFetcher.Fetch(buildSource, payload)
+			Ω(err).ShouldNot(HaveOccurred())
 
-							_, err = io.Copy(w, archive)
-							Ω(err).ShouldNot(HaveOccurred())
-						},
-					),
-				)
+			contents, err := ioutil.ReadAll(fetchedStream)
+			Ω(err).ShouldNot(HaveOccurred())
+			Ω(string(contents)).Should(Equal("sup"))
+		})
+
+		Context("when a config path is specified", func() {
+			BeforeEach(func() {
+				buildSource.ConfigPath = "some/config/path.yml"
 			})
 
-			AfterEach(func() {
-				os.Remove(archivePath)
-			})
-
-			It("downloads it into the temporary directory", func() {
-				fetched, err := sourceFetcher.Fetch(source)
-				Ω(err).ShouldNot(HaveOccurred())
-
-				body, err := ioutil.ReadFile(filepath.Join(fetched, "some-file"))
-				Ω(err).ShouldNot(HaveOccurred())
-
-				Ω(string(body)).Should(Equal("some-file-contents"))
-			})
-
-			Context("when downloading fails", func() {
+			Context("and the config path exists", func() {
 				BeforeEach(func() {
-					server.Close()
+					wardenClient.Connection.WhenStreamingOut = func(handle string, src string) (io.Reader, error) {
+						Ω(handle).Should(Equal("some-handle"))
+
+						buf := new(bytes.Buffer)
+
+						if src == "/tmp/resource-destination/some/config/path.yml" {
+							tarWriter := tar.NewWriter(buf)
+
+							contents := []byte("---\nimage: some-reconfigured-image\n")
+
+							tarWriter.WriteHeader(&tar.Header{
+								Name: "./doesnt-matter",
+								Mode: 0644,
+								Size: int64(len(contents)),
+							})
+
+							tarWriter.Write(contents)
+						}
+
+						return buf, nil
+					}
+				})
+
+				It("is parsed and returned as a Build", func() {
+					config, _, err := sourceFetcher.Fetch(buildSource, payload)
+					Ω(err).ShouldNot(HaveOccurred())
+
+					Ω(config.Image).Should(Equal("some-reconfigured-image"))
+				})
+
+				Context("but the output is invalid", func() {
+					BeforeEach(func() {
+						wardenClient.Connection.WhenStreamingOut = func(handle string, src string) (io.Reader, error) {
+							Ω(handle).Should(Equal("some-handle"))
+
+							buf := new(bytes.Buffer)
+
+							if src == "/tmp/resource-destination/some/config/path.yml" {
+								tarWriter := tar.NewWriter(buf)
+
+								contents := []byte("[")
+
+								tarWriter.WriteHeader(&tar.Header{
+									Name: "./doesnt-matter",
+									Mode: 0644,
+									Size: int64(len(contents)),
+								})
+
+								tarWriter.Write(contents)
+							}
+
+							return buf, nil
+						}
+					})
+
+					It("returns an error", func() {
+						_, _, err := sourceFetcher.Fetch(buildSource, payload)
+						Ω(err).Should(HaveOccurred())
+					})
+				})
+			})
+
+			Context("when the config cannot be fetched", func() {
+				disaster := errors.New("oh no!")
+
+				BeforeEach(func() {
+					wardenClient.Connection.WhenStreamingOut = func(handle string, src string) (io.Reader, error) {
+						return nil, disaster
+					}
+				})
+
+				It("returns the error", func() {
+					_, _, err := sourceFetcher.Fetch(buildSource, payload)
+					Ω(err).Should(Equal(disaster))
+				})
+			})
+
+			Context("when the config path does not exist", func() {
+				BeforeEach(func() {
+					wardenClient.Connection.WhenStreamingOut = func(string, string) (io.Reader, error) {
+						return new(bytes.Buffer), nil
+					}
 				})
 
 				It("returns an error", func() {
-					_, err := sourceFetcher.Fetch(source)
+					_, _, err := sourceFetcher.Fetch(buildSource, payload)
 					Ω(err).Should(HaveOccurred())
 				})
 			})
 
-			Context("when extracting fails", func() {
+			Context("when creating the container fails", func() {
 				disaster := errors.New("oh no!")
 
 				BeforeEach(func() {
-					fakeExtractor := &fake_extractor.FakeExtractor{}
-					fakeExtractor.SetExtractOutput(disaster)
-
-					extractor = fakeExtractor
+					wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
+						return "", disaster
+					}
 				})
 
 				It("returns the error", func() {
-					_, err := sourceFetcher.Fetch(source)
+					_, _, err := sourceFetcher.Fetch(buildSource, payload)
+					Ω(err).Should(Equal(disaster))
+				})
+			})
+
+			Context("when streaming in fails", func() {
+				disaster := errors.New("oh no!")
+
+				BeforeEach(func() {
+					wardenClient.Connection.WhenStreamingIn = func(_, _ string) (io.WriteCloser, error) {
+						return nil, disaster
+					}
+				})
+
+				It("returns the error", func() {
+					_, _, err := sourceFetcher.Fetch(buildSource, payload)
+					Ω(err).Should(Equal(disaster))
+				})
+			})
+
+			Context("when running /tmp/resource/in fails", func() {
+				disaster := errors.New("oh no!")
+
+				BeforeEach(func() {
+					wardenClient.Connection.WhenRunning = func(string, warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+						return 0, nil, disaster
+					}
+				})
+
+				It("returns an err containing stdout/stderr of the process", func() {
+					_, _, err := sourceFetcher.Fetch(buildSource, payload)
+					Ω(err).Should(Equal(disaster))
+				})
+			})
+
+			Context("when /tmp/resource/in fails", func() {
+				BeforeEach(func() {
+					wardenClient.Connection.WhenRunning = func(string, warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+						stream := make(chan warden.ProcessStream, 3)
+
+						stream <- warden.ProcessStream{
+							Source: warden.ProcessStreamSourceStdout,
+							Data:   []byte("some-stdout-data"),
+						}
+
+						stream <- warden.ProcessStream{
+							Source: warden.ProcessStreamSourceStderr,
+							Data:   []byte("some-stderr-data"),
+						}
+
+						failedExitStatus := uint32(9)
+						stream <- warden.ProcessStream{
+							ExitStatus: &failedExitStatus,
+						}
+
+						return 0, stream, nil
+					}
+				})
+
+				It("returns an err containing stdout/stderr of the process", func() {
+					_, _, err := sourceFetcher.Fetch(buildSource, payload)
+					Ω(err).Should(HaveOccurred())
+					Ω(err.Error()).Should(ContainSubstring("some-stdout-data"))
+					Ω(err.Error()).Should(ContainSubstring("some-stderr-data"))
+					Ω(err.Error()).Should(ContainSubstring("exit status 9"))
+				})
+			})
+
+			Context("when streaming out fails", func() {
+				disaster := errors.New("oh no!")
+
+				BeforeEach(func() {
+					wardenClient.Connection.WhenStreamingOut = func(_, _ string) (io.Reader, error) {
+						return nil, disaster
+					}
+				})
+
+				It("returns the error", func() {
+					_, _, err := sourceFetcher.Fetch(buildSource, payload)
 					Ω(err).Should(Equal(disaster))
 				})
 			})
 		})
 	})
 
-	Describe("fetching a git source", func() {
-		var source builds.BuildSource
-
-		BeforeEach(func() {
-			source = builds.BuildSource{
-				Type:   "git",
-				URI:    "git://example.com/some/repo.git",
-				Branch: "some-branch",
-			}
+	Context("when the source's resource type is unknown", func() {
+		It("returns ErrUnknownSourceType", func() {
+			_, _, err := sourceFetcher.Fetch(builds.BuildSource{
+				Type: "lol-butts",
+			}, payload)
+			Ω(err).Should(Equal(ErrUnknownSourceType))
 		})
 
-		It("clones it shallowly to a tmpdir, and checks out the ref", func() {
-			fetched, err := sourceFetcher.Fetch(source)
-			Ω(err).ShouldNot(HaveOccurred())
+		It("does not create a container", func() {
+			_, _, err := sourceFetcher.Fetch(builds.BuildSource{
+				Type: "lol-butts",
+			}, payload)
+			Ω(err).Should(HaveOccurred())
 
-			Ω(commandRunner).Should(HaveExecutedSerially(
-				fake_command_runner.CommandSpec{
-					Path: "git",
-					Args: []string{
-						"clone",
-						"--depth", "10",
-						"--branch", source.Branch,
-						source.URI,
-						fetched,
-					},
-				},
-				fake_command_runner.CommandSpec{
-					Path: "git",
-					Args: []string{"checkout", source.Ref},
-					Dir:  fetched,
-				},
-			))
-		})
-
-		Context("when cloning fails", func() {
-			disaster := errors.New("oh no!")
-
-			BeforeEach(func() {
-				commandRunner.WhenRunning(
-					fake_command_runner.CommandSpec{
-						Path: "git",
-					}, func(cmd *exec.Cmd) error {
-						if cmd.Args[0] == "clone" {
-							return disaster
-						} else {
-							return nil
-						}
-					},
-				)
-			})
-
-			It("returns the error", func() {
-				_, err := sourceFetcher.Fetch(source)
-				Ω(err).Should(Equal(disaster))
-			})
-		})
-
-		Context("when checking out fails", func() {
-			disaster := errors.New("oh no!")
-
-			BeforeEach(func() {
-				commandRunner.WhenRunning(
-					fake_command_runner.CommandSpec{
-						Path: "git",
-					}, func(cmd *exec.Cmd) error {
-						if cmd.Args[0] == "checkout" {
-							return disaster
-						} else {
-							return nil
-						}
-					},
-				)
-			})
-
-			It("returns the error", func() {
-				_, err := sourceFetcher.Fetch(source)
-				Ω(err).Should(Equal(disaster))
-			})
+			Ω(wardenClient.Connection.Created()).Should(BeEmpty())
 		})
 	})
 })

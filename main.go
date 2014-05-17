@@ -8,8 +8,6 @@ import (
 
 	WardenClient "github.com/cloudfoundry-incubator/garden/client"
 	WardenConnection "github.com/cloudfoundry-incubator/garden/client/connection"
-	"github.com/cloudfoundry/gunk/command_runner/linux_command_runner"
-	"github.com/pivotal-golang/archiver/extractor"
 
 	"github.com/winston-ci/prole/api"
 	"github.com/winston-ci/prole/builder"
@@ -21,12 +19,6 @@ var listenAddr = flag.String(
 	"listenAddr",
 	"0.0.0.0:4637",
 	"listening address",
-)
-
-var tmpdir = flag.String(
-	"tmpdir",
-	os.Getenv("TMPDIR"),
-	"directory in which to store ephemeral data",
 )
 
 var wardenNetwork = flag.String(
@@ -51,14 +43,9 @@ func main() {
 		Addr:    *wardenAddr,
 	})
 
-	extractor := extractor.NewDetectable()
-	sourceFetcher := sourcefetcher.NewSourceFetcher(
-		*tmpdir,
-		extractor,
-		linux_command_runner.New(true),
-	)
+	sourceFetcher := sourcefetcher.NewSourceFetcher(nil, wardenClient)
 
-	builder := builder.NewBuilder(*tmpdir, sourceFetcher, wardenClient)
+	builder := builder.NewBuilder(sourceFetcher, wardenClient)
 
 	handler, err := api.New(scheduler.NewScheduler(builder))
 	if err != nil {

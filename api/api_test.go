@@ -50,10 +50,7 @@ var _ = Describe("API", func() {
 				Guid: "abc",
 				Sources: []builds.BuildSource{
 					{
-						Type:   "git",
-						URI:    "https://github.com/winston-ci/prole.git",
-						Branch: "master",
-						Ref:    "deadbeef",
+						Type: "git",
 					},
 				},
 			}
@@ -96,18 +93,6 @@ var _ = Describe("API", func() {
 
 			It("returns 503", func() {
 				Ω(response.StatusCode).Should(Equal(http.StatusServiceUnavailable))
-			})
-		})
-
-		Context("when ref is not given for a git source", func() {
-			BeforeEach(func() {
-				build.Sources[0].Type = "git"
-				build.Sources[0].Ref = ""
-				requestBody = buildPayload(build)
-			})
-
-			It("returns 400", func() {
-				Ω(response.StatusCode).Should(Equal(http.StatusBadRequest))
 			})
 		})
 

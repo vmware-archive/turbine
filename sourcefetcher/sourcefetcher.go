@@ -1,117 +1,187 @@
 package sourcefetcher
 
 import (
+	"archive/tar"
 	"errors"
+	"fmt"
 	"io"
-	"io/ioutil"
-	"net/http"
-	"os/exec"
+	"path"
 
-	"github.com/cloudfoundry/gunk/command_runner"
-	"github.com/pivotal-golang/archiver/extractor"
+	"github.com/cloudfoundry-incubator/garden/warden"
+	"github.com/fraenkel/candiedyaml"
 
 	"github.com/winston-ci/prole/api/builds"
+	"github.com/winston-ci/prole/config"
 )
 
 var ErrUnknownSourceType = errors.New("unknown source type")
 
+type InputConfig struct {
+	Source    builds.BuildSource `json:"source"`
+	ConfigTag []byte             `json:"config"`
+	Payload   []byte             `json:"payload"`
+}
+
+type ErrResourceFetchFailed struct {
+	Stdout     []byte
+	Stderr     []byte
+	ExitStatus uint32
+}
+
+func (err ErrResourceFetchFailed) Error() string {
+	return fmt.Sprintf(
+		"resource fetching failed: exit status %d\n\nstdout:\n\n%s\n\nstderr:%s",
+		err.ExitStatus,
+		err.Stdout,
+		err.Stderr,
+	)
+}
+
 type SourceFetcher struct {
-	tmpdir string
-
-	extractor     extractor.Extractor
-	commandRunner command_runner.CommandRunner
-
-	httpClient *http.Client
+	resourceTypes config.ResourceTypes
+	wardenClient  warden.Client
 }
 
 func NewSourceFetcher(
-	tmpdir string,
-	extractor extractor.Extractor,
-	commandRunner command_runner.CommandRunner,
+	resourceTypes config.ResourceTypes,
+	wardenClient warden.Client,
 ) *SourceFetcher {
 	return &SourceFetcher{
-		tmpdir:        tmpdir,
-		extractor:     extractor,
-		commandRunner: commandRunner,
-
-		httpClient: &http.Client{
-			Transport: &http.Transport{
-				DisableKeepAlives: true,
-			},
-		},
+		resourceTypes: resourceTypes,
+		wardenClient:  wardenClient,
 	}
 }
 
-func (fetcher *SourceFetcher) Fetch(source builds.BuildSource) (string, error) {
-	switch source.Type {
-	case "raw":
-		response, err := fetcher.httpClient.Get(source.URI)
-		if err != nil {
-			return "", err
-		}
+func (fetcher *SourceFetcher) Fetch(source builds.BuildSource, payload []byte) (builds.BuildConfig, io.Reader, error) {
+	var buildConfig builds.BuildConfig
 
-		defer response.Body.Close()
-
-		tempFile, err := ioutil.TempFile(fetcher.tmpdir, "fetched-file")
-		if err != nil {
-			return "", err
-		}
-
-		_, err = io.Copy(tempFile, response.Body)
-		if err != nil {
-			tempFile.Close()
-			return "", err
-		}
-
-		tempFile.Close()
-
-		tempDir, err := ioutil.TempDir(fetcher.tmpdir, "fetched-contents")
-		if err != nil {
-			return "", err
-		}
-
-		err = fetcher.extractor.Extract(tempFile.Name(), tempDir)
-		if err != nil {
-			return "", err
-		}
-
-		return tempDir, nil
-
-	case "git":
-		tempDir, err := ioutil.TempDir(fetcher.tmpdir, "cloned-contents")
-		if err != nil {
-			return "", err
-		}
-
-		clone := &exec.Cmd{
-			Path: "git",
-			Args: []string{
-				"clone",
-				"--depth", "10",
-				"--branch", source.Branch,
-				source.URI,
-				tempDir,
-			},
-		}
-
-		err = fetcher.commandRunner.Run(clone)
-		if err != nil {
-			return "", err
-		}
-
-		checkout := &exec.Cmd{
-			Path: "git",
-			Args: []string{"checkout", source.Ref},
-			Dir:  tempDir,
-		}
-
-		err = fetcher.commandRunner.Run(checkout)
-		if err != nil {
-			return "", err
-		}
-
-		return tempDir, nil
+	resourceType, found := fetcher.resourceTypes.Lookup(source.Type)
+	if !found {
+		return buildConfig, nil, ErrUnknownSourceType
 	}
 
-	return "", ErrUnknownSourceType
+	container, err := fetcher.wardenClient.Create(warden.ContainerSpec{
+		RootFSPath: "image:" + resourceType.Image,
+	})
+	if err != nil {
+		return buildConfig, nil, err
+	}
+
+	err = fetcher.injectInputConfig(container, payload)
+	if err != nil {
+		return buildConfig, nil, err
+	}
+
+	_, stream, err := container.Run(warden.ProcessSpec{
+		Script: "/tmp/resource/in /tmp/resource-destination < /tmp/resource-artifacts/input.json",
+	})
+	if err != nil {
+		return buildConfig, nil, err
+	}
+
+	err = fetcher.waitForRunToEnd(stream)
+	if err != nil {
+		return buildConfig, nil, err
+	}
+
+	buildConfig, err = fetcher.extractBuildConfig(container, source.ConfigPath)
+	if err != nil {
+		return buildConfig, nil, err
+	}
+
+	outStream, err := container.StreamOut("/tmp/resource-destination/")
+
+	return buildConfig, outStream, err
+}
+
+func (fetcher *SourceFetcher) injectInputConfig(container warden.Container, payload []byte) error {
+	streamIn, err := container.StreamIn("/tmp/resource-artifacts/")
+	if err != nil {
+		return err
+	}
+
+	tarWriter := tar.NewWriter(streamIn)
+
+	err = tarWriter.WriteHeader(&tar.Header{
+		Name: "./input.json",
+		Mode: 0644,
+		Size: int64(len(payload)),
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = tarWriter.Write(payload)
+	if err != nil {
+		return err
+	}
+
+	err = tarWriter.Close()
+	if err != nil {
+		return err
+	}
+
+	err = streamIn.Close()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (fetcher *SourceFetcher) waitForRunToEnd(stream <-chan warden.ProcessStream) error {
+	stdout := []byte{}
+	stderr := []byte{}
+
+	for chunk := range stream {
+		if chunk.ExitStatus != nil {
+			if *chunk.ExitStatus != 0 {
+				return ErrResourceFetchFailed{
+					Stdout:     stdout,
+					Stderr:     stderr,
+					ExitStatus: *chunk.ExitStatus,
+				}
+			}
+
+			break
+		}
+
+		switch chunk.Source {
+		case warden.ProcessStreamSourceStdout:
+			stdout = append(stdout, chunk.Data...)
+		case warden.ProcessStreamSourceStderr:
+			stderr = append(stderr, chunk.Data...)
+		}
+	}
+
+	return nil
+}
+
+func (fetcher *SourceFetcher) extractBuildConfig(container warden.Container, configPath string) (builds.BuildConfig, error) {
+	var buildConfig builds.BuildConfig
+
+	if configPath == "" {
+		return buildConfig, nil
+	}
+
+	configStream, err := container.StreamOut(path.Join("/tmp/resource-destination", configPath))
+	if err != nil {
+		return buildConfig, err
+	}
+
+	reader := tar.NewReader(configStream)
+
+	_, err = reader.Next()
+	if err != nil {
+		return buildConfig, err
+	}
+
+	var configFile ConfigFile
+
+	err = candiedyaml.NewDecoder(reader).Decode(&configFile)
+	if err != nil {
+		return buildConfig, err
+	}
+
+	return configFile.AsBuildConfig()
 }

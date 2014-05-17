@@ -1,15 +1,11 @@
 package builder_test
 
 import (
-	"archive/tar"
 	"bytes"
 	"errors"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 
 	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
 	"github.com/cloudfoundry-incubator/garden/warden"
@@ -25,12 +21,9 @@ import (
 )
 
 var _ = Describe("Builder", func() {
-	var builder Builder
-
-	var tmpdir string
 	var sourceFetcher *fakesourcefetcher.Fetcher
 	var wardenClient *fake_warden_client.FakeClient
-
+	var builder Builder
 	var build builds.Build
 
 	primedStream := func(payloads ...warden.ProcessStream) <-chan warden.ProcessStream {
@@ -46,34 +39,31 @@ var _ = Describe("Builder", func() {
 	}
 
 	BeforeEach(func() {
-		var err error
-
-		tmpdir, err = ioutil.TempDir("", "builder-tmpdir")
-		Ω(err).ShouldNot(HaveOccurred())
 		sourceFetcher = fakesourcefetcher.New()
 		wardenClient = fake_warden_client.New()
-
-		builder = NewBuilder(tmpdir, sourceFetcher, wardenClient)
+		builder = NewBuilder(sourceFetcher, wardenClient)
 
 		build = builds.Build{
-			Image: "some-image-name",
+			Config: builds.BuildConfig{
+				Image: "some-image-name",
 
-			Env: [][2]string{
-				{"FOO", "bar"},
-				{"BAZ", "buzz"},
+				Env: [][2]string{
+					{"FOO", "bar"},
+					{"BAZ", "buzz"},
+				},
+				Script: "./bin/test",
 			},
-			Script: "./bin/test",
 
 			Sources: []builds.BuildSource{
 				{
 					Type: "raw",
-					URI:  "http://example.com/foo.tar.gz",
-					Path: "some/source/path",
+
+					DestinationPath: "some/source/path",
 				},
 				{
 					Type: "raw",
-					URI:  "http://example.com/bar.tar.gz",
-					Path: "another/source/path",
+
+					DestinationPath: "another/source/path",
 				},
 			},
 		}
@@ -92,19 +82,9 @@ var _ = Describe("Builder", func() {
 			return "some-handle", nil
 		}
 
-		sourceFetcher.WhenFetching = func(builds.BuildSource) (string, error) {
-			srctmp, err := ioutil.TempDir("", "stream-in-dir")
-			Ω(err).ShouldNot(HaveOccurred())
-
-			err = ioutil.WriteFile(filepath.Join(srctmp, "some-file"), []byte("some-data"), 0644)
-			Ω(err).ShouldNot(HaveOccurred())
-
-			return srctmp, nil
+		sourceFetcher.WhenFetching = func(builds.BuildSource, []byte) (builds.BuildConfig, io.Reader, error) {
+			return builds.BuildConfig{}, bytes.NewBufferString("some-data"), nil
 		}
-	})
-
-	AfterEach(func() {
-		os.RemoveAll(tmpdir)
 	})
 
 	It("creates a container with the specified image", func() {
@@ -117,35 +97,51 @@ var _ = Describe("Builder", func() {
 	})
 
 	It("fetches the build's sources and streams them in to the container", func() {
+		sourceStream1 := bytes.NewBufferString("some-data-1")
+		sourceStream2 := bytes.NewBufferString("some-data-2")
+
+		sourceFetcher.WhenFetching = func(buildSource builds.BuildSource, payload []byte) (builds.BuildConfig, io.Reader, error) {
+			if buildSource.DestinationPath == "some/source/path" {
+				return builds.BuildConfig{}, sourceStream1, nil
+			}
+			if buildSource.DestinationPath == "another/source/path" {
+				return builds.BuildConfig{}, sourceStream2, nil
+			}
+			panic("unknown stream")
+		}
+
 		_, err := builder.Build(build)
 		Ω(err).ShouldNot(HaveOccurred())
 
-		Ω(sourceFetcher.Fetched()).Should(Equal(build.Sources))
+		Ω(sourceFetcher.Fetched()).Should(Equal([]fakesourcefetcher.FetchedSpec{
+			{
+				Source: builds.BuildSource{
+					Type:            "raw",
+					ConfigPath:      "",
+					DestinationPath: "some/source/path",
+				},
+				Payload: nil,
+			},
+			{
+				Source: builds.BuildSource{
+					Type:            "raw",
+					ConfigPath:      "",
+					DestinationPath: "another/source/path",
+				},
+				Payload: nil,
+			},
+		}))
 
-		streamed := wardenClient.Connection.StreamedIn("some-handle")
-		Ω(streamed).Should(HaveLen(1))
+		streamedIn := wardenClient.Connection.StreamedIn("some-handle")
+		Ω(streamedIn).Should(HaveLen(2))
 
-		Ω(streamed[0].Destination).Should(Equal("/tmp/build/src"))
-		Ω(streamed[0].WriteBuffer.Closed()).Should(BeTrue())
+		Ω(streamedIn[0].Destination).Should(Equal("/tmp/build/src/some/source/path"))
+		Ω(string(streamedIn[0].WriteBuffer.Contents())).Should(Equal("some-data-1"))
+		Ω(streamedIn[0].WriteBuffer.Closed()).Should(BeTrue())
 
-		tarReader := tar.NewReader(bytes.NewBuffer(streamed[0].WriteBuffer.Contents()))
-
-		headerNames := []string{}
-
-		for {
-			hdr, err := tarReader.Next()
-			if err != nil {
-				break
-			}
-
-			headerNames = append(headerNames, hdr.Name)
-		}
-
-		Ω(headerNames).Should(ContainElement("./"))
-		Ω(headerNames).Should(ContainElement("some/source/path/"))
-		Ω(headerNames).Should(ContainElement("some/source/path/some-file"))
-		Ω(headerNames).Should(ContainElement("another/source/path/"))
-		Ω(headerNames).Should(ContainElement("another/source/path/some-file"))
+		Ω(streamedIn[1].Destination).Should(Equal("/tmp/build/src/another/source/path"))
+		Ω(string(streamedIn[1].WriteBuffer.Contents())).Should(Equal("some-data-2"))
+		Ω(streamedIn[1].WriteBuffer.Closed()).Should(BeTrue())
 	})
 
 	It("runs the build's script in the container", func() {
@@ -162,21 +158,9 @@ var _ = Describe("Builder", func() {
 		}))
 	})
 
-	It("cleans up the fetched sources", func() {
-		_, err := builder.Build(build)
-		Ω(err).ShouldNot(HaveOccurred())
-
-		entries, err := ioutil.ReadDir(tmpdir)
-		Ω(err).ShouldNot(HaveOccurred())
-		Ω(entries).Should(BeEmpty())
-	})
-
 	Context("when privileged is true", func() {
 		BeforeEach(func() {
-			privilegedBuild := build
-			privilegedBuild.Privileged = true
-
-			build = privilegedBuild
+			build.Config.Privileged = true
 		})
 
 		It("runs the build privileged", func() {
@@ -192,113 +176,6 @@ var _ = Describe("Builder", func() {
 					{"BAZ", "buzz"},
 				},
 			}))
-		})
-	})
-
-	Context("when a config path is specified", func() {
-		BeforeEach(func() {
-			buildWithConfigPath := build
-			buildWithConfigPath.ConfigPath = "some/source/path/config/path.yml"
-
-			build = buildWithConfigPath
-		})
-
-		Context("and the path exists in the fetched source", func() {
-			var contents string
-
-			BeforeEach(func() {
-				contents = ""
-			})
-
-			JustBeforeEach(func() {
-				prevFetching := sourceFetcher.WhenFetching
-
-				sourceFetcher.WhenFetching = func(source builds.BuildSource) (string, error) {
-					tmpdir, err := prevFetching(source)
-					Ω(err).ShouldNot(HaveOccurred())
-
-					err = os.Mkdir(filepath.Join(tmpdir, "config"), 0755)
-					Ω(err).ShouldNot(HaveOccurred())
-
-					err = ioutil.WriteFile(
-						filepath.Join(tmpdir, "config", "path.yml"),
-						[]byte(contents),
-						0644,
-					)
-					Ω(err).ShouldNot(HaveOccurred())
-
-					return tmpdir, nil
-				}
-			})
-
-			Context("and the content is valid YAML", func() {
-				BeforeEach(func() {
-					contents = `---
-image: some-reconfigured-image
-
-script: some-reconfigured-script
-
-env:
-  - FOO=1
-  - BAR=2
-  - BAZ=3
-`
-				})
-
-				It("loads it and uses it to reconfigure the build", func() {
-					_, err := builder.Build(build)
-					Ω(err).ShouldNot(HaveOccurred())
-
-					created := wardenClient.Connection.Created()
-					Ω(created).Should(HaveLen(1))
-					Ω(created[0].RootFSPath).Should(Equal("image:some-reconfigured-image"))
-
-					Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
-						Script: "cd /tmp/build/src\nsome-reconfigured-script",
-						EnvironmentVariables: []warden.EnvironmentVariable{
-							{"FOO", "1"},
-							{"BAR", "2"},
-							{"BAZ", "3"},
-						},
-					}))
-				})
-
-				Context("but the env is malformed", func() {
-					BeforeEach(func() {
-						contents = `---
-image: some-reconfigured-image
-
-script: some-reconfigured-script
-
-env:
-  - FOO
-`
-					})
-
-					It("returns an error", func() {
-						_, err := builder.Build(build)
-						Ω(err).Should(HaveOccurred())
-					})
-				})
-			})
-
-			Context("and the contents are invalid", func() {
-				BeforeEach(func() {
-					contents = `ß`
-				})
-
-				It("returns an error", func() {
-					_, err := builder.Build(build)
-					Ω(err).Should(HaveOccurred())
-				})
-			})
-		})
-
-		Context("and the path does not exist", func() {
-			It("returns an error", func() {
-				_, err := builder.Build(build)
-				Ω(err).Should(HaveOccurred())
-			})
 		})
 	})
 

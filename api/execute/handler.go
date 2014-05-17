@@ -2,7 +2,6 @@ package execute
 
 import (
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
 	"net/url"
@@ -52,16 +51,6 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler *handler) validateBuild(build builds.Build) error {
-	for _, source := range build.Sources {
-		if source.Type == "git" && source.Branch == "" {
-			return errors.New("missing build source branch")
-		}
-
-		if source.Type == "git" && source.Ref == "" {
-			return errors.New("missing build source ref")
-		}
-	}
-
 	if build.Callback != "" {
 		_, err := url.ParseRequestURI(build.Callback)
 		if err != nil {
