@@ -32,11 +32,11 @@ var _ = Describe("SourceFetcher", func() {
 		resourceTypes = config.ResourceTypes{}
 		wardenClient = fake_warden_client.New()
 
-		version := json.RawMessage("some-version")
+		source := json.RawMessage("some-source")
 
 		input = builds.Input{
-			Type:    "some-resource",
-			Version: &version,
+			Type:   "some-resource",
+			Source: &source,
 		}
 
 		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
@@ -100,7 +100,7 @@ var _ = Describe("SourceFetcher", func() {
 			inputConfig, err := ioutil.ReadAll(tarReader)
 			Ω(err).ShouldNot(HaveOccurred())
 
-			Ω(string(inputConfig)).Should(Equal("some-version"))
+			Ω(string(inputConfig)).Should(Equal("some-source"))
 
 			_, err = tarReader.Next()
 			Ω(err).Should(Equal(io.EOF))

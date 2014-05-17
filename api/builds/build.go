@@ -27,7 +27,7 @@ type Config struct {
 type Input struct {
 	Type string `json:"type"`
 
-	Version *json.RawMessage `json:"version"`
+	Source *json.RawMessage `json:"source"`
 
 	ConfigPath      string `json:"configPath"`
 	DestinationPath string `json:"destinationPath"`

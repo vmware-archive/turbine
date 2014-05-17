@@ -48,11 +48,11 @@ var _ = Describe("API", func() {
 		}
 
 		BeforeEach(func() {
-			version := json.RawMessage(`{"ref":"foo"}`)
+			source := json.RawMessage(`{"ref":"foo"}`)
 
 			input = builds.Input{
-				Type:    "git",
-				Version: &version,
+				Type:   "git",
+				Source: &source,
 			}
 
 			requestBody = inputPayload(input)
@@ -73,27 +73,27 @@ var _ = Describe("API", func() {
 			Ω(response.StatusCode).Should(Equal(http.StatusOK))
 		})
 
-		It("checks for new versions of the given input", func() {
+		It("checks for new sources of the given input", func() {
 			Ω(checker.Checked()).Should(ContainElement(input))
 		})
 
-		Context("when the check returns versions", func() {
-			var version1 json.RawMessage
-			var version2 json.RawMessage
+		Context("when the check returns sources", func() {
+			var source1 json.RawMessage
+			var source2 json.RawMessage
 
 			BeforeEach(func() {
-				version1 = json.RawMessage(`{"ref":"a"}`)
-				version2 = json.RawMessage(`{"ref":"b"}`)
+				source1 = json.RawMessage(`{"ref":"a"}`)
+				source2 = json.RawMessage(`{"ref":"b"}`)
 
-				checker.CheckResult = []*json.RawMessage{&version1, &version2}
+				checker.CheckResult = []*json.RawMessage{&source1, &source2}
 			})
 
 			It("responds with them", func() {
-				var versions []*json.RawMessage
-				err := json.NewDecoder(response.Body).Decode(&versions)
+				var sources []*json.RawMessage
+				err := json.NewDecoder(response.Body).Decode(&sources)
 				Ω(err).ShouldNot(HaveOccurred())
 
-				Ω(versions).Should(Equal([]*json.RawMessage{&version1, &version2}))
+				Ω(sources).Should(Equal([]*json.RawMessage{&source1, &source2}))
 			})
 		})
 

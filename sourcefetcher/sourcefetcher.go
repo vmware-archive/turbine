@@ -2,6 +2,7 @@ package sourcefetcher
 
 import (
 	"archive/tar"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -61,7 +62,7 @@ func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.Config, io.Reade
 		return buildConfig, nil, err
 	}
 
-	err = fetcher.injectInputConfig(container, *input.Version)
+	err = fetcher.injectInputSource(container, *input.Source)
 	if err != nil {
 		return buildConfig, nil, err
 	}
@@ -88,7 +89,10 @@ func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.Config, io.Reade
 	return buildConfig, outStream, err
 }
 
-func (fetcher *SourceFetcher) injectInputConfig(container warden.Container, payload []byte) error {
+func (fetcher *SourceFetcher) injectInputSource(
+	container warden.Container,
+	source json.RawMessage,
+) error {
 	streamIn, err := container.StreamIn("/tmp/resource-artifacts/")
 	if err != nil {
 		return err
@@ -99,13 +103,13 @@ func (fetcher *SourceFetcher) injectInputConfig(container warden.Container, payl
 	err = tarWriter.WriteHeader(&tar.Header{
 		Name: "./input.json",
 		Mode: 0644,
-		Size: int64(len(payload)),
+		Size: int64(len(source)),
 	})
 	if err != nil {
 		return err
 	}
 
-	_, err = tarWriter.Write(payload)
+	_, err = tarWriter.Write(source)
 	if err != nil {
 		return err
 	}
