@@ -41,32 +41,39 @@ func NewScheduler(builder builder.Builder) Scheduler {
 func (scheduler *scheduler) Schedule(build builds.Build) error {
 	scheduler.runningBuilds.Add(1)
 
+	log.Printf("building: %#v\n", build)
+
+	started, finished, errored := scheduler.builder.Build(build)
+
 	go func() {
 		defer scheduler.runningBuilds.Done()
 
-		log.Printf("building: %#v\n", build)
+		build := <-started
 
-		ok, err := scheduler.builder.Build(build)
-		scheduler.completeBuild(build, ok, err)
+		select {
+		case ok := <-finished:
+			log.Println("completed:", ok)
+
+			if ok {
+				scheduler.completeBuild(build, "succeeded")
+			} else {
+				scheduler.completeBuild(build, "failed")
+			}
+		case err := <-errored:
+			log.Println("errored:", err)
+			scheduler.completeBuild(build, "errored")
+		}
 	}()
 
 	return nil
 }
 
-func (scheduler *scheduler) completeBuild(build builds.Build, succeeded bool, errored error) {
-	if errored != nil {
-		build.Status = "errored"
-	} else if succeeded {
-		build.Status = "succeeded"
-	} else {
-		build.Status = "failed"
-	}
-
-	log.Println("completed:", build.Status, errored)
-
+func (scheduler *scheduler) completeBuild(build builds.Build, status string) {
 	if build.Callback == "" {
 		return
 	}
+
+	build.Status = status
 
 	// this should always successfully parse (it's done via validation)
 	destination, _ := url.ParseRequestURI(build.Callback)

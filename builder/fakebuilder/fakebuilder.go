@@ -7,9 +7,10 @@ import (
 )
 
 type Builder struct {
-	built       []builds.Build
-	BuildResult bool
-	BuildError  error
+	built        []builds.Build
+	StartedBuild *builds.Build
+	BuildResult  bool
+	BuildError   error
 
 	sync.RWMutex
 }
@@ -18,16 +19,28 @@ func New() *Builder {
 	return &Builder{}
 }
 
-func (builder *Builder) Build(build builds.Build) (bool, error) {
-	if builder.BuildError != nil {
-		return false, builder.BuildError
-	}
+func (builder *Builder) Build(build builds.Build) (<-chan builds.Build, <-chan bool, <-chan error) {
+	started := make(chan builds.Build, 1)
+	finished := make(chan bool, 1)
+	errored := make(chan error, 1)
 
 	builder.Lock()
 	builder.built = append(builder.built, build)
 	builder.Unlock()
 
-	return builder.BuildResult, nil
+	if builder.StartedBuild != nil {
+		started <- *builder.StartedBuild
+	} else {
+		started <- build
+	}
+
+	if builder.BuildError != nil {
+		errored <- builder.BuildError
+	} else {
+		finished <- builder.BuildResult
+	}
+
+	return started, finished, errored
 }
 
 func (builder *Builder) Built() []builds.Build {

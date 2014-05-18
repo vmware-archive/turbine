@@ -11,7 +11,7 @@ import (
 )
 
 type Builder interface {
-	Build(builds.Build) (bool, error)
+	Build(builds.Build) (started <-chan builds.Build, finished <-chan bool, errored <-chan error)
 }
 
 type SourceFetcher interface {
@@ -42,10 +42,21 @@ type nullSink struct{}
 func (nullSink) Write(data []byte) (int, error) { return len(data), nil }
 func (nullSink) Close() error                   { return nil }
 
-func (builder *builder) Build(build builds.Build) (bool, error) {
+func (builder *builder) Build(build builds.Build) (<-chan builds.Build, <-chan bool, <-chan error) {
+	started := make(chan builds.Build, 1)
+	finished := make(chan bool, 1)
+	errored := make(chan error, 1)
+
+	go builder.build(build, started, finished, errored)
+
+	return started, finished, errored
+}
+
+func (builder *builder) build(build builds.Build, started chan<- builds.Build, finished chan<- bool, errored chan<- error) {
 	logs, err := builder.logsFor(build.LogsURL)
 	if err != nil {
-		return false, err
+		errored <- err
+		return
 	}
 
 	defer logs.Close()
@@ -55,7 +66,8 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 	for _, input := range build.Inputs {
 		buildConfig, tarStream, err := builder.sourceFetcher.Fetch(input)
 		if err != nil {
-			return false, err
+			errored <- err
+			return
 		}
 
 		if input.ConfigPath != "" {
@@ -67,20 +79,29 @@ func (builder *builder) Build(build builds.Build) (bool, error) {
 
 	container, err := builder.createBuildContainer(build.Config, logs)
 	if err != nil {
-		return false, err
+		errored <- err
+		return
 	}
 
 	err = builder.streamInResources(container, resources)
 	if err != nil {
-		return false, err
+		errored <- err
+		return
 	}
 
 	stream, err := builder.runBuild(container, build.Privileged, build.Config, logs)
 	if err != nil {
-		return false, err
+		errored <- err
+		return
 	}
 
-	return builder.waitForRunToEnd(stream, logs)
+	succeeded, err := builder.waitForRunToEnd(stream, logs)
+	if err != nil {
+		errored <- err
+		return
+	}
+
+	finished <- succeeded
 }
 
 func (builder *builder) logsFor(logURL string) (io.WriteCloser, error) {

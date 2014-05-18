@@ -25,6 +25,9 @@ var _ = Describe("Builder", func() {
 	var wardenClient *fake_warden_client.FakeClient
 	var builder Builder
 
+	var started <-chan builds.Build
+	var finished <-chan bool
+	var errored <-chan error
 	var build builds.Build
 
 	primedStream := func(payloads ...warden.ProcessStream) <-chan warden.ProcessStream {
@@ -88,60 +91,65 @@ var _ = Describe("Builder", func() {
 		}
 	})
 
+	JustBeforeEach(func() {
+		started, finished, errored = builder.Build(build)
+	})
+
 	It("creates a container with the specified image", func() {
-		_, err := builder.Build(build)
-		Ω(err).ShouldNot(HaveOccurred())
+		Eventually(finished).Should(Receive())
 
 		created := wardenClient.Connection.Created()
 		Ω(created).Should(HaveLen(1))
 		Ω(created[0].RootFSPath).Should(Equal("image:some-image-name"))
 	})
 
-	It("fetches the build's sources and streams them in to the container", func() {
-		sourceStream1 := bytes.NewBufferString("some-data-1")
-		sourceStream2 := bytes.NewBufferString("some-data-2")
+	Context("when fetching the build's sources succeeds", func() {
+		BeforeEach(func() {
+			sourceStream1 := bytes.NewBufferString("some-data-1")
+			sourceStream2 := bytes.NewBufferString("some-data-2")
 
-		sourceFetcher.WhenFetching = func(input builds.Input) (builds.Config, io.Reader, error) {
-			if input.DestinationPath == "some/source/path" {
-				return builds.Config{}, sourceStream1, nil
+			sourceFetcher.WhenFetching = func(input builds.Input) (builds.Config, io.Reader, error) {
+				if input.DestinationPath == "some/source/path" {
+					return builds.Config{}, sourceStream1, nil
+				}
+				if input.DestinationPath == "another/source/path" {
+					return builds.Config{}, sourceStream2, nil
+				}
+				panic("unknown stream")
 			}
-			if input.DestinationPath == "another/source/path" {
-				return builds.Config{}, sourceStream2, nil
-			}
-			panic("unknown stream")
-		}
+		})
 
-		_, err := builder.Build(build)
-		Ω(err).ShouldNot(HaveOccurred())
+		It("streams them in to the container", func() {
+			Eventually(finished).Should(Receive())
 
-		Ω(sourceFetcher.Fetched()).Should(Equal([]builds.Input{
-			{
-				Type:            "raw",
-				ConfigPath:      "",
-				DestinationPath: "some/source/path",
-			},
-			{
-				Type:            "raw",
-				ConfigPath:      "",
-				DestinationPath: "another/source/path",
-			},
-		}))
+			Ω(sourceFetcher.Fetched()).Should(Equal([]builds.Input{
+				{
+					Type:            "raw",
+					ConfigPath:      "",
+					DestinationPath: "some/source/path",
+				},
+				{
+					Type:            "raw",
+					ConfigPath:      "",
+					DestinationPath: "another/source/path",
+				},
+			}))
 
-		streamedIn := wardenClient.Connection.StreamedIn("some-handle")
-		Ω(streamedIn).Should(HaveLen(2))
+			streamedIn := wardenClient.Connection.StreamedIn("some-handle")
+			Ω(streamedIn).Should(HaveLen(2))
 
-		Ω(streamedIn[0].Destination).Should(Equal("/tmp/build/src/some/source/path"))
-		Ω(string(streamedIn[0].WriteBuffer.Contents())).Should(Equal("some-data-1"))
-		Ω(streamedIn[0].WriteBuffer.Closed()).Should(BeTrue())
+			Ω(streamedIn[0].Destination).Should(Equal("/tmp/build/src/some/source/path"))
+			Ω(string(streamedIn[0].WriteBuffer.Contents())).Should(Equal("some-data-1"))
+			Ω(streamedIn[0].WriteBuffer.Closed()).Should(BeTrue())
 
-		Ω(streamedIn[1].Destination).Should(Equal("/tmp/build/src/another/source/path"))
-		Ω(string(streamedIn[1].WriteBuffer.Contents())).Should(Equal("some-data-2"))
-		Ω(streamedIn[1].WriteBuffer.Closed()).Should(BeTrue())
+			Ω(streamedIn[1].Destination).Should(Equal("/tmp/build/src/another/source/path"))
+			Ω(string(streamedIn[1].WriteBuffer.Contents())).Should(Equal("some-data-2"))
+			Ω(streamedIn[1].WriteBuffer.Closed()).Should(BeTrue())
+		})
 	})
 
 	It("runs the build's script in the container", func() {
-		_, err := builder.Build(build)
-		Ω(err).ShouldNot(HaveOccurred())
+		Eventually(finished).Should(Receive())
 
 		Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
 			Script: `cd /tmp/build/src
@@ -159,8 +167,7 @@ var _ = Describe("Builder", func() {
 		})
 
 		It("runs the build privileged", func() {
-			_, err := builder.Build(build)
-			Ω(err).ShouldNot(HaveOccurred())
+			Eventually(finished).Should(Receive())
 
 			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
 				Script: `cd /tmp/build/src
@@ -175,7 +182,11 @@ var _ = Describe("Builder", func() {
 	})
 
 	Context("when a logs url is configured", func() {
-		It("emits the build's output via websockets", func() {
+		var logBuffer *gbytes.Buffer
+
+		BeforeEach(func() {
+			logBuffer = gbytes.NewBuffer()
+
 			wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
 				exitStatus := uint32(0)
 
@@ -197,8 +208,6 @@ var _ = Describe("Builder", func() {
 			}
 
 			websocketEndpoint := ghttp.NewServer()
-
-			buf := gbytes.NewBuffer()
 
 			var upgrader = websocket.Upgrader{
 				ReadBufferSize:  1024,
@@ -225,22 +234,21 @@ var _ = Describe("Builder", func() {
 
 						Ω(err).ShouldNot(HaveOccurred())
 
-						buf.Write(msg)
+						logBuffer.Write(msg)
 					}
 
-					buf.Close()
+					logBuffer.Close()
 				},
 			)
 
 			build.LogsURL = "ws://" + websocketEndpoint.HTTPTestServer.Listener.Addr().String()
+		})
 
-			_, err := builder.Build(build)
-			Ω(err).ShouldNot(HaveOccurred())
-
-			Eventually(buf).Should(gbytes.Say("creating container from some-image-name...\n"))
-			Eventually(buf).Should(gbytes.Say("starting...\n"))
-			Eventually(buf).Should(gbytes.Say("stdout\n"))
-			Eventually(buf).Should(gbytes.Say("stderr\n"))
+		It("emits the build's output via websockets", func() {
+			Eventually(logBuffer).Should(gbytes.Say("creating container from some-image-name...\n"))
+			Eventually(logBuffer).Should(gbytes.Say("starting...\n"))
+			Eventually(logBuffer).Should(gbytes.Say("stdout\n"))
+			Eventually(logBuffer).Should(gbytes.Say("stderr\n"))
 		})
 	})
 
@@ -253,10 +261,8 @@ var _ = Describe("Builder", func() {
 			}
 		})
 
-		It("returns true", func() {
-			succeeded, err := builder.Build(build)
-			Ω(err).Should(Equal(disaster))
-			Ω(succeeded).Should(BeFalse())
+		It("sends the error result", func() {
+			Eventually(errored).Should(Receive(Equal(disaster)))
 		})
 	})
 
@@ -271,11 +277,8 @@ var _ = Describe("Builder", func() {
 			}
 		})
 
-		It("returns true", func() {
-			succeeded, err := builder.Build(build)
-			Ω(err).ShouldNot(HaveOccurred())
-
-			Ω(succeeded).Should(BeTrue())
+		It("sends a successful result", func() {
+			Eventually(finished).Should(Receive(BeTrue()))
 		})
 	})
 
@@ -290,10 +293,8 @@ var _ = Describe("Builder", func() {
 			}
 		})
 
-		It("returns true", func() {
-			succeeded, err := builder.Build(build)
-			Ω(err).ShouldNot(HaveOccurred())
-			Ω(succeeded).Should(BeFalse())
+		It("sends a failed result", func() {
+			Eventually(finished).Should(Receive(BeFalse()))
 		})
 	})
 
@@ -306,10 +307,8 @@ var _ = Describe("Builder", func() {
 			}
 		})
 
-		It("returns the error", func() {
-			succeeded, err := builder.Build(build)
-			Ω(err).Should(Equal(disaster))
-			Ω(succeeded).Should(BeFalse())
+		It("sends the error result", func() {
+			Eventually(errored).Should(Receive(Equal(disaster)))
 		})
 	})
 
@@ -320,10 +319,8 @@ var _ = Describe("Builder", func() {
 			sourceFetcher.FetchError = disaster
 		})
 
-		It("returns the error", func() {
-			succeeded, err := builder.Build(build)
-			Ω(err).Should(Equal(disaster))
-			Ω(succeeded).Should(BeFalse())
+		It("sends the error result", func() {
+			Eventually(errored).Should(Receive(Equal(disaster)))
 		})
 	})
 
@@ -336,10 +333,8 @@ var _ = Describe("Builder", func() {
 			}
 		})
 
-		It("returns the error", func() {
-			succeeded, err := builder.Build(build)
-			Ω(err).Should(Equal(disaster))
-			Ω(succeeded).Should(BeFalse())
+		It("sends the error result", func() {
+			Eventually(errored).Should(Receive(Equal(disaster)))
 		})
 	})
 })
