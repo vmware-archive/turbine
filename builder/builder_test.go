@@ -2,6 +2,7 @@ package builder_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -86,8 +87,8 @@ var _ = Describe("Builder", func() {
 			return "some-handle", nil
 		}
 
-		sourceFetcher.WhenFetching = func(builds.Input) (builds.Config, io.Reader, error) {
-			return builds.Config{}, bytes.NewBufferString("some-data"), nil
+		sourceFetcher.WhenFetching = func(builds.Input) (builds.Config, *json.RawMessage, io.Reader, error) {
+			return builds.Config{}, nil, bytes.NewBufferString("some-data"), nil
 		}
 	})
 
@@ -105,16 +106,21 @@ var _ = Describe("Builder", func() {
 
 	Context("when fetching the build's sources succeeds", func() {
 		BeforeEach(func() {
+			source1 := json.RawMessage("some-source-1")
+			source2 := json.RawMessage("some-source-2")
 			sourceStream1 := bytes.NewBufferString("some-data-1")
 			sourceStream2 := bytes.NewBufferString("some-data-2")
 
-			sourceFetcher.WhenFetching = func(input builds.Input) (builds.Config, io.Reader, error) {
+			sourceFetcher.WhenFetching = func(input builds.Input) (builds.Config, *json.RawMessage, io.Reader, error) {
 				if input.DestinationPath == "some/source/path" {
-					return builds.Config{}, sourceStream1, nil
+					return builds.Config{}, &source1, sourceStream1, nil
 				}
+
 				if input.DestinationPath == "another/source/path" {
-					return builds.Config{}, sourceStream2, nil
+					config := builds.Config{Image: "some-reconfigured-image"}
+					return config, &source2, sourceStream2, nil
 				}
+
 				panic("unknown stream")
 			}
 		})
@@ -125,12 +131,10 @@ var _ = Describe("Builder", func() {
 			Ω(sourceFetcher.Fetched()).Should(Equal([]builds.Input{
 				{
 					Type:            "raw",
-					ConfigPath:      "",
 					DestinationPath: "some/source/path",
 				},
 				{
 					Type:            "raw",
-					ConfigPath:      "",
 					DestinationPath: "another/source/path",
 				},
 			}))
@@ -145,6 +149,30 @@ var _ = Describe("Builder", func() {
 			Ω(streamedIn[1].Destination).Should(Equal("/tmp/build/src/another/source/path"))
 			Ω(string(streamedIn[1].WriteBuffer.Contents())).Should(Equal("some-data-2"))
 			Ω(streamedIn[1].WriteBuffer.Closed()).Should(BeTrue())
+		})
+
+		It("notifies that the build has started, with updated sources and config", func() {
+			var startedBuild builds.Build
+			Eventually(started).Should(Receive(&startedBuild))
+
+			source1 := json.RawMessage("some-source-1")
+			Ω(startedBuild.Inputs[0].Source).Should(Equal(&source1))
+
+			source2 := json.RawMessage("some-source-2")
+			Ω(startedBuild.Inputs[1].Source).Should(Equal(&source2))
+		})
+
+		Context("and a source reconfigured the build", func() {
+			BeforeEach(func() {
+				build.Inputs[1].ConfigPath = "some/config/path.yml"
+			})
+
+			It("sends the reconfigured build as the started build", func() {
+				var startedBuild builds.Build
+				Eventually(started).Should(Receive(&startedBuild))
+
+				Ω(startedBuild.Config.Image).Should(Equal("some-reconfigured-image"))
+			})
 		})
 	})
 

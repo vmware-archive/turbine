@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 
@@ -15,7 +16,7 @@ type Builder interface {
 }
 
 type SourceFetcher interface {
-	Fetch(source builds.Input) (config builds.Config, tarStream io.Reader, err error)
+	Fetch(input builds.Input) (config builds.Config, source *json.RawMessage, tarStream io.Reader, err error)
 }
 
 type ImageFetcher interface {
@@ -63,12 +64,14 @@ func (builder *builder) build(build builds.Build, started chan<- builds.Build, f
 
 	resources := map[string]io.Reader{}
 
-	for _, input := range build.Inputs {
-		buildConfig, tarStream, err := builder.sourceFetcher.Fetch(input)
+	for i, input := range build.Inputs {
+		buildConfig, source, tarStream, err := builder.sourceFetcher.Fetch(input)
 		if err != nil {
 			errored <- err
 			return
 		}
+
+		build.Inputs[i].Source = source
 
 		if input.ConfigPath != "" {
 			build.Config = buildConfig
@@ -76,6 +79,8 @@ func (builder *builder) build(build builds.Build, started chan<- builds.Build, f
 
 		resources[input.DestinationPath] = tarStream
 	}
+
+	started <- build
 
 	container, err := builder.createBuildContainer(build.Config, logs)
 	if err != nil {

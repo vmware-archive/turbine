@@ -47,46 +47,46 @@ func NewSourceFetcher(
 	}
 }
 
-func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.Config, io.Reader, error) {
+func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.Config, *json.RawMessage, io.Reader, error) {
 	var buildConfig builds.Config
 
 	resourceType, found := fetcher.resourceTypes.Lookup(input.Type)
 	if !found {
-		return buildConfig, nil, ErrUnknownSourceType
+		return buildConfig, nil, nil, ErrUnknownSourceType
 	}
 
 	container, err := fetcher.wardenClient.Create(warden.ContainerSpec{
 		RootFSPath: "image:" + resourceType.Image,
 	})
 	if err != nil {
-		return buildConfig, nil, err
+		return buildConfig, nil, nil, err
 	}
 
 	err = fetcher.injectInputSource(container, *input.Source)
 	if err != nil {
-		return buildConfig, nil, err
+		return buildConfig, nil, nil, err
 	}
 
 	_, stream, err := container.Run(warden.ProcessSpec{
 		Script: "/tmp/resource/in /tmp/resource-destination < /tmp/resource-artifacts/input.json",
 	})
 	if err != nil {
-		return buildConfig, nil, err
+		return buildConfig, nil, nil, err
 	}
 
-	err = fetcher.waitForRunToEnd(stream)
+	source, err := fetcher.waitForRunToEnd(stream)
 	if err != nil {
-		return buildConfig, nil, err
+		return buildConfig, nil, nil, err
 	}
 
 	buildConfig, err = fetcher.extractConfig(container, input.ConfigPath)
 	if err != nil {
-		return buildConfig, nil, err
+		return buildConfig, nil, nil, err
 	}
 
 	outStream, err := container.StreamOut("/tmp/resource-destination/")
 
-	return buildConfig, outStream, err
+	return buildConfig, &source, outStream, err
 }
 
 func (fetcher *SourceFetcher) injectInputSource(
@@ -127,14 +127,14 @@ func (fetcher *SourceFetcher) injectInputSource(
 	return nil
 }
 
-func (fetcher *SourceFetcher) waitForRunToEnd(stream <-chan warden.ProcessStream) error {
+func (fetcher *SourceFetcher) waitForRunToEnd(stream <-chan warden.ProcessStream) (json.RawMessage, error) {
 	stdout := []byte{}
 	stderr := []byte{}
 
 	for chunk := range stream {
 		if chunk.ExitStatus != nil {
 			if *chunk.ExitStatus != 0 {
-				return ErrResourceFetchFailed{
+				return nil, ErrResourceFetchFailed{
 					Stdout:     stdout,
 					Stderr:     stderr,
 					ExitStatus: *chunk.ExitStatus,
@@ -152,7 +152,7 @@ func (fetcher *SourceFetcher) waitForRunToEnd(stream <-chan warden.ProcessStream
 		}
 	}
 
-	return nil
+	return json.RawMessage(stdout), nil
 }
 
 func (fetcher *SourceFetcher) extractConfig(container warden.Container, configPath string) (builds.Config, error) {

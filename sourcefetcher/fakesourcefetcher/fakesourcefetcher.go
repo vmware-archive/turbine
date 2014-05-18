@@ -2,6 +2,7 @@ package fakesourcefetcher
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"sync"
 
@@ -10,7 +11,7 @@ import (
 
 type Fetcher struct {
 	fetched      []builds.Input
-	WhenFetching func(builds.Input) (builds.Config, io.Reader, error)
+	WhenFetching func(builds.Input) (builds.Config, *json.RawMessage, io.Reader, error)
 	FetchError   error
 
 	sync.RWMutex
@@ -20,21 +21,23 @@ func New() *Fetcher {
 	return &Fetcher{}
 }
 
-func (fetcher *Fetcher) Fetch(input builds.Input) (builds.Config, io.Reader, error) {
+func (fetcher *Fetcher) Fetch(input builds.Input) (builds.Config, *json.RawMessage, io.Reader, error) {
 	if fetcher.FetchError != nil {
-		return builds.Config{}, nil, fetcher.FetchError
+		return builds.Config{}, nil, nil, fetcher.FetchError
 	}
 
 	var buildConfig builds.Config
+	var fetchedSource *json.RawMessage
 	var result io.Reader
 
 	if fetcher.WhenFetching != nil {
-		config, stream, err := fetcher.WhenFetching(input)
+		config, source, stream, err := fetcher.WhenFetching(input)
 		if err != nil {
-			return builds.Config{}, nil, err
+			return builds.Config{}, nil, nil, err
 		}
 
 		buildConfig = config
+		fetchedSource = source
 		result = stream
 	} else {
 		result = new(bytes.Buffer)
@@ -44,7 +47,7 @@ func (fetcher *Fetcher) Fetch(input builds.Input) (builds.Config, io.Reader, err
 	fetcher.fetched = append(fetcher.fetched, input)
 	fetcher.Unlock()
 
-	return buildConfig, result, nil
+	return buildConfig, fetchedSource, result, nil
 }
 
 func (fetcher *Fetcher) Fetched() []builds.Input {
