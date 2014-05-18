@@ -50,30 +50,35 @@ func (scheduler *scheduler) Schedule(build builds.Build) error {
 
 		build := <-started
 
+		build.Status = builds.StatusStarted
+		scheduler.reportBuild(build)
+
 		select {
 		case ok := <-finished:
 			log.Println("completed:", ok)
 
 			if ok {
-				scheduler.completeBuild(build, "succeeded")
+				build.Status = builds.StatusSucceeded
+				scheduler.reportBuild(build)
 			} else {
-				scheduler.completeBuild(build, "failed")
+				build.Status = builds.StatusFailed
+				scheduler.reportBuild(build)
 			}
 		case err := <-errored:
 			log.Println("errored:", err)
-			scheduler.completeBuild(build, "errored")
+
+			build.Status = builds.StatusErrored
+			scheduler.reportBuild(build)
 		}
 	}()
 
 	return nil
 }
 
-func (scheduler *scheduler) completeBuild(build builds.Build, status string) {
+func (scheduler *scheduler) reportBuild(build builds.Build) {
 	if build.Callback == "" {
 		return
 	}
-
-	build.Status = status
 
 	// this should always successfully parse (it's done via validation)
 	destination, _ := url.ParseRequestURI(build.Callback)

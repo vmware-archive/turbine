@@ -79,11 +79,26 @@ var _ = Describe("Scheduler", func() {
 			Context("and the build starts", func() {
 				var startedBuild builds.Build
 
+				var gotStartedCallback <-chan struct{}
+
 				BeforeEach(func() {
 					startedBuild = build
 					startedBuild.Config.Image = "some-reconfigured-image"
+					startedBuild.Status = builds.StatusStarted
 
 					builder.StartedBuild = &startedBuild
+
+					gotStartedCallback = handleBuild(startedBuild)
+				})
+
+				It("reports the started build as started", func() {
+					// ignore completion callback
+					server.AllowUnhandledRequests = true
+
+					err := scheduler.Schedule(build)
+					Ω(err).ShouldNot(HaveOccurred())
+
+					Eventually(gotStartedCallback).Should(BeClosed())
 				})
 
 				Context("when the build succeeds", func() {
@@ -93,7 +108,7 @@ var _ = Describe("Scheduler", func() {
 						builder.BuildResult = true
 
 						succeededBuild := startedBuild
-						succeededBuild.Status = "succeeded"
+						succeededBuild.Status = builds.StatusSucceeded
 
 						gotRequest = handleBuild(succeededBuild)
 					})
@@ -113,7 +128,7 @@ var _ = Describe("Scheduler", func() {
 						builder.BuildResult = false
 
 						failedBuild := startedBuild
-						failedBuild.Status = "failed"
+						failedBuild.Status = builds.StatusFailed
 
 						gotRequest = handleBuild(failedBuild)
 					})
@@ -133,7 +148,7 @@ var _ = Describe("Scheduler", func() {
 						builder.BuildError = errors.New("oh no!")
 
 						erroredBuild := startedBuild
-						erroredBuild.Status = "errored"
+						erroredBuild.Status = builds.StatusErrored
 
 						gotRequest = handleBuild(erroredBuild)
 					})
