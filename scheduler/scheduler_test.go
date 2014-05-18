@@ -161,6 +161,26 @@ var _ = Describe("Scheduler", func() {
 					})
 				})
 			})
+
+			Context("and the build fails to start", func() {
+				var gotRequest <-chan struct{}
+
+				BeforeEach(func() {
+					builder.StartError = errors.New("oh no!")
+
+					erroredBuild := build
+					erroredBuild.Status = builds.StatusErrored
+
+					gotRequest = handleBuild(erroredBuild)
+				})
+
+				It("reports the build as errored", func() {
+					err := scheduler.Schedule(build)
+					Ω(err).ShouldNot(HaveOccurred())
+
+					Eventually(gotRequest).Should(BeClosed())
+				})
+			})
 		})
 	})
 })

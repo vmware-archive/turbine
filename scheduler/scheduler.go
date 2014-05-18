@@ -45,13 +45,19 @@ func (scheduler *scheduler) Schedule(build builds.Build) error {
 
 	started, finished, errored := scheduler.builder.Build(build)
 
-	go func() {
+	go func(build builds.Build) {
 		defer scheduler.runningBuilds.Done()
 
-		build := <-started
+		select {
+		case build = <-started:
+			build.Status = builds.StatusStarted
+			scheduler.reportBuild(build)
+		case err := <-errored:
+			log.Println("errored while starting:", err)
 
-		build.Status = builds.StatusStarted
-		scheduler.reportBuild(build)
+			build.Status = builds.StatusErrored
+			scheduler.reportBuild(build)
+		}
 
 		select {
 		case ok := <-finished:
@@ -70,7 +76,7 @@ func (scheduler *scheduler) Schedule(build builds.Build) error {
 			build.Status = builds.StatusErrored
 			scheduler.reportBuild(build)
 		}
-	}()
+	}(build)
 
 	return nil
 }
