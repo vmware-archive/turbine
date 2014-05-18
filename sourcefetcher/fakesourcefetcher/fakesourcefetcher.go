@@ -2,7 +2,6 @@ package fakesourcefetcher
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"sync"
 
@@ -11,7 +10,7 @@ import (
 
 type Fetcher struct {
 	fetched      []builds.Input
-	WhenFetching func(builds.Input) (builds.Config, *json.RawMessage, io.Reader, error)
+	WhenFetching func(builds.Input) (builds.Config, builds.Source, io.Reader, error)
 	FetchError   error
 
 	sync.RWMutex
@@ -21,13 +20,13 @@ func New() *Fetcher {
 	return &Fetcher{}
 }
 
-func (fetcher *Fetcher) Fetch(input builds.Input) (builds.Config, *json.RawMessage, io.Reader, error) {
+func (fetcher *Fetcher) Fetch(input builds.Input) (builds.Config, builds.Source, io.Reader, error) {
 	if fetcher.FetchError != nil {
 		return builds.Config{}, nil, nil, fetcher.FetchError
 	}
 
 	var buildConfig builds.Config
-	var fetchedSource *json.RawMessage
+	var fetchedSource builds.Source
 	var result io.Reader
 
 	if fetcher.WhenFetching != nil {

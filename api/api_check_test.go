@@ -48,11 +48,9 @@ var _ = Describe("API", func() {
 		}
 
 		BeforeEach(func() {
-			source := json.RawMessage(`{"ref":"foo"}`)
-
 			input = builds.Input{
 				Type:   "git",
-				Source: &source,
+				Source: builds.Source(`{"ref":"foo"}`),
 			}
 
 			requestBody = inputPayload(input)
@@ -78,22 +76,22 @@ var _ = Describe("API", func() {
 		})
 
 		Context("when the check returns sources", func() {
-			var source1 json.RawMessage
-			var source2 json.RawMessage
+			var source1 builds.Source
+			var source2 builds.Source
 
 			BeforeEach(func() {
-				source1 = json.RawMessage(`{"ref":"a"}`)
-				source2 = json.RawMessage(`{"ref":"b"}`)
+				source1 = builds.Source(`{"ref":"a"}`)
+				source2 = builds.Source(`{"ref":"b"}`)
 
-				checker.CheckResult = []*json.RawMessage{&source1, &source2}
+				checker.CheckResult = []builds.Source{source1, source2}
 			})
 
 			It("responds with them", func() {
-				var sources []*json.RawMessage
+				var sources []builds.Source
 				err := json.NewDecoder(response.Body).Decode(&sources)
 				Ω(err).ShouldNot(HaveOccurred())
 
-				Ω(sources).Should(Equal([]*json.RawMessage{&source1, &source2}))
+				Ω(sources).Should(Equal([]builds.Source{source1, source2}))
 			})
 		})
 

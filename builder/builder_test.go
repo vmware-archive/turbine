@@ -2,7 +2,6 @@ package builder_test
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"io"
 	"log"
@@ -87,7 +86,7 @@ var _ = Describe("Builder", func() {
 			return "some-handle", nil
 		}
 
-		sourceFetcher.WhenFetching = func(builds.Input) (builds.Config, *json.RawMessage, io.Reader, error) {
+		sourceFetcher.WhenFetching = func(builds.Input) (builds.Config, builds.Source, io.Reader, error) {
 			return builds.Config{}, nil, bytes.NewBufferString("some-data"), nil
 		}
 	})
@@ -106,19 +105,20 @@ var _ = Describe("Builder", func() {
 
 	Context("when fetching the build's sources succeeds", func() {
 		BeforeEach(func() {
-			source1 := json.RawMessage("some-source-1")
-			source2 := json.RawMessage("some-source-2")
+			source1 := builds.Source("some-source-1")
+			source2 := builds.Source("some-source-2")
+
 			sourceStream1 := bytes.NewBufferString("some-data-1")
 			sourceStream2 := bytes.NewBufferString("some-data-2")
 
-			sourceFetcher.WhenFetching = func(input builds.Input) (builds.Config, *json.RawMessage, io.Reader, error) {
+			sourceFetcher.WhenFetching = func(input builds.Input) (builds.Config, builds.Source, io.Reader, error) {
 				if input.DestinationPath == "some/source/path" {
-					return builds.Config{}, &source1, sourceStream1, nil
+					return builds.Config{}, source1, sourceStream1, nil
 				}
 
 				if input.DestinationPath == "another/source/path" {
 					config := builds.Config{Image: "some-reconfigured-image"}
-					return config, &source2, sourceStream2, nil
+					return config, source2, sourceStream2, nil
 				}
 
 				panic("unknown stream")
@@ -155,11 +155,8 @@ var _ = Describe("Builder", func() {
 			var startedBuild builds.Build
 			Eventually(started).Should(Receive(&startedBuild))
 
-			source1 := json.RawMessage("some-source-1")
-			Ω(startedBuild.Inputs[0].Source).Should(Equal(&source1))
-
-			source2 := json.RawMessage("some-source-2")
-			Ω(startedBuild.Inputs[1].Source).Should(Equal(&source2))
+			Ω(startedBuild.Inputs[0].Source).Should(Equal(builds.Source("some-source-1")))
+			Ω(startedBuild.Inputs[1].Source).Should(Equal(builds.Source("some-source-2")))
 		})
 
 		Context("and a source reconfigured the build", func() {

@@ -1,7 +1,6 @@
 package fakechecker
 
 import (
-	"encoding/json"
 	"sync"
 
 	"github.com/winston-ci/prole/api/builds"
@@ -10,7 +9,7 @@ import (
 type FakeChecker struct {
 	checked      []builds.Input
 	checkedMutex *sync.Mutex
-	CheckResult  []*json.RawMessage
+	CheckResult  []builds.Source
 	CheckError   error
 }
 
@@ -20,7 +19,7 @@ func New() *FakeChecker {
 	}
 }
 
-func (checker *FakeChecker) Check(input builds.Input) ([]*json.RawMessage, error) {
+func (checker *FakeChecker) Check(input builds.Input) ([]builds.Source, error) {
 	if checker.CheckError != nil {
 		return nil, checker.CheckError
 	}

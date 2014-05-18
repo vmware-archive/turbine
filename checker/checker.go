@@ -12,7 +12,7 @@ import (
 )
 
 type Checker interface {
-	Check(builds.Input) ([]*json.RawMessage, error)
+	Check(builds.Input) ([]builds.Source, error)
 }
 
 var ErrUnknownSourceType = errors.New("unknown source type")
@@ -47,7 +47,7 @@ func NewChecker(
 	}
 }
 
-func (checker *checker) Check(input builds.Input) ([]*json.RawMessage, error) {
+func (checker *checker) Check(input builds.Input) ([]builds.Source, error) {
 	resourceType, found := checker.resourceTypes.Lookup(input.Type)
 	if !found {
 		return nil, ErrUnknownSourceType
@@ -62,7 +62,7 @@ func (checker *checker) Check(input builds.Input) ([]*json.RawMessage, error) {
 
 	defer checker.wardenClient.Destroy(container.Handle())
 
-	err = checker.injectInputSource(container, *input.Source)
+	err = checker.injectInputSource(container, input.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -79,18 +79,18 @@ func (checker *checker) Check(input builds.Input) ([]*json.RawMessage, error) {
 		return nil, err
 	}
 
-	var versions []*json.RawMessage
-	err = json.Unmarshal(stdout, &versions)
+	var sources []builds.Source
+	err = json.Unmarshal(stdout, &sources)
 	if err != nil {
 		return nil, err
 	}
 
-	return versions, nil
+	return sources, nil
 }
 
 func (checker *checker) injectInputSource(
 	container warden.Container,
-	source json.RawMessage,
+	source builds.Source,
 ) error {
 	streamIn, err := container.StreamIn("/tmp/resource-artifacts/")
 	if err != nil {

@@ -3,7 +3,6 @@ package sourcefetcher_test
 import (
 	"archive/tar"
 	"bytes"
-	"encoding/json"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -33,7 +32,7 @@ var _ = Describe("SourceFetcher", func() {
 		inError      error
 
 		extractedConfig builds.Config
-		fetchedSource   *json.RawMessage
+		fetchedSource   builds.Source
 		fetchedStream   io.Reader
 		fetchError      error
 	)
@@ -42,11 +41,9 @@ var _ = Describe("SourceFetcher", func() {
 		resourceTypes = config.ResourceTypes{}
 		wardenClient = fake_warden_client.New()
 
-		source := json.RawMessage("some-source")
-
 		input = builds.Input{
 			Type:   "some-resource",
-			Source: &source,
+			Source: builds.Source("some-source"),
 		}
 
 		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
@@ -162,8 +159,7 @@ var _ = Describe("SourceFetcher", func() {
 			})
 
 			It("returns the build source printed out by /tmp/resource/in", func() {
-				expectedSource := json.RawMessage("some-new-source")
-				Ω(fetchedSource).Should(Equal(&expectedSource))
+				Ω(fetchedSource).Should(Equal(builds.Source("some-new-source")))
 			})
 		})
 

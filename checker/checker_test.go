@@ -3,7 +3,6 @@ package checker_test
 import (
 	"archive/tar"
 	"bytes"
-	"encoding/json"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -49,11 +48,9 @@ var _ = Describe("Checker", func() {
 		resourceTypes = config.ResourceTypes{}
 		wardenClient = fake_warden_client.New()
 
-		source := json.RawMessage("some-source")
-
 		input = builds.Input{
 			Type:   "some-resource",
-			Source: &source,
+			Source: builds.Source("some-source"),
 		}
 
 		checkStdout = "[]"
@@ -164,10 +161,11 @@ var _ = Describe("Checker", func() {
 				sources, err := checker.Check(input)
 				Ω(err).ShouldNot(HaveOccurred())
 
-				abc := json.RawMessage(`"abc"`)
-				def := json.RawMessage(`"def"`)
-				ghi := json.RawMessage(`"ghi"`)
-				Ω(sources).Should(Equal([]*json.RawMessage{&abc, &def, &ghi}))
+				Ω(sources).Should(Equal([]builds.Source{
+					builds.Source(`"abc"`),
+					builds.Source(`"def"`),
+					builds.Source(`"ghi"`),
+				}))
 			})
 		})
 

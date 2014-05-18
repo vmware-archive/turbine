@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 
@@ -16,7 +15,7 @@ type Builder interface {
 }
 
 type SourceFetcher interface {
-	Fetch(input builds.Input) (config builds.Config, source *json.RawMessage, tarStream io.Reader, err error)
+	Fetch(input builds.Input) (config builds.Config, source builds.Source, tarStream io.Reader, err error)
 }
 
 type ImageFetcher interface {

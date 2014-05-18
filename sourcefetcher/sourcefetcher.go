@@ -2,7 +2,6 @@ package sourcefetcher
 
 import (
 	"archive/tar"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -47,7 +46,7 @@ func NewSourceFetcher(
 	}
 }
 
-func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.Config, *json.RawMessage, io.Reader, error) {
+func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.Config, builds.Source, io.Reader, error) {
 	var buildConfig builds.Config
 
 	resourceType, found := fetcher.resourceTypes.Lookup(input.Type)
@@ -62,7 +61,7 @@ func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.Config, *json.Ra
 		return buildConfig, nil, nil, err
 	}
 
-	err = fetcher.injectInputSource(container, *input.Source)
+	err = fetcher.injectInputSource(container, input.Source)
 	if err != nil {
 		return buildConfig, nil, nil, err
 	}
@@ -86,12 +85,12 @@ func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.Config, *json.Ra
 
 	outStream, err := container.StreamOut("/tmp/resource-destination/")
 
-	return buildConfig, &source, outStream, err
+	return buildConfig, source, outStream, err
 }
 
 func (fetcher *SourceFetcher) injectInputSource(
 	container warden.Container,
-	source json.RawMessage,
+	source builds.Source,
 ) error {
 	streamIn, err := container.StreamIn("/tmp/resource-artifacts/")
 	if err != nil {
@@ -127,7 +126,7 @@ func (fetcher *SourceFetcher) injectInputSource(
 	return nil
 }
 
-func (fetcher *SourceFetcher) waitForRunToEnd(stream <-chan warden.ProcessStream) (json.RawMessage, error) {
+func (fetcher *SourceFetcher) waitForRunToEnd(stream <-chan warden.ProcessStream) (builds.Source, error) {
 	stdout := []byte{}
 	stderr := []byte{}
 
@@ -152,7 +151,7 @@ func (fetcher *SourceFetcher) waitForRunToEnd(stream <-chan warden.ProcessStream
 		}
 	}
 
-	return json.RawMessage(stdout), nil
+	return builds.Source(stdout), nil
 }
 
 func (fetcher *SourceFetcher) extractConfig(container warden.Container, configPath string) (builds.Config, error) {
