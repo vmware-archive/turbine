@@ -38,7 +38,7 @@ var wardenAddr = flag.String(
 
 var resourceTypes = flag.String(
 	"resourceTypes",
-	`{"git":"winston/git-resource"}`,
+	`{"git":"winston/git-resource","raw":"winston/raw-resource"}`,
 	"map of resource type to its docker image",
 )
 
