@@ -7,8 +7,8 @@
 	"Deps": [
 		{
 			"ImportPath": "code.google.com/p/go.net/websocket",
-			"Comment": "null-117",
-			"Rev": "c17ad62118ea511e1051721b429779fa40bddc74"
+			"Comment": "null-133",
+			"Rev": "aa1a4b63e03d4dfef7d5310d70338707e36fc7eb"
 		},
 		{
 			"ImportPath": "code.google.com/p/gogoprotobuf/proto",
@@ -25,19 +25,19 @@
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/client",
-			"Rev": "5e74b7145160f99b0a669a6718164905689e9809"
+			"Rev": "ed61704cf072f19c957b6741ed65ffdc90d2c9bb"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/protocol",
-			"Rev": "5e74b7145160f99b0a669a6718164905689e9809"
+			"Rev": "ed61704cf072f19c957b6741ed65ffdc90d2c9bb"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/transport",
-			"Rev": "5e74b7145160f99b0a669a6718164905689e9809"
+			"Rev": "ed61704cf072f19c957b6741ed65ffdc90d2c9bb"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/warden",
-			"Rev": "5e74b7145160f99b0a669a6718164905689e9809"
+			"Rev": "ed61704cf072f19c957b6741ed65ffdc90d2c9bb"
 		},
 		{
 			"ImportPath": "github.com/fraenkel/candiedyaml",
