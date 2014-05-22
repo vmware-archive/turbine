@@ -103,7 +103,7 @@ var _ = Describe("SourceFetcher", func() {
 		It("creates a container with the image configured via the source's type", func() {
 			Ω(wardenClient.Connection.Created()).Should(Equal([]warden.ContainerSpec{
 				{
-					RootFSPath: "image:some-resource-image",
+					RootFSPath: "docker:///some-resource-image",
 				},
 			}))
 		})

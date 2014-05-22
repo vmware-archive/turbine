@@ -100,7 +100,7 @@ var _ = Describe("Builder", func() {
 
 		created := wardenClient.Connection.Created()
 		Ω(created).Should(HaveLen(1))
-		Ω(created[0].RootFSPath).Should(Equal("image:some-image-name"))
+		Ω(created[0].RootFSPath).Should(Equal("docker:///some-image-name"))
 	})
 
 	Context("when fetching the build's sources succeeds", func() {

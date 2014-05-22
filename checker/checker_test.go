@@ -99,7 +99,7 @@ var _ = Describe("Checker", func() {
 
 			Ω(wardenClient.Connection.Created()).Should(Equal([]warden.ContainerSpec{
 				{
-					RootFSPath: "image:some-resource-image",
+					RootFSPath: "docker:///some-resource-image",
 				},
 			}))
 		})

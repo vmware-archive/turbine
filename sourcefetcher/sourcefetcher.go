@@ -55,7 +55,7 @@ func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.Config, builds.S
 	}
 
 	container, err := fetcher.wardenClient.Create(warden.ContainerSpec{
-		RootFSPath: "image:" + resourceType.Image,
+		RootFSPath: "docker:///" + resourceType.Image,
 	})
 	if err != nil {
 		return buildConfig, nil, nil, err

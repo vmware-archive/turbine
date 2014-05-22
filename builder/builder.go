@@ -130,7 +130,7 @@ func (builder *builder) createBuildContainer(
 	fmt.Fprintf(logs, "creating container from %s...\n", buildConfig.Image)
 
 	containerSpec := warden.ContainerSpec{
-		RootFSPath: "image:" + buildConfig.Image,
+		RootFSPath: "docker:///" + buildConfig.Image,
 	}
 
 	return builder.wardenClient.Create(containerSpec)

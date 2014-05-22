@@ -54,7 +54,7 @@ func (checker *checker) Check(input builds.Input) ([]builds.Source, error) {
 	}
 
 	container, err := checker.wardenClient.Create(warden.ContainerSpec{
-		RootFSPath: "image:" + resourceType.Image,
+		RootFSPath: "docker:///" + resourceType.Image,
 	})
 	if err != nil {
 		return nil, err
