@@ -21,29 +21,31 @@ func New() *Builder {
 }
 
 func (builder *Builder) Build(build builds.Build) (<-chan builds.Build, <-chan bool, <-chan error) {
-	started := make(chan builds.Build, 1)
-	finished := make(chan bool, 1)
-	errored := make(chan error, 2)
+	started := make(chan builds.Build)
+	finished := make(chan bool)
+	errored := make(chan error)
 
 	builder.Lock()
 	builder.built = append(builder.built, build)
 	builder.Unlock()
 
-	if builder.StartError != nil {
-		errored <- builder.StartError
-	} else {
-		if builder.StartedBuild != nil {
-			started <- *builder.StartedBuild
+	go func() {
+		if builder.StartError != nil {
+			errored <- builder.StartError
 		} else {
-			started <- build
-		}
+			if builder.StartedBuild != nil {
+				started <- *builder.StartedBuild
+			} else {
+				started <- build
+			}
 
-		if builder.BuildError != nil {
-			errored <- builder.BuildError
-		} else {
-			finished <- builder.BuildResult
+			if builder.BuildError != nil {
+				errored <- builder.BuildError
+			} else {
+				finished <- builder.BuildResult
+			}
 		}
-	}
+	}()
 
 	return started, finished, errored
 }
