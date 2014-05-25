@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"log"
 	"net/http"
 
+	"code.google.com/p/go.net/websocket"
 	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
 	"github.com/cloudfoundry-incubator/garden/warden"
-	"github.com/gorilla/websocket"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
@@ -27,10 +26,6 @@ var _ = Describe("Builder", func() {
 	var wardenClient *fake_warden_client.FakeClient
 	var builder Builder
 
-	var started <-chan builds.Build
-	var failed <-chan error
-	var errored <-chan error
-	var finished <-chan builds.Build
 	var build builds.Build
 
 	primedStream := func(payloads ...warden.ProcessStream) <-chan warden.ProcessStream {
@@ -43,6 +38,31 @@ var _ = Describe("Builder", func() {
 		close(stream)
 
 		return stream
+	}
+
+	exitedStream := func(exitStatus uint32) <-chan warden.ProcessStream {
+		return primedStream(warden.ProcessStream{
+			ExitStatus: &exitStatus,
+		})
+	}
+
+	websocketListener := func(buf io.WriteCloser) (string, *ghttp.Server) {
+		websocketEndpoint := ghttp.NewServer()
+
+		websocketEndpoint.AppendHandlers(
+			func(w http.ResponseWriter, r *http.Request) {
+				websocket.Server{Handler: func(conn *websocket.Conn) {
+					_, err := io.Copy(buf, conn)
+					Ω(err).ShouldNot(HaveOccurred())
+
+					buf.Close()
+				}}.ServeHTTP(w, r)
+			},
+		)
+
+		addr := websocketEndpoint.HTTPTestServer.Listener.Addr().String()
+
+		return "ws://" + addr, websocketEndpoint
 	}
 
 	BeforeEach(func() {
@@ -75,118 +95,326 @@ var _ = Describe("Builder", func() {
 				},
 			},
 		}
+	})
 
-		exitStatus := uint32(0)
+	Describe("Build", func() {
+		var started <-chan RunningBuild
+		var errored <-chan error
 
-		successfulStream := primedStream(warden.ProcessStream{
-			ExitStatus: &exitStatus,
+		JustBeforeEach(func() {
+			started, errored = builder.Build(build)
 		})
 
-		wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-			return 42, successfulStream, nil
-		}
-
-		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
-			return "some-handle", nil
-		}
-
-		sourceFetcher.WhenFetching = func(builds.Input) (builds.Config, builds.Source, io.Reader, error) {
-			return builds.Config{}, nil, bytes.NewBufferString("some-data"), nil
-		}
-	})
-
-	JustBeforeEach(func() {
-		started, failed, errored, finished = builder.Build(build)
-	})
-
-	It("creates a container with the specified image", func() {
-		Eventually(finished).Should(Receive())
-
-		created := wardenClient.Connection.Created()
-		Ω(created).Should(HaveLen(1))
-		Ω(created[0].RootFSPath).Should(Equal("docker:///some-image-name"))
-	})
-
-	Context("when fetching the build's sources succeeds", func() {
 		BeforeEach(func() {
-			source1 := builds.Source("some-source-1")
-			source2 := builds.Source("some-source-2")
 
-			sourceStream1 := bytes.NewBufferString("some-data-1")
-			sourceStream2 := bytes.NewBufferString("some-data-2")
+			wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
+				return "some-handle", nil
+			}
 
-			sourceFetcher.WhenFetching = func(input builds.Input) (builds.Config, builds.Source, io.Reader, error) {
-				if input.Name == "name1" {
-					return builds.Config{}, source1, sourceStream1, nil
-				}
-
-				if input.Name == "name2" {
-					config := builds.Config{Image: "some-reconfigured-image"}
-					return config, source2, sourceStream2, nil
-				}
-
-				panic("unknown stream")
+			sourceFetcher.WhenFetching = func(builds.Input) (builds.Config, builds.Source, io.Reader, error) {
+				return builds.Config{}, nil, bytes.NewBufferString("some-data"), nil
 			}
 		})
 
-		It("streams them in to the container", func() {
-			Eventually(finished).Should(Receive())
+		It("creates a container with the specified image", func() {
+			Eventually(started).Should(Receive())
 
-			Ω(sourceFetcher.Fetched()).Should(Equal([]builds.Input{
+			created := wardenClient.Connection.Created()
+			Ω(created).Should(HaveLen(1))
+			Ω(created[0].RootFSPath).Should(Equal("docker:///some-image-name"))
+		})
+
+		Context("when fetching the build's sources succeeds", func() {
+			BeforeEach(func() {
+				source1 := builds.Source("some-source-1")
+				source2 := builds.Source("some-source-2")
+
+				sourceStream1 := bytes.NewBufferString("some-data-1")
+				sourceStream2 := bytes.NewBufferString("some-data-2")
+
+				sourceFetcher.WhenFetching = func(input builds.Input) (builds.Config, builds.Source, io.Reader, error) {
+					if input.Name == "name1" {
+						return builds.Config{}, source1, sourceStream1, nil
+					}
+
+					if input.Name == "name2" {
+						config := builds.Config{Image: "some-reconfigured-image"}
+						return config, source2, sourceStream2, nil
+					}
+
+					panic("unknown stream")
+				}
+			})
+
+			It("streams them in to the container", func() {
+				Eventually(started).Should(Receive())
+
+				Ω(sourceFetcher.Fetched()).Should(Equal([]builds.Input{
+					{
+						Name:            "name1",
+						Type:            "raw",
+						DestinationPath: "some/source/path",
+					},
+					{
+						Name:            "name2",
+						Type:            "raw",
+						DestinationPath: "another/source/path",
+					},
+				}))
+
+				streamedIn := wardenClient.Connection.StreamedIn("some-handle")
+				Ω(streamedIn).Should(HaveLen(2))
+
+				Ω(streamedIn[0].Destination).Should(Equal("/tmp/build/src/some/source/path"))
+				Ω(string(streamedIn[0].WriteBuffer.Contents())).Should(Equal("some-data-1"))
+				Ω(streamedIn[0].WriteBuffer.Closed()).Should(BeTrue())
+
+				Ω(streamedIn[1].Destination).Should(Equal("/tmp/build/src/another/source/path"))
+				Ω(string(streamedIn[1].WriteBuffer.Contents())).Should(Equal("some-data-2"))
+				Ω(streamedIn[1].WriteBuffer.Closed()).Should(BeTrue())
+			})
+
+			Context("and running the process succeeds", func() {
+				BeforeEach(func() {
+					wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+						return 42, exitedStream(0), nil
+					}
+				})
+
+				It("notifies that the build is running started, with updated sources and config", func() {
+					var runningBuild RunningBuild
+					Eventually(started).Should(Receive(&runningBuild))
+
+					Ω(runningBuild.Build.Inputs[0].Source).Should(Equal(builds.Source("some-source-1")))
+					Ω(runningBuild.Build.Inputs[1].Source).Should(Equal(builds.Source("some-source-2")))
+				})
+			})
+
+			Context("and a source reconfigured the build", func() {
+				BeforeEach(func() {
+					build.Inputs[1].ConfigPath = "some/config/path.yml"
+				})
+
+				It("sends the reconfigured build as the started build", func() {
+					var startedBuild RunningBuild
+					Eventually(started).Should(Receive(&startedBuild))
+
+					Ω(startedBuild.Build.Config.Image).Should(Equal("some-reconfigured-image"))
+				})
+			})
+		})
+
+		It("runs the build's script in the container", func() {
+			Eventually(started).Should(Receive())
+
+			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
+				Script: `cd /tmp/build/src
+./bin/test`,
+				EnvironmentVariables: []warden.EnvironmentVariable{
+					{"FOO", "bar"},
+					{"BAZ", "buzz"},
+				},
+			}))
+		})
+
+		Context("when privileged is true", func() {
+			BeforeEach(func() {
+				build.Privileged = true
+			})
+
+			It("runs the build privileged", func() {
+				Eventually(started).Should(Receive())
+
+				Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
+					Script: `cd /tmp/build/src
+./bin/test`,
+					Privileged: true,
+					EnvironmentVariables: []warden.EnvironmentVariable{
+						{"FOO", "bar"},
+						{"BAZ", "buzz"},
+					},
+				}))
+			})
+		})
+
+		Context("when a logs url is configured", func() {
+			var logBuffer *gbytes.Buffer
+			var websocketSink *ghttp.Server
+
+			BeforeEach(func() {
+				logBuffer = gbytes.NewBuffer()
+
+				build.LogsURL, websocketSink = websocketListener(logBuffer)
+			})
+
+			Context("and the sink is listening", func() {
+				AfterEach(func() {
+					websocketSink.Close()
+				})
+
+				It("emits the build's output via websockets", func() {
+					Eventually(logBuffer).Should(gbytes.Say("creating container from some-image-name...\n"))
+					Eventually(logBuffer).Should(gbytes.Say("starting...\n"))
+
+					var runningBuild RunningBuild
+					Eventually(started).Should(Receive(&runningBuild))
+
+					runningBuild.LogStream.Close()
+				})
+			})
+
+			Context("but the sink is not listening", func() {
+				BeforeEach(func() {
+					websocketSink.Close()
+				})
+
+				It("sends the error result", func() {
+					Eventually(errored).Should(Receive())
+				})
+			})
+		})
+
+		Context("when running the build's script fails", func() {
+			disaster := errors.New("oh no!")
+
+			BeforeEach(func() {
+				wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+					return 0, nil, disaster
+				}
+			})
+
+			It("sends the error result", func() {
+				Eventually(errored).Should(Receive(Equal(disaster)))
+			})
+		})
+
+		Context("when creating the container fails", func() {
+			disaster := errors.New("oh no!")
+
+			BeforeEach(func() {
+				wardenClient.Connection.WhenCreating = func(spec warden.ContainerSpec) (string, error) {
+					return "", disaster
+				}
+			})
+
+			It("sends the error result", func() {
+				Eventually(errored).Should(Receive(Equal(disaster)))
+			})
+		})
+
+		Context("when fetching the source fails", func() {
+			disaster := errors.New("oh no!")
+
+			BeforeEach(func() {
+				sourceFetcher.FetchError = disaster
+			})
+
+			It("sends the error result", func() {
+				Eventually(errored).Should(Receive(Equal(disaster)))
+			})
+		})
+
+		Context("when copying the source in to the container fails", func() {
+			disaster := errors.New("oh no!")
+
+			BeforeEach(func() {
+				wardenClient.Connection.WhenStreamingIn = func(handle string, dst string) (io.WriteCloser, error) {
+					return nil, disaster
+				}
+			})
+
+			It("sends the error result", func() {
+				Eventually(errored).Should(Receive(Equal(disaster)))
+			})
+		})
+	})
+
+	Describe("Attach", func() {
+		var finished <-chan builds.Build
+		var failed <-chan error
+		var errored <-chan error
+		var runningBuild RunningBuild
+
+		JustBeforeEach(func() {
+			finished, failed, errored = builder.Attach(runningBuild)
+		})
+
+		BeforeEach(func() {
+			build.Inputs = []builds.Input{
 				{
 					Name:            "name1",
 					Type:            "raw",
 					DestinationPath: "some/source/path",
+					Source:          builds.Source("some-source-1"),
 				},
 				{
 					Name:            "name2",
 					Type:            "raw",
 					DestinationPath: "another/source/path",
+					Source:          builds.Source("some-source-2"),
 				},
-			}))
+			}
 
-			streamedIn := wardenClient.Connection.StreamedIn("some-handle")
-			Ω(streamedIn).Should(HaveLen(2))
+			wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
+				return "the-attached-container", nil
+			}
 
-			Ω(streamedIn[0].Destination).Should(Equal("/tmp/build/src/some/source/path"))
-			Ω(string(streamedIn[0].WriteBuffer.Contents())).Should(Equal("some-data-1"))
-			Ω(streamedIn[0].WriteBuffer.Closed()).Should(BeTrue())
+			container, err := wardenClient.Create(warden.ContainerSpec{})
+			Ω(err).ShouldNot(HaveOccurred())
 
-			Ω(streamedIn[1].Destination).Should(Equal("/tmp/build/src/another/source/path"))
-			Ω(string(streamedIn[1].WriteBuffer.Contents())).Should(Equal("some-data-2"))
-			Ω(streamedIn[1].WriteBuffer.Closed()).Should(BeTrue())
+			wardenClient.Connection.WhenCreating = nil
+
+			runningBuild = RunningBuild{
+				Build:     build,
+				Container: container,
+
+				ProcessID: 42,
+			}
 		})
 
-		It("notifies that the build has started, with updated sources and config", func() {
-			var startedBuild builds.Build
-			Eventually(started).Should(Receive(&startedBuild))
+		Context("when the build's process stream is not present", func() {
+			var attached chan struct{}
 
-			Ω(startedBuild.Inputs[0].Source).Should(Equal(builds.Source("some-source-1")))
-			Ω(startedBuild.Inputs[1].Source).Should(Equal(builds.Source("some-source-2")))
-		})
-
-		Context("and a source reconfigured the build", func() {
 			BeforeEach(func() {
-				build.Inputs[1].ConfigPath = "some/config/path.yml"
+				attached = make(chan struct{})
+
+				runningBuild.ProcessStream = nil
+
+				wardenClient.Connection.WhenAttaching = func(handle string, processID uint32) (<-chan warden.ProcessStream, error) {
+					defer GinkgoRecover()
+
+					Ω(handle).Should(Equal("the-attached-container"))
+					Ω(processID).Should(Equal(uint32(42)))
+
+					close(attached)
+
+					return exitedStream(0), nil
+				}
 			})
 
-			It("sends the reconfigured build as the started build", func() {
-				var startedBuild builds.Build
-				Eventually(started).Should(Receive(&startedBuild))
+			It("attaches to the build's process", func() {
+				Eventually(attached).Should(BeClosed())
+				Eventually(finished).Should(Receive())
+			})
 
-				Ω(startedBuild.Config.Image).Should(Equal("some-reconfigured-image"))
+			Context("and attaching fails", func() {
+				disaster := errors.New("oh no!")
+
+				BeforeEach(func() {
+					wardenClient.Connection.WhenAttaching = func(handle string, processID uint32) (<-chan warden.ProcessStream, error) {
+						return nil, disaster
+					}
+				})
+
+				It("sends the error result", func() {
+					Eventually(errored).Should(Receive(Equal(disaster)))
+				})
 			})
 		})
 
 		Context("when the build's script exits 0", func() {
 			BeforeEach(func() {
-				wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-					exitStatus := uint32(0)
-
-					return 42, primedStream(warden.ProcessStream{
-						ExitStatus: &exitStatus,
-					}), nil
-				}
+				runningBuild.ProcessStream = exitedStream(0)
 			})
 
 			It("sends a successful result", func() {
@@ -214,7 +442,7 @@ var _ = Describe("Builder", func() {
 
 			Context("and outputs are configured on the build", func() {
 				BeforeEach(func() {
-					build.Outputs = []builds.Output{
+					runningBuild.Build.Outputs = []builds.Output{
 						{
 							Name:   "name1",
 							Type:   "git",
@@ -261,8 +489,8 @@ var _ = Describe("Builder", func() {
 							Ω(performed.StreamedIn.Closed()).Should(BeTrue())
 						}
 
-						Ω(outputs).Should(ContainElement(build.Outputs[0]))
-						Ω(outputs).Should(ContainElement(build.Outputs[1]))
+						Ω(outputs).Should(ContainElement(runningBuild.Build.Outputs[0]))
+						Ω(outputs).Should(ContainElement(runningBuild.Build.Outputs[1]))
 					})
 
 					It("reports the output sources", func() {
@@ -323,64 +551,22 @@ var _ = Describe("Builder", func() {
 
 		Context("when the build's script exits nonzero", func() {
 			BeforeEach(func() {
-				wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-					exitStatus := uint32(2)
-
-					return 42, primedStream(warden.ProcessStream{
-						ExitStatus: &exitStatus,
-					}), nil
-				}
+				runningBuild.ProcessStream = exitedStream(2)
 			})
 
 			It("sends a failed result", func() {
 				Eventually(failed).Should(Receive())
 			})
 		})
-	})
 
-	It("runs the build's script in the container", func() {
-		Eventually(finished).Should(Receive())
+		Context("when the process outputs", func() {
+			var logBuffer *gbytes.Buffer
 
-		Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
-			Script: `cd /tmp/build/src
-./bin/test`,
-			EnvironmentVariables: []warden.EnvironmentVariable{
-				{"FOO", "bar"},
-				{"BAZ", "buzz"},
-			},
-		}))
-	})
+			BeforeEach(func() {
+				logBuffer = gbytes.NewBuffer()
 
-	Context("when privileged is true", func() {
-		BeforeEach(func() {
-			build.Privileged = true
-		})
-
-		It("runs the build privileged", func() {
-			Eventually(finished).Should(Receive())
-
-			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
-				Script: `cd /tmp/build/src
-./bin/test`,
-				Privileged: true,
-				EnvironmentVariables: []warden.EnvironmentVariable{
-					{"FOO", "bar"},
-					{"BAZ", "buzz"},
-				},
-			}))
-		})
-	})
-
-	Context("when a logs url is configured", func() {
-		var logBuffer *gbytes.Buffer
-
-		BeforeEach(func() {
-			logBuffer = gbytes.NewBuffer()
-
-			wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
 				exitStatus := uint32(0)
-
-				successfulStream := primedStream(
+				runningBuild.ProcessStream = primedStream(
 					warden.ProcessStream{
 						Source: warden.ProcessStreamSourceStdout,
 						Data:   []byte("stdout\n"),
@@ -393,106 +579,41 @@ var _ = Describe("Builder", func() {
 						ExitStatus: &exitStatus,
 					},
 				)
+			})
 
-				return 42, successfulStream, nil
-			}
+			Context("and the running build already has a log stream", func() {
+				BeforeEach(func() {
+					runningBuild.LogStream = logBuffer
+				})
 
-			websocketEndpoint := ghttp.NewServer()
+				It("emits the build's output to it", func() {
+					Eventually(logBuffer).Should(gbytes.Say("stdout\n"))
+					Eventually(logBuffer).Should(gbytes.Say("stderr\n"))
+				})
+			})
 
-			var upgrader = websocket.Upgrader{
-				ReadBufferSize:  1024,
-				WriteBufferSize: 1024,
-				CheckOrigin: func(r *http.Request) bool {
-					// allow all connections
-					return true
-				},
-			}
+			Context("and a logs url is configured", func() {
+				var websocketSink *ghttp.Server
 
-			websocketEndpoint.AppendHandlers(
-				func(w http.ResponseWriter, r *http.Request) {
-					conn, err := upgrader.Upgrade(w, r, nil)
-					if err != nil {
-						log.Println(err)
-						return
-					}
+				BeforeEach(func() {
+					runningBuild.Build.LogsURL, websocketSink = websocketListener(logBuffer)
+				})
 
-					for {
-						_, msg, err := conn.ReadMessage()
-						if err == io.EOF {
-							break
-						}
+				It("emits the build's output via websockets", func() {
+					Eventually(logBuffer).Should(gbytes.Say("stdout\n"))
+					Eventually(logBuffer).Should(gbytes.Say("stderr\n"))
+				})
 
-						Ω(err).ShouldNot(HaveOccurred())
+				Context("but the sink is not listening", func() {
+					BeforeEach(func() {
+						websocketSink.Close()
+					})
 
-						logBuffer.Write(msg)
-					}
-
-					logBuffer.Close()
-				},
-			)
-
-			build.LogsURL = "ws://" + websocketEndpoint.HTTPTestServer.Listener.Addr().String()
-		})
-
-		It("emits the build's output via websockets", func() {
-			Eventually(logBuffer).Should(gbytes.Say("creating container from some-image-name...\n"))
-			Eventually(logBuffer).Should(gbytes.Say("starting...\n"))
-			Eventually(logBuffer).Should(gbytes.Say("stdout\n"))
-			Eventually(logBuffer).Should(gbytes.Say("stderr\n"))
-		})
-	})
-
-	Context("when running the build's script fails", func() {
-		disaster := errors.New("oh no!")
-
-		BeforeEach(func() {
-			wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-				return 0, nil, disaster
-			}
-		})
-
-		It("sends the error result", func() {
-			Eventually(errored).Should(Receive(Equal(disaster)))
-		})
-	})
-
-	Context("when creating the container fails", func() {
-		disaster := errors.New("oh no!")
-
-		BeforeEach(func() {
-			wardenClient.Connection.WhenCreating = func(spec warden.ContainerSpec) (string, error) {
-				return "", disaster
-			}
-		})
-
-		It("sends the error result", func() {
-			Eventually(errored).Should(Receive(Equal(disaster)))
-		})
-	})
-
-	Context("when fetching the source fails", func() {
-		disaster := errors.New("oh no!")
-
-		BeforeEach(func() {
-			sourceFetcher.FetchError = disaster
-		})
-
-		It("sends the error result", func() {
-			Eventually(errored).Should(Receive(Equal(disaster)))
-		})
-	})
-
-	Context("when copying the source in to the container fails", func() {
-		disaster := errors.New("oh no!")
-
-		BeforeEach(func() {
-			wardenClient.Connection.WhenStreamingIn = func(handle string, dst string) (io.WriteCloser, error) {
-				return nil, disaster
-			}
-		})
-
-		It("sends the error result", func() {
-			Eventually(errored).Should(Receive(Equal(disaster)))
+					It("sends the error result", func() {
+						Eventually(errored).Should(Receive())
+					})
+				})
+			})
 		})
 	})
 })

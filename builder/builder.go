@@ -12,7 +12,8 @@ import (
 )
 
 type Builder interface {
-	Build(builds.Build) (started <-chan builds.Build, failed <-chan error, errored <-chan error, finished <-chan builds.Build)
+	Build(builds.Build) (started <-chan RunningBuild, errored <-chan error)
+	Attach(RunningBuild) (finished <-chan builds.Build, failed <-chan error, errored <-chan error)
 }
 
 type SourceFetcher interface {
@@ -21,6 +22,16 @@ type SourceFetcher interface {
 
 type Outputter interface {
 	PerformOutput(builds.Output, io.Reader) (builds.Source, error)
+}
+
+type RunningBuild struct {
+	Build     builds.Build
+	Container warden.Container
+
+	ProcessID     uint32
+	ProcessStream <-chan warden.ProcessStream
+
+	LogStream io.WriteCloser
 }
 
 type builder struct {
@@ -46,32 +57,29 @@ type nullSink struct{}
 func (nullSink) Write(data []byte) (int, error) { return len(data), nil }
 func (nullSink) Close() error                   { return nil }
 
-func (builder *builder) Build(build builds.Build) (<-chan builds.Build, <-chan error, <-chan error, <-chan builds.Build) {
-	started := make(chan builds.Build, 1)
-	failed := make(chan error, 1)
+func (builder *builder) Build(build builds.Build) (<-chan RunningBuild, <-chan error) {
+	started := make(chan RunningBuild, 1)
 	errored := make(chan error, 1)
-	finished := make(chan builds.Build, 1)
 
-	go builder.build(build, started, failed, errored, finished)
+	go builder.build(build, started, errored)
 
-	return started, failed, errored, finished
+	return started, errored
 }
 
-func (builder *builder) build(build builds.Build, started chan<- builds.Build, failed chan<- error, errored chan<- error, finished chan<- builds.Build) {
+func (builder *builder) build(build builds.Build, started chan<- RunningBuild, errored chan<- error) {
 	logs, err := builder.logsFor(build.LogsURL)
 	if err != nil {
 		errored <- err
 		return
 	}
 
-	defer logs.Close()
-
-	resources := map[io.Reader]string{}
+	resources := map[string]io.Reader{}
 
 	for i, input := range build.Inputs {
 		buildConfig, source, tarStream, err := builder.sourceFetcher.Fetch(input)
 		if err != nil {
 			errored <- err
+			logs.Close()
 			return
 		}
 
@@ -81,27 +89,80 @@ func (builder *builder) build(build builds.Build, started chan<- builds.Build, f
 			build.Config = buildConfig
 		}
 
-		resources[tarStream] = input.DestinationPath
+		resources[input.DestinationPath] = tarStream
 	}
-
-	started <- build
 
 	container, err := builder.createBuildContainer(build.Config, logs)
 	if err != nil {
 		errored <- err
+		logs.Close()
 		return
 	}
 
 	err = builder.streamInResources(container, resources)
 	if err != nil {
 		errored <- err
+		logs.Close()
 		return
 	}
 
-	stream, err := builder.runBuild(container, build.Privileged, build.Config, logs)
+	pid, stream, err := builder.runBuild(container, build.Privileged, build.Config, logs)
 	if err != nil {
 		errored <- err
+		logs.Close()
 		return
+	}
+
+	started <- RunningBuild{
+		Build:     build,
+		Container: container,
+
+		ProcessID:     pid,
+		ProcessStream: stream,
+
+		LogStream: logs,
+	}
+}
+
+func (builder *builder) Attach(running RunningBuild) (<-chan builds.Build, <-chan error, <-chan error) {
+	failed := make(chan error, 1)
+	errored := make(chan error, 1)
+	finished := make(chan builds.Build, 1)
+
+	go builder.attach(running, finished, failed, errored)
+
+	return finished, failed, errored
+}
+
+func (builder *builder) attach(running RunningBuild, finished chan<- builds.Build, failed chan<- error, errored chan<- error) {
+	var logs io.WriteCloser
+
+	if running.LogStream != nil {
+		logs = running.LogStream
+	} else {
+		var err error
+
+		logs, err = builder.logsFor(running.Build.LogsURL)
+		if err != nil {
+			errored <- err
+			return
+		}
+	}
+
+	defer logs.Close()
+
+	var stream <-chan warden.ProcessStream
+
+	if running.ProcessStream != nil {
+		stream = running.ProcessStream
+	} else {
+		var err error
+
+		stream, err = running.Container.Attach(running.ProcessID)
+		if err != nil {
+			errored <- err
+			return
+		}
 	}
 
 	succeeded, err := builder.waitForRunToEnd(stream, logs)
@@ -115,15 +176,15 @@ func (builder *builder) build(build builds.Build, started chan<- builds.Build, f
 		return
 	}
 
-	outputs, err := builder.performOutputs(container, build)
+	outputs, err := builder.performOutputs(running.Container, running.Build)
 	if err != nil {
 		errored <- err
 		return
 	}
 
-	build.Outputs = outputs
+	running.Build.Outputs = outputs
 
-	finished <- build
+	finished <- running.Build
 }
 
 func (builder *builder) logsFor(logURL string) (io.WriteCloser, error) {
@@ -156,9 +217,9 @@ func (builder *builder) createBuildContainer(
 
 func (builder *builder) streamInResources(
 	container warden.Container,
-	resources map[io.Reader]string,
+	resources map[string]io.Reader,
 ) error {
-	for streamOut, destination := range resources {
+	for destination, streamOut := range resources {
 		streamIn, err := container.StreamIn("/tmp/build/src/" + destination)
 		if err != nil {
 			return err
@@ -183,7 +244,7 @@ func (builder *builder) runBuild(
 	privileged bool,
 	buildConfig builds.Config,
 	logs io.Writer,
-) (<-chan warden.ProcessStream, error) {
+) (uint32, <-chan warden.ProcessStream, error) {
 	fmt.Fprintf(logs, "starting...\n")
 
 	env := make([]warden.EnvironmentVariable, len(buildConfig.Env))
@@ -199,9 +260,7 @@ func (builder *builder) runBuild(
 		EnvironmentVariables: env,
 	}
 
-	_, stream, err := container.Run(processSpec)
-
-	return stream, err
+	return container.Run(processSpec)
 }
 
 func (builder *builder) waitForRunToEnd(

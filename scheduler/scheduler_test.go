@@ -85,15 +85,13 @@ var _ = Describe("Scheduler", func() {
 							server.HTTPTestServer.CloseClientConnections()
 						})
 
-						server.AppendHandlers(
-							func(w http.ResponseWriter, r *http.Request) {
-								server.HTTPTestServer.CloseClientConnections()
-							},
-							handler,
-						)
+						server.AppendHandlers(handler)
 					})
 
 					It("retries", func() {
+						// ignore completion callback
+						server.AllowUnhandledRequests = true
+
 						err := scheduler.Schedule(build)
 						Ω(err).ShouldNot(HaveOccurred())
 
@@ -128,14 +126,14 @@ var _ = Describe("Scheduler", func() {
 				})
 
 				itRetries(0, func() {
-					Eventually(gotStartedCallback, 4).Should(BeClosed())
+					Eventually(gotStartedCallback, 3).Should(BeClosed())
 				})
 
 				Context("when the build succeeds", func() {
 					var gotRequest <-chan struct{}
 
 					BeforeEach(func() {
-						builder.BuildResult = startedBuild
+						builder.FinishedBuild = startedBuild
 
 						succeededBuild := startedBuild
 						succeededBuild.Status = builds.StatusSucceeded
@@ -151,7 +149,7 @@ var _ = Describe("Scheduler", func() {
 					})
 
 					itRetries(1, func() {
-						Eventually(gotRequest, 4).Should(BeClosed())
+						Eventually(gotRequest, 3).Should(BeClosed())
 					})
 				})
 
@@ -175,7 +173,7 @@ var _ = Describe("Scheduler", func() {
 					})
 
 					itRetries(1, func() {
-						Eventually(gotRequest, 4).Should(BeClosed())
+						Eventually(gotRequest, 3).Should(BeClosed())
 					})
 				})
 
@@ -199,7 +197,7 @@ var _ = Describe("Scheduler", func() {
 					})
 
 					itRetries(1, func() {
-						Eventually(gotRequest, 4).Should(BeClosed())
+						Eventually(gotRequest, 3).Should(BeClosed())
 					})
 				})
 			})
@@ -224,7 +222,7 @@ var _ = Describe("Scheduler", func() {
 				})
 
 				itRetries(0, func() {
-					Eventually(gotRequest, 4).Should(BeClosed())
+					Eventually(gotRequest, 3).Should(BeClosed())
 				})
 			})
 		})

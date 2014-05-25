@@ -44,44 +44,51 @@ func (scheduler *scheduler) Schedule(build builds.Build) error {
 
 	log.Printf("building: %#v\n", build)
 
-	started, failed, errored, finished := scheduler.builder.Build(build)
+	started, errored := scheduler.builder.Build(build)
 
-	go func(build builds.Build) {
-		defer scheduler.runningBuilds.Done()
-
-		select {
-		case build = <-started:
-			log.Println("started")
-
-			build.Status = builds.StatusStarted
-			scheduler.reportBuild(build)
-		case err := <-errored:
-			log.Println("errored while starting:", err)
-
-			build.Status = builds.StatusErrored
-			scheduler.reportBuild(build)
-		}
-
-		select {
-		case err := <-failed:
-			log.Println("failed:", err)
-
-			build.Status = builds.StatusFailed
-			scheduler.reportBuild(build)
-		case build = <-finished:
-			log.Println("completed")
-
-			build.Status = builds.StatusSucceeded
-			scheduler.reportBuild(build)
-		case err := <-errored:
-			log.Println("errored:", err)
-
-			build.Status = builds.StatusErrored
-			scheduler.reportBuild(build)
-		}
-	}(build)
+	go scheduler.runBuild(build, started, errored)
 
 	return nil
+}
+
+func (scheduler *scheduler) runBuild(originalBuild builds.Build, started <-chan builder.RunningBuild, errored <-chan error) {
+	defer scheduler.runningBuilds.Done()
+
+	var running builder.RunningBuild
+
+	select {
+	case running = <-started:
+		log.Println("started")
+
+		running.Build.Status = builds.StatusStarted
+		scheduler.reportBuild(running.Build)
+	case err := <-errored:
+		log.Println("errored while starting:", err)
+
+		originalBuild.Status = builds.StatusErrored
+		scheduler.reportBuild(originalBuild)
+		return
+	}
+
+	finished, failed, errored := scheduler.builder.Attach(running)
+
+	select {
+	case err := <-failed:
+		log.Println("failed:", err)
+
+		running.Build.Status = builds.StatusFailed
+		scheduler.reportBuild(running.Build)
+	case finishedBuild := <-finished:
+		log.Println("completed")
+
+		finishedBuild.Status = builds.StatusSucceeded
+		scheduler.reportBuild(finishedBuild)
+	case err := <-errored:
+		log.Println("errored:", err)
+
+		running.Build.Status = builds.StatusErrored
+		scheduler.reportBuild(running.Build)
+	}
 }
 
 func (scheduler *scheduler) reportBuild(build builds.Build) {
