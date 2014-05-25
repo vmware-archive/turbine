@@ -1,5 +1,7 @@
 package builds
 
+import "fmt"
+
 type Status string
 
 const (
@@ -53,6 +55,14 @@ func (source *Source) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (source Source) String() string {
+	return string(source)
+}
+
+func (source Source) GoString() string {
+	return fmt.Sprintf("builds.Source(%q)", source)
+}
+
 type Output struct {
 	Name string `json:"name"`
 
@@ -73,4 +83,12 @@ func (params Params) MarshalJSON() ([]byte, error) {
 func (params *Params) UnmarshalJSON(data []byte) error {
 	*params = append((*params)[0:0], data...)
 	return nil
+}
+
+func (params Params) String() string {
+	return string(params)
+}
+
+func (params Params) GoString() string {
+	return fmt.Sprintf("builds.Params(%q)", params)
 }
