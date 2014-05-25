@@ -217,37 +217,6 @@ func (builder *builder) streamInResources(
 	return nil
 }
 
-func (builder *builder) streamOutTo(
-	container warden.Container,
-	outputs []io.WriteCloser,
-) error {
-	streamOut, err := container.StreamOut("/tmp/build/src/")
-	if err != nil {
-		return err
-	}
-
-	writers := make([]io.Writer, len(outputs))
-	for i, writeCloser := range outputs {
-		writers[i] = writeCloser
-	}
-
-	writer := io.MultiWriter(writers...)
-
-	_, err = io.Copy(writer, streamOut)
-	if err != nil {
-		return err
-	}
-
-	for _, writeCloser := range outputs {
-		err := writeCloser.Close()
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func (builder *builder) runBuild(
 	container warden.Container,
 	privileged bool,
