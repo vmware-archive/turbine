@@ -64,13 +64,13 @@ var _ = Describe("Builder", func() {
 
 			Inputs: []builds.Input{
 				{
-					Type: "raw",
-
+					Name:            "name1",
+					Type:            "raw",
 					DestinationPath: "some/source/path",
 				},
 				{
-					Type: "raw",
-
+					Name:            "name2",
+					Type:            "raw",
 					DestinationPath: "another/source/path",
 				},
 			},
@@ -116,11 +116,11 @@ var _ = Describe("Builder", func() {
 			sourceStream2 := bytes.NewBufferString("some-data-2")
 
 			sourceFetcher.WhenFetching = func(input builds.Input) (builds.Config, builds.Source, io.Reader, error) {
-				if input.DestinationPath == "some/source/path" {
+				if input.Name == "name1" {
 					return builds.Config{}, source1, sourceStream1, nil
 				}
 
-				if input.DestinationPath == "another/source/path" {
+				if input.Name == "name2" {
 					config := builds.Config{Image: "some-reconfigured-image"}
 					return config, source2, sourceStream2, nil
 				}
@@ -134,10 +134,12 @@ var _ = Describe("Builder", func() {
 
 			Ω(sourceFetcher.Fetched()).Should(Equal([]builds.Input{
 				{
+					Name:            "name1",
 					Type:            "raw",
 					DestinationPath: "some/source/path",
 				},
 				{
+					Name:            "name2",
 					Type:            "raw",
 					DestinationPath: "another/source/path",
 				},
@@ -173,6 +175,162 @@ var _ = Describe("Builder", func() {
 				Eventually(started).Should(Receive(&startedBuild))
 
 				Ω(startedBuild.Config.Image).Should(Equal("some-reconfigured-image"))
+			})
+		})
+
+		Context("when the build's script exits 0", func() {
+			BeforeEach(func() {
+				wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+					exitStatus := uint32(0)
+
+					return 42, primedStream(warden.ProcessStream{
+						ExitStatus: &exitStatus,
+					}), nil
+				}
+			})
+
+			It("sends a successful result", func() {
+				Eventually(finished).Should(Receive())
+			})
+
+			It("reports regular inputs as output sources", func() {
+				var finishedBuild builds.Build
+				Eventually(finished).Should(Receive(&finishedBuild))
+
+				Ω(finishedBuild.Outputs).Should(Equal([]builds.Output{
+					{
+						Name:   "name1",
+						Type:   "raw",
+						Source: builds.Source("some-source-1"),
+					},
+					{
+						Name:   "name2",
+						Type:   "raw",
+						Source: builds.Source("some-source-2"),
+					},
+				}))
+			})
+
+			Context("and outputs are configured on the build", func() {
+				BeforeEach(func() {
+					build.Outputs = []builds.Output{
+						{
+							Name:   "name1",
+							Type:   "git",
+							Params: builds.Params("123"),
+						},
+						{
+							Name:   "someoutput",
+							Type:   "git",
+							Params: builds.Params("456"),
+						},
+					}
+				})
+
+				Context("and streaming out succeeds", func() {
+					BeforeEach(func() {
+						wardenClient.Connection.WhenStreamingOut = func(string, string) (io.Reader, error) {
+							return bytes.NewBufferString("streamed-out"), nil
+						}
+
+						sync := make(chan bool)
+
+						outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader) (builds.Source, error) {
+							if string(output.Params) == "123" {
+								<-sync
+								return builds.Source("output-1"), nil
+							} else {
+								close(sync)
+								return builds.Source("output-2"), nil
+							}
+						}
+					})
+
+					It("evaluates every output in parallel with the source and params", func() {
+						Eventually(finished).Should(Receive())
+
+						performedOutputs := outputter.PerformedOutputs()
+						Ω(performedOutputs).Should(HaveLen(2))
+
+						outputs := []builds.Output{}
+						for _, performed := range performedOutputs {
+							outputs = append(outputs, performed.Output)
+
+							Ω(string(performed.StreamedIn.Contents())).Should(Equal("streamed-out"))
+							Ω(performed.StreamedIn.Closed()).Should(BeTrue())
+						}
+
+						Ω(outputs).Should(ContainElement(build.Outputs[0]))
+						Ω(outputs).Should(ContainElement(build.Outputs[1]))
+					})
+
+					It("reports the output sources", func() {
+						var finishedBuild builds.Build
+						Eventually(finished).Should(Receive(&finishedBuild))
+
+						Ω(finishedBuild.Outputs).Should(Equal([]builds.Output{
+							{
+								Name:   "name1",
+								Type:   "git",
+								Params: builds.Params("123"),
+								Source: builds.Source("output-1"),
+							},
+							{
+								Name:   "name2",
+								Type:   "raw",
+								Source: builds.Source("some-source-2"),
+							},
+							{
+								Name:   "someoutput",
+								Type:   "git",
+								Params: builds.Params("456"),
+								Source: builds.Source("output-2"),
+							},
+						}))
+					})
+
+					Context("and an output fails", func() {
+						disaster := errors.New("oh no!")
+
+						BeforeEach(func() {
+							outputter.PerformOutputError = disaster
+						})
+
+						It("sends the error result", func() {
+							Eventually(errored).Should(Receive(Equal(disaster)))
+						})
+					})
+				})
+
+				Context("and streaming out fails", func() {
+					disaster := errors.New("oh no!")
+
+					BeforeEach(func() {
+						wardenClient.Connection.WhenStreamingOut = func(string, string) (io.Reader, error) {
+							return nil, disaster
+						}
+					})
+
+					It("sends the error result", func() {
+						Eventually(errored).Should(Receive(Equal(disaster)))
+					})
+				})
+			})
+		})
+
+		Context("when the build's script exits nonzero", func() {
+			BeforeEach(func() {
+				wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+					exitStatus := uint32(2)
+
+					return 42, primedStream(warden.ProcessStream{
+						ExitStatus: &exitStatus,
+					}), nil
+				}
+			})
+
+			It("sends a failed result", func() {
+				Eventually(failed).Should(Receive())
 			})
 		})
 	})
@@ -292,134 +450,6 @@ var _ = Describe("Builder", func() {
 
 		It("sends the error result", func() {
 			Eventually(errored).Should(Receive(Equal(disaster)))
-		})
-	})
-
-	Context("when the build's script exits 0", func() {
-		BeforeEach(func() {
-			wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-				exitStatus := uint32(0)
-
-				return 42, primedStream(warden.ProcessStream{
-					ExitStatus: &exitStatus,
-				}), nil
-			}
-		})
-
-		It("sends a successful result", func() {
-			Eventually(finished).Should(Receive())
-		})
-
-		Context("and outputs are configured on the build", func() {
-			BeforeEach(func() {
-				build.Outputs = []builds.Output{
-					{
-						Type:   "git",
-						Params: builds.Params("123"),
-					},
-					{
-						Type:   "git",
-						Params: builds.Params("456"),
-					},
-				}
-			})
-
-			Context("and streaming out succeeds", func() {
-				BeforeEach(func() {
-					wardenClient.Connection.WhenStreamingOut = func(string, string) (io.Reader, error) {
-						return bytes.NewBufferString("streamed-out"), nil
-					}
-
-					sync := make(chan bool)
-
-					outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader) (builds.Source, error) {
-						if string(output.Params) == "123" {
-							<-sync
-							return builds.Source("output-1"), nil
-						} else {
-							close(sync)
-							return builds.Source("output-2"), nil
-						}
-					}
-				})
-
-				It("evaluates every output in parallel with the source and params", func() {
-					Eventually(finished).Should(Receive())
-
-					performedOutputs := outputter.PerformedOutputs()
-					Ω(performedOutputs).Should(HaveLen(2))
-
-					outputs := []builds.Output{}
-					for _, performed := range performedOutputs {
-						outputs = append(outputs, performed.Output)
-
-						Ω(string(performed.StreamedIn.Contents())).Should(Equal("streamed-out"))
-						Ω(performed.StreamedIn.Closed()).Should(BeTrue())
-					}
-
-					Ω(outputs).Should(ContainElement(build.Outputs[0]))
-					Ω(outputs).Should(ContainElement(build.Outputs[1]))
-				})
-
-				It("reports the output sources", func() {
-					var finishedBuild builds.Build
-					Eventually(finished).Should(Receive(&finishedBuild))
-
-					Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
-						Type:   "git",
-						Params: builds.Params("123"),
-						Source: builds.Source("output-1"),
-					}))
-
-					Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
-						Type:   "git",
-						Params: builds.Params("456"),
-						Source: builds.Source("output-2"),
-					}))
-				})
-
-				Context("and an output fails", func() {
-					disaster := errors.New("oh no!")
-
-					BeforeEach(func() {
-						outputter.PerformOutputError = disaster
-					})
-
-					It("sends the error result", func() {
-						Eventually(errored).Should(Receive(Equal(disaster)))
-					})
-				})
-			})
-
-			Context("and streaming out fails", func() {
-				disaster := errors.New("oh no!")
-
-				BeforeEach(func() {
-					wardenClient.Connection.WhenStreamingOut = func(string, string) (io.Reader, error) {
-						return nil, disaster
-					}
-				})
-
-				It("sends the error result", func() {
-					Eventually(errored).Should(Receive(Equal(disaster)))
-				})
-			})
-		})
-	})
-
-	Context("when the build's script exits nonzero", func() {
-		BeforeEach(func() {
-			wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-				exitStatus := uint32(2)
-
-				return 42, primedStream(warden.ProcessStream{
-					ExitStatus: &exitStatus,
-				}), nil
-			}
-		})
-
-		It("sends a failed result", func() {
-			Eventually(failed).Should(Receive())
 		})
 	})
 

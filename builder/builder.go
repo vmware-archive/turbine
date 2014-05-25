@@ -115,6 +115,15 @@ func (builder *builder) build(build builds.Build, started chan<- builds.Build, f
 		return
 	}
 
+	allOutputs := map[string]builds.Output{}
+	for _, input := range build.Inputs {
+		allOutputs[input.Name] = builds.Output{
+			Name:   input.Name,
+			Type:   input.Type,
+			Source: input.Source,
+		}
+	}
+
 	if len(build.Outputs) > 0 {
 		errs := make(chan error, len(build.Outputs))
 		results := make(chan builds.Output, len(build.Outputs))
@@ -145,13 +154,18 @@ func (builder *builder) build(build builds.Build, started chan<- builds.Build, f
 			return
 		}
 
-		outputs := make([]builds.Output, len(build.Outputs))
 		for i := 0; i < len(build.Outputs); i++ {
-			outputs[i] = <-results
+			output := <-results
+			allOutputs[output.Name] = output
 		}
-
-		build.Outputs = outputs
 	}
+
+	outputs := []builds.Output{}
+	for _, output := range allOutputs {
+		outputs = append(outputs, output)
+	}
+
+	build.Outputs = outputs
 
 	finished <- build
 }
