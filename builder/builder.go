@@ -66,7 +66,7 @@ func (builder *builder) build(build builds.Build, started chan<- builds.Build, f
 
 	defer logs.Close()
 
-	resources := map[string]io.Reader{}
+	resources := map[io.Reader]string{}
 
 	for i, input := range build.Inputs {
 		buildConfig, source, tarStream, err := builder.sourceFetcher.Fetch(input)
@@ -81,7 +81,7 @@ func (builder *builder) build(build builds.Build, started chan<- builds.Build, f
 			build.Config = buildConfig
 		}
 
-		resources[input.DestinationPath] = tarStream
+		resources[tarStream] = input.DestinationPath
 	}
 
 	started <- build
@@ -115,68 +115,15 @@ func (builder *builder) build(build builds.Build, started chan<- builds.Build, f
 		return
 	}
 
-	allOutputs := map[string]builds.Output{}
-	for _, input := range build.Inputs {
-		allOutputs[input.Name] = builds.Output{
-			Name:   input.Name,
-			Type:   input.Type,
-			Source: input.Source,
-		}
-	}
-
-	if len(build.Outputs) > 0 {
-		errs := make(chan error, len(build.Outputs))
-		results := make(chan builds.Output, len(build.Outputs))
-
-		for _, output := range build.Outputs {
-			go func(output builds.Output) {
-				source, err := builder.performOutput(container, output)
-
-				errs <- err
-
-				if err == nil {
-					output.Source = source
-					results <- output
-				}
-			}(output)
-		}
-
-		var outputErr error
-		for i := 0; i < len(build.Outputs); i++ {
-			err := <-errs
-			if err != nil {
-				outputErr = err
-			}
-		}
-
-		if outputErr != nil {
-			errored <- outputErr
-			return
-		}
-
-		for i := 0; i < len(build.Outputs); i++ {
-			output := <-results
-			allOutputs[output.Name] = output
-		}
-	}
-
-	outputs := []builds.Output{}
-	for _, output := range allOutputs {
-		outputs = append(outputs, output)
+	outputs, err := builder.performOutputs(container, build)
+	if err != nil {
+		errored <- err
+		return
 	}
 
 	build.Outputs = outputs
 
 	finished <- build
-}
-
-func (builder *builder) performOutput(container warden.Container, output builds.Output) (builds.Source, error) {
-	streamOut, err := container.StreamOut("/tmp/build/src/")
-	if err != nil {
-		return nil, err
-	}
-
-	return builder.outputter.PerformOutput(output, streamOut)
 }
 
 func (builder *builder) logsFor(logURL string) (io.WriteCloser, error) {
@@ -209,9 +156,9 @@ func (builder *builder) createBuildContainer(
 
 func (builder *builder) streamInResources(
 	container warden.Container,
-	resources map[string]io.Reader,
+	resources map[io.Reader]string,
 ) error {
-	for destination, streamOut := range resources {
+	for streamOut, destination := range resources {
 		streamIn, err := container.StreamIn("/tmp/build/src/" + destination)
 		if err != nil {
 			return err
@@ -270,4 +217,66 @@ func (builder *builder) waitForRunToEnd(
 	}
 
 	return false, fmt.Errorf("output stream interrupted")
+}
+
+func (builder *builder) performOutputs(container warden.Container, build builds.Build) ([]builds.Output, error) {
+	allOutputs := map[string]builds.Output{}
+	for _, input := range build.Inputs {
+		allOutputs[input.Name] = builds.Output{
+			Name:   input.Name,
+			Type:   input.Type,
+			Source: input.Source,
+		}
+	}
+
+	if len(build.Outputs) > 0 {
+		errs := make(chan error, len(build.Outputs))
+		results := make(chan builds.Output, len(build.Outputs))
+
+		for _, output := range build.Outputs {
+			go func(output builds.Output) {
+				source, err := builder.performOutput(container, output)
+
+				errs <- err
+
+				if err == nil {
+					output.Source = source
+					results <- output
+				}
+			}(output)
+		}
+
+		var outputErr error
+		for i := 0; i < len(build.Outputs); i++ {
+			err := <-errs
+			if err != nil {
+				outputErr = err
+			}
+		}
+
+		if outputErr != nil {
+			return nil, outputErr
+		}
+
+		for i := 0; i < len(build.Outputs); i++ {
+			output := <-results
+			allOutputs[output.Name] = output
+		}
+	}
+
+	outputs := []builds.Output{}
+	for _, output := range allOutputs {
+		outputs = append(outputs, output)
+	}
+
+	return outputs, nil
+}
+
+func (builder *builder) performOutput(container warden.Container, output builds.Output) (builds.Source, error) {
+	streamOut, err := container.StreamOut("/tmp/build/src/")
+	if err != nil {
+		return nil, err
+	}
+
+	return builder.outputter.PerformOutput(output, streamOut)
 }
