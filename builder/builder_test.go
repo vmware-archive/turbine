@@ -197,17 +197,18 @@ var _ = Describe("Builder", func() {
 				var finishedBuild builds.Build
 				Eventually(finished).Should(Receive(&finishedBuild))
 
-				Ω(finishedBuild.Outputs).Should(Equal([]builds.Output{
-					{
-						Name:   "name1",
-						Type:   "raw",
-						Source: builds.Source("some-source-1"),
-					},
-					{
-						Name:   "name2",
-						Type:   "raw",
-						Source: builds.Source("some-source-2"),
-					},
+				Ω(finishedBuild.Outputs).Should(HaveLen(2))
+
+				Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
+					Name:   "name1",
+					Type:   "raw",
+					Source: builds.Source("some-source-1"),
+				}))
+
+				Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
+					Name:   "name2",
+					Type:   "raw",
+					Source: builds.Source("some-source-2"),
 				}))
 			})
 
@@ -268,24 +269,26 @@ var _ = Describe("Builder", func() {
 						var finishedBuild builds.Build
 						Eventually(finished).Should(Receive(&finishedBuild))
 
-						Ω(finishedBuild.Outputs).Should(Equal([]builds.Output{
-							{
-								Name:   "name1",
-								Type:   "git",
-								Params: builds.Params("123"),
-								Source: builds.Source("output-1"),
-							},
-							{
-								Name:   "name2",
-								Type:   "raw",
-								Source: builds.Source("some-source-2"),
-							},
-							{
-								Name:   "someoutput",
-								Type:   "git",
-								Params: builds.Params("456"),
-								Source: builds.Source("output-2"),
-							},
+						Ω(finishedBuild.Outputs).Should(HaveLen(3))
+
+						Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
+							Name:   "name1",
+							Type:   "git",
+							Params: builds.Params("123"),
+							Source: builds.Source("output-1"),
+						}))
+
+						Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
+							Name:   "name2",
+							Type:   "raw",
+							Source: builds.Source("some-source-2"),
+						}))
+
+						Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
+							Name:   "someoutput",
+							Type:   "git",
+							Params: builds.Params("456"),
+							Source: builds.Source("output-2"),
 						}))
 					})
 
