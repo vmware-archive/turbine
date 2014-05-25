@@ -42,6 +42,8 @@ var _ = Describe("Outputter", func() {
 		output = builds.Output{
 			Type:   "some-resource",
 			Params: builds.Params("some-params"),
+
+			SourcePath: "some-resource",
 		}
 
 		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
@@ -174,7 +176,7 @@ var _ = Describe("Outputter", func() {
 
 			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
 				{
-					Script: "/tmp/resource/out /tmp/build/src < /tmp/resource-artifacts/output.json",
+					Script: "/tmp/resource/out /tmp/build/src/some-resource < /tmp/resource-artifacts/output.json",
 				},
 			}))
 		})

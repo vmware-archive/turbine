@@ -33,8 +33,7 @@ type Config struct {
 }
 
 type Input struct {
-	Type string `json:"type"`
-
+	Type   string `json:"type"`
 	Source Source `json:"source,omitempty"`
 
 	ConfigPath      string `json:"configPath"`
@@ -57,6 +56,8 @@ type Output struct {
 	Params Params `json:"params,omitempty"`
 
 	Source Source `json:"source,omitempty"`
+
+	SourcePath string `json:"sourcePath"`
 }
 
 type Params []byte

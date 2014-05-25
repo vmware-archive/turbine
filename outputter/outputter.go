@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
 
@@ -68,7 +69,10 @@ func (outputter *Outputter) PerformOutput(output builds.Output, sourceStream io.
 	}
 
 	_, stream, err := container.Run(warden.ProcessSpec{
-		Script: "/tmp/resource/out /tmp/build/src < /tmp/resource-artifacts/output.json",
+		Script: fmt.Sprintf(
+			"/tmp/resource/out %s < /tmp/resource-artifacts/output.json",
+			path.Join("/tmp/build/src", output.SourcePath),
+		),
 	})
 	if err != nil {
 		return nil, err
