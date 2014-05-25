@@ -33,6 +33,8 @@ type Config struct {
 }
 
 type Input struct {
+	Name string `json:"name"`
+
 	Type   string `json:"type"`
 	Source Source `json:"source,omitempty"`
 
@@ -52,6 +54,8 @@ func (source *Source) UnmarshalJSON(data []byte) error {
 }
 
 type Output struct {
+	Name string `json:"name"`
+
 	Type   string `json:"type"`
 	Params Params `json:"params,omitempty"`
 
