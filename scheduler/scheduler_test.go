@@ -76,6 +76,32 @@ var _ = Describe("Scheduler", func() {
 				build.Callback = server.URL() + "/abc"
 			})
 
+			itRetries := func(index int, assertion func()) {
+				Context("and the callback URI fails", func() {
+					BeforeEach(func() {
+						handler := server.GetHandler(index)
+
+						server.SetHandler(index, func(w http.ResponseWriter, r *http.Request) {
+							server.HTTPTestServer.CloseClientConnections()
+						})
+
+						server.AppendHandlers(
+							func(w http.ResponseWriter, r *http.Request) {
+								server.HTTPTestServer.CloseClientConnections()
+							},
+							handler,
+						)
+					})
+
+					It("retries", func() {
+						err := scheduler.Schedule(build)
+						Ω(err).ShouldNot(HaveOccurred())
+
+						assertion()
+					})
+				})
+			}
+
 			Context("and the build starts", func() {
 				var startedBuild builds.Build
 
@@ -101,6 +127,10 @@ var _ = Describe("Scheduler", func() {
 					Eventually(gotStartedCallback).Should(BeClosed())
 				})
 
+				itRetries(0, func() {
+					Eventually(gotStartedCallback, 4).Should(BeClosed())
+				})
+
 				Context("when the build succeeds", func() {
 					var gotRequest <-chan struct{}
 
@@ -118,6 +148,10 @@ var _ = Describe("Scheduler", func() {
 						Ω(err).ShouldNot(HaveOccurred())
 
 						Eventually(gotRequest).Should(BeClosed())
+					})
+
+					itRetries(1, func() {
+						Eventually(gotRequest, 4).Should(BeClosed())
 					})
 				})
 
@@ -139,6 +173,10 @@ var _ = Describe("Scheduler", func() {
 
 						Eventually(gotRequest).Should(BeClosed())
 					})
+
+					itRetries(1, func() {
+						Eventually(gotRequest, 4).Should(BeClosed())
+					})
 				})
 
 				Context("when building fails", func() {
@@ -158,6 +196,10 @@ var _ = Describe("Scheduler", func() {
 						Ω(err).ShouldNot(HaveOccurred())
 
 						Eventually(gotRequest).Should(BeClosed())
+					})
+
+					itRetries(1, func() {
+						Eventually(gotRequest, 4).Should(BeClosed())
 					})
 				})
 			})
@@ -179,6 +221,10 @@ var _ = Describe("Scheduler", func() {
 					Ω(err).ShouldNot(HaveOccurred())
 
 					Eventually(gotRequest).Should(BeClosed())
+				})
+
+				itRetries(0, func() {
+					Eventually(gotRequest, 4).Should(BeClosed())
 				})
 			})
 		})

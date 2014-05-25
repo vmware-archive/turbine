@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/winston-ci/prole/api/builds"
 	"github.com/winston-ci/prole/builder"
@@ -93,22 +94,28 @@ func (scheduler *scheduler) reportBuild(build builds.Build) {
 
 	payload, _ := json.Marshal(build)
 
-	res, err := scheduler.httpClient.Do(&http.Request{
-		Method: "PUT",
-		URL:    destination,
+	for {
+		res, err := scheduler.httpClient.Do(&http.Request{
+			Method: "PUT",
+			URL:    destination,
 
-		ContentLength: int64(len(payload)),
+			ContentLength: int64(len(payload)),
 
-		Header: map[string][]string{
-			"Content-Type": {"application/json"},
-		},
+			Header: map[string][]string{
+				"Content-Type": {"application/json"},
+			},
 
-		Body: ioutil.NopCloser(bytes.NewBuffer(payload)),
-	})
-	if err != nil {
-		log.Println("failed to submit result:", err)
-		return
+			Body: ioutil.NopCloser(bytes.NewBuffer(payload)),
+		})
+
+		if err != nil {
+			log.Println("failed to submit result:", err)
+			time.Sleep(time.Second)
+			continue
+		}
+
+		res.Body.Close()
+
+		break
 	}
-
-	res.Body.Close()
 }
