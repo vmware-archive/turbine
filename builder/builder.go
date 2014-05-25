@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -11,28 +12,31 @@ import (
 )
 
 type Builder interface {
-	Build(builds.Build) (started <-chan builds.Build, finished <-chan bool, errored <-chan error)
+	Build(builds.Build) (started <-chan builds.Build, failed <-chan error, errored <-chan error, finished <-chan builds.Build)
 }
 
 type SourceFetcher interface {
 	Fetch(input builds.Input) (config builds.Config, source builds.Source, tarStream io.Reader, err error)
 }
 
-type ImageFetcher interface {
-	Fetch(name string) (id string, err error)
+type Outputter interface {
+	PerformOutput(builds.Output, io.Reader) (builds.Source, error)
 }
 
 type builder struct {
 	sourceFetcher SourceFetcher
+	outputter     Outputter
 	wardenClient  warden.Client
 }
 
 func NewBuilder(
 	sourceFetcher SourceFetcher,
+	outputter Outputter,
 	wardenClient warden.Client,
 ) Builder {
 	return &builder{
 		sourceFetcher: sourceFetcher,
+		outputter:     outputter,
 		wardenClient:  wardenClient,
 	}
 }
@@ -42,17 +46,18 @@ type nullSink struct{}
 func (nullSink) Write(data []byte) (int, error) { return len(data), nil }
 func (nullSink) Close() error                   { return nil }
 
-func (builder *builder) Build(build builds.Build) (<-chan builds.Build, <-chan bool, <-chan error) {
+func (builder *builder) Build(build builds.Build) (<-chan builds.Build, <-chan error, <-chan error, <-chan builds.Build) {
 	started := make(chan builds.Build, 1)
-	finished := make(chan bool, 1)
+	failed := make(chan error, 1)
 	errored := make(chan error, 1)
+	finished := make(chan builds.Build, 1)
 
-	go builder.build(build, started, finished, errored)
+	go builder.build(build, started, failed, errored, finished)
 
-	return started, finished, errored
+	return started, failed, errored, finished
 }
 
-func (builder *builder) build(build builds.Build, started chan<- builds.Build, finished chan<- bool, errored chan<- error) {
+func (builder *builder) build(build builds.Build, started chan<- builds.Build, failed chan<- error, errored chan<- error, finished chan<- builds.Build) {
 	logs, err := builder.logsFor(build.LogsURL)
 	if err != nil {
 		errored <- err
@@ -105,7 +110,59 @@ func (builder *builder) build(build builds.Build, started chan<- builds.Build, f
 		return
 	}
 
-	finished <- succeeded
+	if !succeeded {
+		failed <- errors.New("nonzero exit status") // TODO
+		return
+	}
+
+	if len(build.Outputs) > 0 {
+		errs := make(chan error, len(build.Outputs))
+		results := make(chan builds.Output, len(build.Outputs))
+
+		for _, output := range build.Outputs {
+			go func(output builds.Output) {
+				source, err := builder.performOutput(container, output)
+
+				errs <- err
+
+				if err == nil {
+					output.Source = source
+					results <- output
+				}
+			}(output)
+		}
+
+		var outputErr error
+		for i := 0; i < len(build.Outputs); i++ {
+			err := <-errs
+			if err != nil {
+				outputErr = err
+			}
+		}
+
+		if outputErr != nil {
+			errored <- outputErr
+			return
+		}
+
+		outputs := make([]builds.Output, len(build.Outputs))
+		for i := 0; i < len(build.Outputs); i++ {
+			outputs[i] = <-results
+		}
+
+		build.Outputs = outputs
+	}
+
+	finished <- build
+}
+
+func (builder *builder) performOutput(container warden.Container, output builds.Output) (builds.Source, error) {
+	streamOut, err := container.StreamOut("/tmp/build/src/")
+	if err != nil {
+		return nil, err
+	}
+
+	return builder.outputter.PerformOutput(output, streamOut)
 }
 
 func (builder *builder) logsFor(logURL string) (io.WriteCloser, error) {
@@ -152,6 +209,37 @@ func (builder *builder) streamInResources(
 		}
 
 		err = streamIn.Close()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (builder *builder) streamOutTo(
+	container warden.Container,
+	outputs []io.WriteCloser,
+) error {
+	streamOut, err := container.StreamOut("/tmp/build/src/")
+	if err != nil {
+		return err
+	}
+
+	writers := make([]io.Writer, len(outputs))
+	for i, writeCloser := range outputs {
+		writers[i] = writeCloser
+	}
+
+	writer := io.MultiWriter(writers...)
+
+	_, err = io.Copy(writer, streamOut)
+	if err != nil {
+		return err
+	}
+
+	for _, writeCloser := range outputs {
+		err := writeCloser.Close()
 		if err != nil {
 			return err
 		}

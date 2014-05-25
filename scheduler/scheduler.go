@@ -43,13 +43,15 @@ func (scheduler *scheduler) Schedule(build builds.Build) error {
 
 	log.Printf("building: %#v\n", build)
 
-	started, finished, errored := scheduler.builder.Build(build)
+	started, failed, errored, finished := scheduler.builder.Build(build)
 
 	go func(build builds.Build) {
 		defer scheduler.runningBuilds.Done()
 
 		select {
 		case build = <-started:
+			log.Println("started")
+
 			build.Status = builds.StatusStarted
 			scheduler.reportBuild(build)
 		case err := <-errored:
@@ -60,16 +62,16 @@ func (scheduler *scheduler) Schedule(build builds.Build) error {
 		}
 
 		select {
-		case ok := <-finished:
-			log.Println("completed:", ok)
+		case err := <-failed:
+			log.Println("failed:", err)
 
-			if ok {
-				build.Status = builds.StatusSucceeded
-				scheduler.reportBuild(build)
-			} else {
-				build.Status = builds.StatusFailed
-				scheduler.reportBuild(build)
-			}
+			build.Status = builds.StatusFailed
+			scheduler.reportBuild(build)
+		case build = <-finished:
+			log.Println("completed")
+
+			build.Status = builds.StatusSucceeded
+			scheduler.reportBuild(build)
 		case err := <-errored:
 			log.Println("errored:", err)
 

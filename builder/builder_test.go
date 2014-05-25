@@ -17,17 +17,20 @@ import (
 
 	"github.com/winston-ci/prole/api/builds"
 	. "github.com/winston-ci/prole/builder"
+	"github.com/winston-ci/prole/outputter/fakeoutputter"
 	"github.com/winston-ci/prole/sourcefetcher/fakesourcefetcher"
 )
 
 var _ = Describe("Builder", func() {
 	var sourceFetcher *fakesourcefetcher.Fetcher
+	var outputter *fakeoutputter.Outputter
 	var wardenClient *fake_warden_client.FakeClient
 	var builder Builder
 
 	var started <-chan builds.Build
-	var finished <-chan bool
+	var failed <-chan error
 	var errored <-chan error
+	var finished <-chan builds.Build
 	var build builds.Build
 
 	primedStream := func(payloads ...warden.ProcessStream) <-chan warden.ProcessStream {
@@ -44,8 +47,9 @@ var _ = Describe("Builder", func() {
 
 	BeforeEach(func() {
 		sourceFetcher = fakesourcefetcher.New()
+		outputter = fakeoutputter.New()
 		wardenClient = fake_warden_client.New()
-		builder = NewBuilder(sourceFetcher, wardenClient)
+		builder = NewBuilder(sourceFetcher, outputter, wardenClient)
 
 		build = builds.Build{
 			Config: builds.Config{
@@ -92,7 +96,7 @@ var _ = Describe("Builder", func() {
 	})
 
 	JustBeforeEach(func() {
-		started, finished, errored = builder.Build(build)
+		started, failed, errored, finished = builder.Build(build)
 	})
 
 	It("creates a container with the specified image", func() {
@@ -303,7 +307,103 @@ var _ = Describe("Builder", func() {
 		})
 
 		It("sends a successful result", func() {
-			Eventually(finished).Should(Receive(BeTrue()))
+			Eventually(finished).Should(Receive())
+		})
+
+		Context("and outputs are configured on the build", func() {
+			BeforeEach(func() {
+				build.Outputs = []builds.Output{
+					{
+						Type:   "git",
+						Params: builds.Params("123"),
+					},
+					{
+						Type:   "git",
+						Params: builds.Params("456"),
+					},
+				}
+			})
+
+			Context("and streaming out succeeds", func() {
+				BeforeEach(func() {
+					wardenClient.Connection.WhenStreamingOut = func(string, string) (io.Reader, error) {
+						return bytes.NewBufferString("streamed-out"), nil
+					}
+
+					sync := make(chan bool)
+
+					outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader) (builds.Source, error) {
+						if string(output.Params) == "123" {
+							<-sync
+							return builds.Source("output-1"), nil
+						} else {
+							close(sync)
+							return builds.Source("output-2"), nil
+						}
+					}
+				})
+
+				It("evaluates every output in parallel with the source and params", func() {
+					Eventually(finished).Should(Receive())
+
+					performedOutputs := outputter.PerformedOutputs()
+					Ω(performedOutputs).Should(HaveLen(2))
+
+					outputs := []builds.Output{}
+					for _, performed := range performedOutputs {
+						outputs = append(outputs, performed.Output)
+
+						Ω(string(performed.StreamedIn.Contents())).Should(Equal("streamed-out"))
+						Ω(performed.StreamedIn.Closed()).Should(BeTrue())
+					}
+
+					Ω(outputs).Should(ContainElement(build.Outputs[0]))
+					Ω(outputs).Should(ContainElement(build.Outputs[1]))
+				})
+
+				It("reports the output sources", func() {
+					var finishedBuild builds.Build
+					Eventually(finished).Should(Receive(&finishedBuild))
+
+					Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
+						Type:   "git",
+						Params: builds.Params("123"),
+						Source: builds.Source("output-1"),
+					}))
+
+					Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
+						Type:   "git",
+						Params: builds.Params("456"),
+						Source: builds.Source("output-2"),
+					}))
+				})
+
+				Context("and an output fails", func() {
+					disaster := errors.New("oh no!")
+
+					BeforeEach(func() {
+						outputter.PerformOutputError = disaster
+					})
+
+					It("sends the error result", func() {
+						Eventually(errored).Should(Receive(Equal(disaster)))
+					})
+				})
+			})
+
+			Context("and streaming out fails", func() {
+				disaster := errors.New("oh no!")
+
+				BeforeEach(func() {
+					wardenClient.Connection.WhenStreamingOut = func(string, string) (io.Reader, error) {
+						return nil, disaster
+					}
+				})
+
+				It("sends the error result", func() {
+					Eventually(errored).Should(Receive(Equal(disaster)))
+				})
+			})
 		})
 	})
 
@@ -319,7 +419,7 @@ var _ = Describe("Builder", func() {
 		})
 
 		It("sends a failed result", func() {
-			Eventually(finished).Should(Receive(BeFalse()))
+			Eventually(failed).Should(Receive())
 		})
 	})
 

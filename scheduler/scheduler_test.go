@@ -105,7 +105,7 @@ var _ = Describe("Scheduler", func() {
 					var gotRequest <-chan struct{}
 
 					BeforeEach(func() {
-						builder.BuildResult = true
+						builder.BuildResult = startedBuild
 
 						succeededBuild := startedBuild
 						succeededBuild.Status = builds.StatusSucceeded
@@ -125,7 +125,7 @@ var _ = Describe("Scheduler", func() {
 					var gotRequest <-chan struct{}
 
 					BeforeEach(func() {
-						builder.BuildResult = false
+						builder.BuildFailure = errors.New("exit status 1")
 
 						failedBuild := startedBuild
 						failedBuild.Status = builds.StatusFailed

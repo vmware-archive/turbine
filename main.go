@@ -14,6 +14,7 @@ import (
 	"github.com/winston-ci/prole/builder"
 	"github.com/winston-ci/prole/checker"
 	"github.com/winston-ci/prole/config"
+	"github.com/winston-ci/prole/outputter"
 	"github.com/winston-ci/prole/scheduler"
 	"github.com/winston-ci/prole/sourcefetcher"
 )
@@ -67,9 +68,10 @@ func main() {
 	}
 
 	sourceFetcher := sourcefetcher.NewSourceFetcher(resourceTypesConfig, wardenClient)
-	checker := checker.NewChecker(resourceTypesConfig, wardenClient)
+	outputter := outputter.NewOutputter(resourceTypesConfig, wardenClient)
+	builder := builder.NewBuilder(sourceFetcher, outputter, wardenClient)
 
-	builder := builder.NewBuilder(sourceFetcher, wardenClient)
+	checker := checker.NewChecker(resourceTypesConfig, wardenClient)
 
 	handler, err := api.New(scheduler.NewScheduler(builder), checker)
 	if err != nil {
