@@ -1,4 +1,4 @@
-= Room 101 Agent
+= Prole
 
 image:https://travis-ci.org/winston-ci/prole.svg?branch=master["Build Status", link="https://travis-ci.org/winston-ci/prole"]
 image:https://coveralls.io/repos/winston-ci/prole/badge.png["Coverage Status", link="https://coveralls.io/r/winston-ci/prole"]
