@@ -25,8 +25,10 @@ type Outputter interface {
 }
 
 type RunningBuild struct {
-	Build     builds.Build
-	Container warden.Container
+	Build builds.Build
+
+	ContainerHandle string
+	Container       warden.Container
 
 	ProcessID     uint32
 	ProcessStream <-chan warden.ProcessStream
@@ -35,8 +37,10 @@ type RunningBuild struct {
 }
 
 type SucceededBuild struct {
-	Build     builds.Build
-	Container warden.Container
+	Build builds.Build
+
+	ContainerHandle string
+	Container       warden.Container
 }
 
 type builder struct {
@@ -138,8 +142,10 @@ func (builder *builder) start(build builds.Build, started chan<- RunningBuild, e
 	}
 
 	started <- RunningBuild{
-		Build:     build,
-		Container: container,
+		Build: build,
+
+		ContainerHandle: container.Handle(),
+		Container:       container,
 
 		ProcessID:     pid,
 		ProcessStream: stream,
@@ -149,6 +155,19 @@ func (builder *builder) start(build builds.Build, started chan<- RunningBuild, e
 }
 
 func (builder *builder) attach(running RunningBuild, succeeded chan<- SucceededBuild, failed chan<- error, errored chan<- error) {
+	var container warden.Container
+	if running.Container != nil {
+		container = running.Container
+	} else {
+		var err error
+
+		container, err = builder.wardenClient.Lookup(running.ContainerHandle)
+		if err != nil {
+			errored <- err
+			return
+		}
+	}
+
 	var logs io.WriteCloser
 
 	if running.LogStream != nil {
@@ -172,7 +191,7 @@ func (builder *builder) attach(running RunningBuild, succeeded chan<- SucceededB
 	} else {
 		var err error
 
-		stream, err = running.Container.Attach(running.ProcessID)
+		stream, err = container.Attach(running.ProcessID)
 		if err != nil {
 			errored <- err
 			return
@@ -192,7 +211,7 @@ func (builder *builder) attach(running RunningBuild, succeeded chan<- SucceededB
 
 	succeeded <- SucceededBuild{
 		Build:     running.Build,
-		Container: running.Container,
+		Container: container,
 	}
 }
 

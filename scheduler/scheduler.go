@@ -85,6 +85,9 @@ func (scheduler *scheduler) Start(build builds.Build) {
 }
 
 func (scheduler *scheduler) Attach(running builder.RunningBuild) {
+	scheduler.inFlight.Add(1) // in addition to .Start's
+	defer scheduler.inFlight.Done()
+
 	runningRef := &running
 
 	scheduler.addRunning(runningRef)

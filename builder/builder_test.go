@@ -181,12 +181,23 @@ var _ = Describe("Builder", func() {
 					}
 				})
 
-				It("notifies that the build is running started, with updated sources and config", func() {
+				It("notifies that the build is started, with updated sources and config", func() {
 					var runningBuild RunningBuild
 					Eventually(started).Should(Receive(&runningBuild))
 
 					Ω(runningBuild.Build.Inputs[0].Source).Should(Equal(builds.Source("some-source-1")))
 					Ω(runningBuild.Build.Inputs[1].Source).Should(Equal(builds.Source("some-source-2")))
+				})
+
+				It("returns the container, container handle, process ID, process stream, and logs", func() {
+					var runningBuild RunningBuild
+					Eventually(started).Should(Receive(&runningBuild))
+
+					Ω(runningBuild.Container).ShouldNot(BeNil())
+					Ω(runningBuild.ContainerHandle).Should(Equal("some-handle"))
+					Ω(runningBuild.ProcessID).Should(Equal(uint32(42)))
+					Ω(runningBuild.ProcessStream).ShouldNot(BeNil())
+					Ω(runningBuild.LogStream).ShouldNot(BeNil())
 				})
 			})
 
@@ -365,11 +376,58 @@ var _ = Describe("Builder", func() {
 			wardenClient.Connection.WhenCreating = nil
 
 			runningBuild = RunningBuild{
-				Build:     build,
-				Container: container,
+				Build: build,
+
+				ContainerHandle: container.Handle(),
+				Container:       container,
 
 				ProcessID: 42,
 			}
+		})
+
+		Context("when the build's container and process stream are not present", func() {
+			BeforeEach(func() {
+				runningBuild.Container = nil
+
+				wardenClient.Connection.WhenAttaching = func(handle string, processID uint32) (<-chan warden.ProcessStream, error) {
+					defer GinkgoRecover()
+
+					Ω(handle).Should(Equal("the-attached-container"))
+					Ω(processID).Should(Equal(uint32(42)))
+
+					return exitedStream(0), nil
+				}
+			})
+
+			Context("and the container can still be found", func() {
+				var lookedUp chan struct{}
+
+				BeforeEach(func() {
+					lookedUp = make(chan struct{})
+
+					wardenClient.Connection.WhenListing = func(warden.Properties) ([]string, error) {
+						close(lookedUp)
+						return []string{runningBuild.ContainerHandle}, nil
+					}
+				})
+
+				It("looks it up via warden and uses it for attaching", func() {
+					Eventually(lookedUp).Should(BeClosed())
+					Eventually(succeeded).Should(Receive())
+				})
+			})
+
+			Context("and the lookup fails", func() {
+				BeforeEach(func() {
+					wardenClient.Connection.WhenListing = func(warden.Properties) ([]string, error) {
+						return []string{}, nil
+					}
+				})
+
+				It("sends an error result", func() {
+					Eventually(errored).Should(Receive())
+				})
+			})
 		})
 
 		Context("when the build's process stream is not present", func() {

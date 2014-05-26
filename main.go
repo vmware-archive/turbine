@@ -19,6 +19,7 @@ import (
 	"github.com/winston-ci/prole/config"
 	"github.com/winston-ci/prole/outputter"
 	"github.com/winston-ci/prole/scheduler"
+	"github.com/winston-ci/prole/snapshotter"
 	"github.com/winston-ci/prole/sourcefetcher"
 )
 
@@ -44,6 +45,12 @@ var resourceTypes = flag.String(
 	"resourceTypes",
 	`{"git":"winston/git-resource","raw":"winston/raw-resource"}`,
 	"map of resource type to its docker image",
+)
+
+var snapshotPath = flag.String(
+	"snapshotPath",
+	"/tmp/prole.json",
+	"path to file to store/load snapshots from",
 )
 
 func main() {
@@ -82,7 +89,8 @@ func main() {
 	}
 
 	group := grouper.EnvokeGroup(grouper.RunGroup{
-		"api": http_server.New(*listenAddr, handler),
+		"api":         http_server.New(*listenAddr, handler),
+		"snapshotter": snapshotter.NewSnapshotter(*snapshotPath, scheduler),
 	})
 
 	running := ifrit.Envoke(sigmon.New(group))
