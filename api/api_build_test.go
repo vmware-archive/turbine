@@ -3,7 +3,6 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 
@@ -86,16 +85,6 @@ var _ = Describe("API", func() {
 
 		It("schedules the build", func() {
 			Ω(scheduler.Scheduled()).Should(ContainElement(build))
-		})
-
-		Context("when scheduling fails", func() {
-			BeforeEach(func() {
-				scheduler.ScheduleError = errors.New("oh no!")
-			})
-
-			It("returns 503", func() {
-				Ω(response.StatusCode).Should(Equal(http.StatusServiceUnavailable))
-			})
 		})
 
 		Context("when the callback url is malformed", func() {

@@ -4,11 +4,14 @@ import (
 	"sync"
 
 	"github.com/winston-ci/prole/api/builds"
+	"github.com/winston-ci/prole/builder"
 )
 
 type FakeScheduler struct {
-	scheduled     []builds.Build
-	ScheduleError error
+	scheduled []builds.Build
+	attached  []builder.RunningBuild
+
+	DrainResult []builder.RunningBuild
 
 	sync.RWMutex
 }
@@ -17,18 +20,20 @@ func New() *FakeScheduler {
 	return &FakeScheduler{}
 }
 
-func (scheduler *FakeScheduler) Schedule(build builds.Build) error {
-	if scheduler.ScheduleError != nil {
-		return scheduler.ScheduleError
-	}
-
+func (scheduler *FakeScheduler) Start(build builds.Build) {
 	scheduler.Lock()
-
 	scheduler.scheduled = append(scheduler.scheduled, build)
-
 	scheduler.Unlock()
+}
 
-	return nil
+func (scheduler *FakeScheduler) Attach(running builder.RunningBuild) {
+	scheduler.Lock()
+	scheduler.attached = append(scheduler.attached, running)
+	scheduler.Unlock()
+}
+
+func (scheduler *FakeScheduler) Drain() []builder.RunningBuild {
+	return scheduler.DrainResult
 }
 
 func (scheduler *FakeScheduler) Scheduled() []builds.Build {
@@ -40,4 +45,15 @@ func (scheduler *FakeScheduler) Scheduled() []builds.Build {
 	scheduler.RUnlock()
 
 	return scheduled
+}
+
+func (scheduler *FakeScheduler) Attached() []builder.RunningBuild {
+	scheduler.RLock()
+
+	attached := make([]builder.RunningBuild, len(scheduler.attached))
+	copy(attached, scheduler.attached)
+
+	scheduler.RUnlock()
+
+	return attached
 }

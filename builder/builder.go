@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"errors"
 	"fmt"
 	"io"
 
@@ -12,8 +11,9 @@ import (
 )
 
 type Builder interface {
-	Build(builds.Build) (started <-chan RunningBuild, errored <-chan error)
-	Attach(RunningBuild) (finished <-chan builds.Build, failed <-chan error, errored <-chan error)
+	Start(builds.Build) (started <-chan RunningBuild, errored <-chan error)
+	Attach(RunningBuild) (finished <-chan SucceededBuild, failed <-chan error, errored <-chan error)
+	Complete(SucceededBuild) (finished <-chan builds.Build, errored <-chan error)
 }
 
 type SourceFetcher interface {
@@ -32,6 +32,11 @@ type RunningBuild struct {
 	ProcessStream <-chan warden.ProcessStream
 
 	LogStream io.WriteCloser
+}
+
+type SucceededBuild struct {
+	Build     builds.Build
+	Container warden.Container
 }
 
 type builder struct {
@@ -57,16 +62,35 @@ type nullSink struct{}
 func (nullSink) Write(data []byte) (int, error) { return len(data), nil }
 func (nullSink) Close() error                   { return nil }
 
-func (builder *builder) Build(build builds.Build) (<-chan RunningBuild, <-chan error) {
+func (builder *builder) Start(build builds.Build) (<-chan RunningBuild, <-chan error) {
 	started := make(chan RunningBuild, 1)
 	errored := make(chan error, 1)
 
-	go builder.build(build, started, errored)
+	go builder.start(build, started, errored)
 
 	return started, errored
 }
 
-func (builder *builder) build(build builds.Build, started chan<- RunningBuild, errored chan<- error) {
+func (builder *builder) Attach(running RunningBuild) (<-chan SucceededBuild, <-chan error, <-chan error) {
+	succeeded := make(chan SucceededBuild, 1)
+	failed := make(chan error, 1)
+	errored := make(chan error, 1)
+
+	go builder.attach(running, succeeded, failed, errored)
+
+	return succeeded, failed, errored
+}
+
+func (builder *builder) Complete(succeeded SucceededBuild) (<-chan builds.Build, <-chan error) {
+	finished := make(chan builds.Build, 1)
+	errored := make(chan error, 1)
+
+	go builder.complete(succeeded, finished, errored)
+
+	return finished, errored
+}
+
+func (builder *builder) start(build builds.Build, started chan<- RunningBuild, errored chan<- error) {
 	logs, err := builder.logsFor(build.LogsURL)
 	if err != nil {
 		errored <- err
@@ -124,17 +148,7 @@ func (builder *builder) build(build builds.Build, started chan<- RunningBuild, e
 	}
 }
 
-func (builder *builder) Attach(running RunningBuild) (<-chan builds.Build, <-chan error, <-chan error) {
-	failed := make(chan error, 1)
-	errored := make(chan error, 1)
-	finished := make(chan builds.Build, 1)
-
-	go builder.attach(running, finished, failed, errored)
-
-	return finished, failed, errored
-}
-
-func (builder *builder) attach(running RunningBuild, finished chan<- builds.Build, failed chan<- error, errored chan<- error) {
+func (builder *builder) attach(running RunningBuild, succeeded chan<- SucceededBuild, failed chan<- error, errored chan<- error) {
 	var logs io.WriteCloser
 
 	if running.LogStream != nil {
@@ -165,26 +179,33 @@ func (builder *builder) attach(running RunningBuild, finished chan<- builds.Buil
 		}
 	}
 
-	succeeded, err := builder.waitForRunToEnd(stream, logs)
+	status, err := builder.waitForRunToEnd(stream, logs)
 	if err != nil {
 		errored <- err
 		return
 	}
 
-	if !succeeded {
-		failed <- errors.New("nonzero exit status") // TODO
+	if status != 0 {
+		failed <- fmt.Errorf("exit status %d", status)
 		return
 	}
 
-	outputs, err := builder.performOutputs(running.Container, running.Build)
+	succeeded <- SucceededBuild{
+		Build:     running.Build,
+		Container: running.Container,
+	}
+}
+
+func (builder *builder) complete(succeeded SucceededBuild, finished chan<- builds.Build, errored chan<- error) {
+	outputs, err := builder.performOutputs(succeeded.Container, succeeded.Build)
 	if err != nil {
 		errored <- err
 		return
 	}
 
-	running.Build.Outputs = outputs
+	succeeded.Build.Outputs = outputs
 
-	finished <- running.Build
+	finished <- succeeded.Build
 }
 
 func (builder *builder) logsFor(logURL string) (io.WriteCloser, error) {
@@ -266,16 +287,16 @@ func (builder *builder) runBuild(
 func (builder *builder) waitForRunToEnd(
 	stream <-chan warden.ProcessStream,
 	logs io.Writer,
-) (bool, error) {
+) (uint32, error) {
 	for chunk := range stream {
 		if chunk.ExitStatus != nil {
-			return *chunk.ExitStatus == 0, nil
+			return *chunk.ExitStatus, nil
 		}
 
 		logs.Write(chunk.Data)
 	}
 
-	return false, fmt.Errorf("output stream interrupted")
+	return 0, fmt.Errorf("output stream interrupted")
 }
 
 func (builder *builder) performOutputs(container warden.Container, build builds.Build) ([]builds.Output, error) {

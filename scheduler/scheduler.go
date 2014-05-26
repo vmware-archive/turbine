@@ -15,19 +15,27 @@ import (
 )
 
 type Scheduler interface {
-	Schedule(builds.Build) error
+	Start(builds.Build)
+	Attach(builder.RunningBuild)
+
+	Drain() []builder.RunningBuild
 }
 
 type scheduler struct {
-	builder       builder.Builder
-	runningBuilds *sync.WaitGroup
+	builder builder.Builder
 
 	httpClient *http.Client
+
+	inFlight *sync.WaitGroup
+	draining chan struct{}
+	running  map[*builder.RunningBuild]bool
+
+	mutex *sync.RWMutex
 }
 
-func NewScheduler(builder builder.Builder) Scheduler {
+func NewScheduler(b builder.Builder) Scheduler {
 	return &scheduler{
-		builder: builder,
+		builder: b,
 
 		httpClient: &http.Client{
 			Transport: &http.Transport{
@@ -35,42 +43,53 @@ func NewScheduler(builder builder.Builder) Scheduler {
 			},
 		},
 
-		runningBuilds: new(sync.WaitGroup),
+		inFlight: new(sync.WaitGroup),
+		draining: make(chan struct{}),
+		running:  make(map[*builder.RunningBuild]bool),
+
+		mutex: new(sync.RWMutex),
 	}
 }
 
-func (scheduler *scheduler) Schedule(build builds.Build) error {
-	scheduler.runningBuilds.Add(1)
+func (scheduler *scheduler) Drain() []builder.RunningBuild {
+	close(scheduler.draining)
+	scheduler.inFlight.Wait()
+	return scheduler.runningBuilds()
+}
+
+func (scheduler *scheduler) Start(build builds.Build) {
+	scheduler.inFlight.Add(1)
 
 	log.Printf("building: %#v\n", build)
 
-	started, errored := scheduler.builder.Build(build)
+	started, errored := scheduler.builder.Start(build)
 
-	go scheduler.runBuild(build, started, errored)
+	go func() {
+		select {
+		case running := <-started:
+			log.Println("started")
 
-	return nil
+			running.Build.Status = builds.StatusStarted
+			scheduler.reportBuild(running.Build)
+
+			scheduler.Attach(running)
+		case err := <-errored:
+			log.Println("errored while starting:", err)
+
+			build.Status = builds.StatusErrored
+			scheduler.reportBuild(build)
+		}
+
+		scheduler.inFlight.Done()
+	}()
 }
 
-func (scheduler *scheduler) runBuild(originalBuild builds.Build, started <-chan builder.RunningBuild, errored <-chan error) {
-	defer scheduler.runningBuilds.Done()
+func (scheduler *scheduler) Attach(running builder.RunningBuild) {
+	runningRef := &running
 
-	var running builder.RunningBuild
+	scheduler.addRunning(runningRef)
 
-	select {
-	case running = <-started:
-		log.Println("started")
-
-		running.Build.Status = builds.StatusStarted
-		scheduler.reportBuild(running.Build)
-	case err := <-errored:
-		log.Println("errored while starting:", err)
-
-		originalBuild.Status = builds.StatusErrored
-		scheduler.reportBuild(originalBuild)
-		return
-	}
-
-	finished, failed, errored := scheduler.builder.Attach(running)
+	succeeded, failed, errored := scheduler.builder.Attach(running)
 
 	select {
 	case err := <-failed:
@@ -78,17 +97,69 @@ func (scheduler *scheduler) runBuild(originalBuild builds.Build, started <-chan 
 
 		running.Build.Status = builds.StatusFailed
 		scheduler.reportBuild(running.Build)
-	case finishedBuild := <-finished:
-		log.Println("completed")
 
-		finishedBuild.Status = builds.StatusSucceeded
-		scheduler.reportBuild(finishedBuild)
+	case succeededBuild := <-succeeded:
+		log.Println("succeeded")
+
+		scheduler.complete(succeededBuild)
+
 	case err := <-errored:
 		log.Println("errored:", err)
 
 		running.Build.Status = builds.StatusErrored
 		scheduler.reportBuild(running.Build)
+
+	case <-scheduler.draining:
+		return
 	}
+
+	scheduler.removeRunning(runningRef)
+}
+
+func (scheduler *scheduler) complete(succeeded builder.SucceededBuild) {
+	finished, errored := scheduler.builder.Complete(succeeded)
+
+	select {
+	case finishedBuild := <-finished:
+		log.Println("completed")
+
+		finishedBuild.Status = builds.StatusSucceeded
+		scheduler.reportBuild(finishedBuild)
+
+	case err := <-errored:
+		log.Println("failed to complete:", err)
+
+		succeeded.Build.Status = builds.StatusErrored
+		scheduler.reportBuild(succeeded.Build)
+	}
+}
+
+func (scheduler *scheduler) runningBuilds() []builder.RunningBuild {
+	scheduler.mutex.RLock()
+
+	running := []builder.RunningBuild{}
+	for build, _ := range scheduler.running {
+		running = append(running, *build)
+	}
+
+	scheduler.mutex.RUnlock()
+
+	return running
+}
+
+func (scheduler *scheduler) addRunning(running *builder.RunningBuild) {
+	scheduler.mutex.Lock()
+	scheduler.running[running] = true
+	scheduler.mutex.Unlock()
+}
+
+func (scheduler *scheduler) removeRunning(running *builder.RunningBuild) {
+	scheduler.mutex.Lock()
+	delete(scheduler.running, running)
+	scheduler.mutex.Unlock()
+}
+
+func (scheduler *scheduler) runBuild(originalBuild builds.Build, started <-chan builder.RunningBuild, errored <-chan error) {
 }
 
 func (scheduler *scheduler) reportBuild(build builds.Build) {

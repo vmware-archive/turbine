@@ -40,11 +40,7 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	log.Println("scheduling", build.Guid)
 
-	err = handler.scheduler.Schedule(build)
-	if err != nil {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		return
-	}
+	handler.scheduler.Start(build)
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(build)

@@ -53,6 +53,10 @@
 			"Rev": "50bea9a608004800126b3fddab0c3608d87c0ca9"
 		},
 		{
+			"ImportPath": "github.com/tedsuo/ifrit",
+			"Rev": "f02dc8a87f9898bcaf8aae82d92954a6d5eb7717"
+		},
+		{
 			"ImportPath": "github.com/tedsuo/router",
 			"Rev": "e148496de27fab9f10ef07f3be00471fa59f58b9"
 		}

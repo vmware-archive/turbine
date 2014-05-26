@@ -8,14 +8,21 @@ import (
 )
 
 type Builder struct {
+	WhenStarting func(builds.Build) (<-chan builder.RunningBuild, <-chan error)
 	built        []builds.Build
 	StartedBuild *builds.Build
 	StartError   error
 
-	attached      []builder.RunningBuild
-	FinishedBuild builds.Build
-	BuildFailure  error
-	BuildError    error
+	WhenAttaching  func(builder.RunningBuild) (<-chan builder.SucceededBuild, <-chan error, <-chan error)
+	attached       []builder.RunningBuild
+	SucceededBuild *builds.Build
+	BuildFailure   error
+	BuildError     error
+
+	WhenCompleting func(builder.SucceededBuild) (<-chan builds.Build, <-chan error)
+	completed      []builder.SucceededBuild
+	FinishedBuild  builds.Build
+	CompleteError  error
 
 	sync.RWMutex
 }
@@ -24,7 +31,11 @@ func New() *Builder {
 	return &Builder{}
 }
 
-func (fake *Builder) Build(build builds.Build) (<-chan builder.RunningBuild, <-chan error) {
+func (fake *Builder) Start(build builds.Build) (<-chan builder.RunningBuild, <-chan error) {
+	if fake.WhenStarting != nil {
+		return fake.WhenStarting(build)
+	}
+
 	started := make(chan builder.RunningBuild)
 	errored := make(chan error)
 
@@ -45,8 +56,12 @@ func (fake *Builder) Build(build builds.Build) (<-chan builder.RunningBuild, <-c
 	return started, errored
 }
 
-func (fake *Builder) Attach(runningBuild builder.RunningBuild) (<-chan builds.Build, <-chan error, <-chan error) {
-	finished := make(chan builds.Build)
+func (fake *Builder) Attach(runningBuild builder.RunningBuild) (<-chan builder.SucceededBuild, <-chan error, <-chan error) {
+	if fake.WhenAttaching != nil {
+		return fake.WhenAttaching(runningBuild)
+	}
+
+	succeeded := make(chan builder.SucceededBuild)
 	failed := make(chan error)
 	errored := make(chan error)
 
@@ -59,12 +74,37 @@ func (fake *Builder) Attach(runningBuild builder.RunningBuild) (<-chan builds.Bu
 			errored <- fake.BuildError
 		} else if fake.BuildFailure != nil {
 			failed <- fake.BuildFailure
+		} else if fake.SucceededBuild != nil {
+			succeeded <- builder.SucceededBuild{Build: *fake.SucceededBuild}
 		} else {
-			finished <- runningBuild.Build
+			succeeded <- builder.SucceededBuild{Build: runningBuild.Build}
 		}
 	}()
 
-	return finished, failed, errored
+	return succeeded, failed, errored
+}
+
+func (fake *Builder) Complete(succeededBuild builder.SucceededBuild) (<-chan builds.Build, <-chan error) {
+	if fake.WhenCompleting != nil {
+		return fake.WhenCompleting(succeededBuild)
+	}
+
+	finished := make(chan builds.Build)
+	errored := make(chan error)
+
+	fake.Lock()
+	fake.completed = append(fake.completed, succeededBuild)
+	fake.Unlock()
+
+	go func() {
+		if fake.CompleteError != nil {
+			errored <- fake.CompleteError
+		} else {
+			finished <- fake.FinishedBuild
+		}
+	}()
+
+	return finished, errored
 }
 
 func (fake *Builder) Built() []builds.Build {
@@ -87,4 +127,15 @@ func (fake *Builder) Attached() []builder.RunningBuild {
 	fake.RUnlock()
 
 	return attached
+}
+
+func (fake *Builder) Completed() []builder.SucceededBuild {
+	fake.RLock()
+
+	completed := make([]builder.SucceededBuild, len(fake.completed))
+	copy(completed, fake.completed)
+
+	fake.RUnlock()
+
+	return completed
 }
