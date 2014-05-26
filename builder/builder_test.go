@@ -165,13 +165,18 @@ var _ = Describe("Builder", func() {
 				streamedIn := wardenClient.Connection.StreamedIn("some-handle")
 				Ω(streamedIn).Should(HaveLen(2))
 
-				Ω(streamedIn[0].Destination).Should(Equal("/tmp/build/src/some/source/path"))
-				Ω(string(streamedIn[0].WriteBuffer.Contents())).Should(Equal("some-data-1"))
-				Ω(streamedIn[0].WriteBuffer.Closed()).Should(BeTrue())
-
-				Ω(streamedIn[1].Destination).Should(Equal("/tmp/build/src/another/source/path"))
-				Ω(string(streamedIn[1].WriteBuffer.Contents())).Should(Equal("some-data-2"))
-				Ω(streamedIn[1].WriteBuffer.Closed()).Should(BeTrue())
+				for _, streamed := range streamedIn {
+					switch streamed.Destination {
+					case "/tmp/build/src/some/source/path":
+						Ω(string(streamed.WriteBuffer.Contents())).Should(Equal("some-data-1"))
+						Ω(streamed.WriteBuffer.Closed()).Should(BeTrue())
+					case "/tmp/build/src/another/source/path":
+						Ω(string(streamed.WriteBuffer.Contents())).Should(Equal("some-data-2"))
+						Ω(streamed.WriteBuffer.Closed()).Should(BeTrue())
+					default:
+						Fail("unknown stream destination: " + streamed.Destination)
+					}
+				}
 			})
 
 			Context("and running the process succeeds", func() {
