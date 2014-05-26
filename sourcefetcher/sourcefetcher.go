@@ -3,7 +3,6 @@ package sourcefetcher
 import (
 	"archive/tar"
 	"errors"
-	"fmt"
 	"io"
 	"path"
 
@@ -12,24 +11,10 @@ import (
 
 	"github.com/winston-ci/prole/api/builds"
 	"github.com/winston-ci/prole/config"
+	"github.com/winston-ci/prole/scriptrunner"
 )
 
 var ErrUnknownSourceType = errors.New("unknown source type")
-
-type ErrResourceFetchFailed struct {
-	Stdout     []byte
-	Stderr     []byte
-	ExitStatus uint32
-}
-
-func (err ErrResourceFetchFailed) Error() string {
-	return fmt.Sprintf(
-		"resource fetching failed: exit status %d\n\nstdout:\n\n%s\n\nstderr:%s",
-		err.ExitStatus,
-		err.Stdout,
-		err.Stderr,
-	)
-}
 
 type SourceFetcher struct {
 	resourceTypes config.ResourceTypes
@@ -61,19 +46,15 @@ func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.Config, builds.S
 		return buildConfig, nil, nil, err
 	}
 
-	err = fetcher.injectInputSource(container, input.Source)
-	if err != nil {
-		return buildConfig, nil, nil, err
-	}
+	var source builds.Source
 
-	_, stream, err := container.Run(warden.ProcessSpec{
-		Script: "/tmp/resource/in /tmp/resource-destination < /tmp/resource-artifacts/input.json",
-	})
-	if err != nil {
-		return buildConfig, nil, nil, err
-	}
-
-	source, err := fetcher.waitForRunToEnd(stream)
+	err = scriptrunner.Run(
+		container,
+		"/tmp/resource/in /tmp/resource-destination",
+		nil,
+		input.Source,
+		&source,
+	)
 	if err != nil {
 		return buildConfig, nil, nil, err
 	}
@@ -86,72 +67,6 @@ func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.Config, builds.S
 	outStream, err := container.StreamOut("/tmp/resource-destination/")
 
 	return buildConfig, source, outStream, err
-}
-
-func (fetcher *SourceFetcher) injectInputSource(
-	container warden.Container,
-	source builds.Source,
-) error {
-	streamIn, err := container.StreamIn("/tmp/resource-artifacts/")
-	if err != nil {
-		return err
-	}
-
-	tarWriter := tar.NewWriter(streamIn)
-
-	err = tarWriter.WriteHeader(&tar.Header{
-		Name: "./input.json",
-		Mode: 0644,
-		Size: int64(len(source)),
-	})
-	if err != nil {
-		return err
-	}
-
-	_, err = tarWriter.Write(source)
-	if err != nil {
-		return err
-	}
-
-	err = tarWriter.Close()
-	if err != nil {
-		return err
-	}
-
-	err = streamIn.Close()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (fetcher *SourceFetcher) waitForRunToEnd(stream <-chan warden.ProcessStream) (builds.Source, error) {
-	stdout := []byte{}
-	stderr := []byte{}
-
-	for chunk := range stream {
-		if chunk.ExitStatus != nil {
-			if *chunk.ExitStatus != 0 {
-				return nil, ErrResourceFetchFailed{
-					Stdout:     stdout,
-					Stderr:     stderr,
-					ExitStatus: *chunk.ExitStatus,
-				}
-			}
-
-			break
-		}
-
-		switch chunk.Source {
-		case warden.ProcessStreamSourceStdout:
-			stdout = append(stdout, chunk.Data...)
-		case warden.ProcessStreamSourceStderr:
-			stderr = append(stderr, chunk.Data...)
-		}
-	}
-
-	return builds.Source(stdout), nil
 }
 
 func (fetcher *SourceFetcher) extractConfig(container warden.Container, configPath string) (builds.Config, error) {

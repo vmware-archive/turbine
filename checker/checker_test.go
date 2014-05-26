@@ -50,7 +50,7 @@ var _ = Describe("Checker", func() {
 
 		input = builds.Input{
 			Type:   "some-resource",
-			Source: builds.Source("some-source"),
+			Source: builds.Source(`{"some":"source"}`),
 		}
 
 		checkStdout = "[]"
@@ -109,7 +109,7 @@ var _ = Describe("Checker", func() {
 
 			wardenClient.Connection.WhenStreamingIn = func(handle string, destination string) (io.WriteCloser, error) {
 				Ω(handle).Should(Equal("some-handle"))
-				Ω(destination).Should(Equal("/tmp/resource-artifacts/"))
+				Ω(destination).Should(Equal("/tmp/resource-artifacts"))
 				return buffer, nil
 			}
 
@@ -120,13 +120,13 @@ var _ = Describe("Checker", func() {
 
 			hdr, err := tarReader.Next()
 			Ω(err).ShouldNot(HaveOccurred())
-			Ω(hdr.Name).Should(Equal("./input.json"))
+			Ω(hdr.Name).Should(Equal("./stdin"))
 			Ω(hdr.Mode).Should(Equal(int64(0644)))
 
 			inputConfig, err := ioutil.ReadAll(tarReader)
 			Ω(err).ShouldNot(HaveOccurred())
 
-			Ω(string(inputConfig)).Should(Equal("some-source"))
+			Ω(string(inputConfig)).Should(Equal(`{"some":"source"}`))
 
 			_, err = tarReader.Next()
 			Ω(err).Should(Equal(io.EOF))
@@ -140,7 +140,7 @@ var _ = Describe("Checker", func() {
 
 			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
 				{
-					Script: "/tmp/resource/check < /tmp/resource-artifacts/input.json",
+					Script: "/tmp/resource/check < /tmp/resource-artifacts/stdin",
 				},
 			}))
 		})

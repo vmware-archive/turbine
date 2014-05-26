@@ -41,7 +41,7 @@ var _ = Describe("Outputter", func() {
 
 		output = builds.Output{
 			Type:   "some-resource",
-			Params: builds.Params("some-params"),
+			Params: builds.Params(`{"some":"params"}`),
 
 			SourcePath: "some-resource",
 		}
@@ -132,13 +132,13 @@ var _ = Describe("Outputter", func() {
 
 				hdr, err := tarReader.Next()
 				Ω(err).ShouldNot(HaveOccurred())
-				Ω(hdr.Name).Should(Equal("./output.json"))
+				Ω(hdr.Name).Should(Equal("./stdin"))
 				Ω(hdr.Mode).Should(Equal(int64(0644)))
 
 				inputConfig, err := ioutil.ReadAll(tarReader)
 				Ω(err).ShouldNot(HaveOccurred())
 
-				Ω(string(inputConfig)).Should(Equal("some-params"))
+				Ω(string(inputConfig)).Should(Equal(`{"some":"params"}`))
 
 				_, err = tarReader.Next()
 				Ω(err).Should(Equal(io.EOF))
@@ -176,18 +176,18 @@ var _ = Describe("Outputter", func() {
 
 			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
 				{
-					Script: "/tmp/resource/out /tmp/build/src/some-resource < /tmp/resource-artifacts/output.json",
+					Script: "/tmp/resource/out /tmp/build/src/some-resource < /tmp/resource-artifacts/stdin",
 				},
 			}))
 		})
 
 		Context("when /tmp/resource/out prints the source", func() {
 			BeforeEach(func() {
-				outStdout = "some-new-source"
+				outStdout = `{"some":"new-source"}`
 			})
 
 			It("returns the build source printed out by /tmp/resource/out", func() {
-				Ω(outputSource).Should(Equal(builds.Source("some-new-source")))
+				Ω(outputSource).Should(Equal(builds.Source(`{"some":"new-source"}`)))
 			})
 		})
 

@@ -43,7 +43,7 @@ var _ = Describe("SourceFetcher", func() {
 
 		input = builds.Input{
 			Type:   "some-resource",
-			Source: builds.Source("some-source"),
+			Source: builds.Source(`{"some":"source"}`),
 		}
 
 		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
@@ -116,7 +116,7 @@ var _ = Describe("SourceFetcher", func() {
 
 				wardenClient.Connection.WhenStreamingIn = func(handle string, destination string) (io.WriteCloser, error) {
 					Ω(handle).Should(Equal("some-handle"))
-					Ω(destination).Should(Equal("/tmp/resource-artifacts/"))
+					Ω(destination).Should(Equal("/tmp/resource-artifacts"))
 					return streamedIn, nil
 				}
 			})
@@ -128,13 +128,13 @@ var _ = Describe("SourceFetcher", func() {
 
 				hdr, err := tarReader.Next()
 				Ω(err).ShouldNot(HaveOccurred())
-				Ω(hdr.Name).Should(Equal("./input.json"))
+				Ω(hdr.Name).Should(Equal("./stdin"))
 				Ω(hdr.Mode).Should(Equal(int64(0644)))
 
 				inputConfig, err := ioutil.ReadAll(tarReader)
 				Ω(err).ShouldNot(HaveOccurred())
 
-				Ω(string(inputConfig)).Should(Equal("some-source"))
+				Ω(string(inputConfig)).Should(Equal(`{"some":"source"}`))
 
 				_, err = tarReader.Next()
 				Ω(err).Should(Equal(io.EOF))
@@ -148,18 +148,18 @@ var _ = Describe("SourceFetcher", func() {
 
 			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
 				{
-					Script: "/tmp/resource/in /tmp/resource-destination < /tmp/resource-artifacts/input.json",
+					Script: "/tmp/resource/in /tmp/resource-destination < /tmp/resource-artifacts/stdin",
 				},
 			}))
 		})
 
 		Context("when /tmp/resource/in prints the source", func() {
 			BeforeEach(func() {
-				inStdout = "some-new-source"
+				inStdout = `{"some":"new-source"}`
 			})
 
 			It("returns the build source printed out by /tmp/resource/in", func() {
-				Ω(fetchedSource).Should(Equal(builds.Source("some-new-source")))
+				Ω(fetchedSource).Should(Equal(builds.Source(`{"some":"new-source"}`)))
 			})
 		})
 
