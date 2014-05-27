@@ -10,7 +10,7 @@ import (
 
 type Outputter struct {
 	performedOutputs     []PerformSpec
-	WhenPerformingOutput func(builds.Output, io.Reader) (builds.Source, error)
+	WhenPerformingOutput func(builds.Output, io.Reader, io.Writer) (builds.Source, error)
 	PerformOutputError   error
 
 	sync.RWMutex
@@ -19,17 +19,18 @@ type Outputter struct {
 type PerformSpec struct {
 	Output     builds.Output
 	StreamedIn *gbytes.Buffer
+	Logs       io.Writer
 }
 
 func New() *Outputter {
 	return &Outputter{
-		WhenPerformingOutput: func(builds.Output, io.Reader) (builds.Source, error) {
+		WhenPerformingOutput: func(builds.Output, io.Reader, io.Writer) (builds.Source, error) {
 			return nil, nil
 		},
 	}
 }
 
-func (outputter *Outputter) PerformOutput(output builds.Output, streamIn io.Reader) (builds.Source, error) {
+func (outputter *Outputter) PerformOutput(output builds.Output, streamIn io.Reader, logs io.Writer) (builds.Source, error) {
 	if outputter.PerformOutputError != nil {
 		return nil, outputter.PerformOutputError
 	}
@@ -45,10 +46,11 @@ func (outputter *Outputter) PerformOutput(output builds.Output, streamIn io.Read
 	outputter.performedOutputs = append(outputter.performedOutputs, PerformSpec{
 		Output:     output,
 		StreamedIn: streamedIn,
+		Logs:       logs,
 	})
 	outputter.Unlock()
 
-	return outputter.WhenPerformingOutput(output, streamIn)
+	return outputter.WhenPerformingOutput(output, streamIn, logs)
 }
 
 func (outputter *Outputter) PerformedOutputs() []PerformSpec {

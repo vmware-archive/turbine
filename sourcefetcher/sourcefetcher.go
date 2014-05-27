@@ -31,7 +31,7 @@ func NewSourceFetcher(
 	}
 }
 
-func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.Config, builds.Source, io.Reader, error) {
+func (fetcher *SourceFetcher) Fetch(input builds.Input, logs io.Writer) (builds.Config, builds.Source, io.Reader, error) {
 	var buildConfig builds.Config
 
 	resourceType, found := fetcher.resourceTypes.Lookup(input.Type)
@@ -51,7 +51,7 @@ func (fetcher *SourceFetcher) Fetch(input builds.Input) (builds.Config, builds.S
 	err = scriptrunner.Run(
 		container,
 		"/tmp/resource/in /tmp/resource-destination",
-		nil,
+		logs,
 		input.Source,
 		&source,
 	)

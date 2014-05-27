@@ -25,6 +25,7 @@ var _ = Describe("Outputter", func() {
 		outputter     *Outputter
 
 		output builds.Output
+		logs   io.Writer
 
 		outStdout     string
 		outStderr     string
@@ -45,6 +46,8 @@ var _ = Describe("Outputter", func() {
 
 			SourcePath: "some-resource",
 		}
+
+		logs = nil
 
 		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
 			return "some-handle", nil
@@ -89,7 +92,7 @@ var _ = Describe("Outputter", func() {
 
 		outputter = NewOutputter(resourceTypes, wardenClient)
 
-		outputSource, outputError = outputter.PerformOutput(output, bytes.NewBufferString("the-source"))
+		outputSource, outputError = outputter.PerformOutput(output, bytes.NewBufferString("the-source"), logs)
 	})
 
 	Context("when the source's resource type is configured", func() {
@@ -191,6 +194,22 @@ var _ = Describe("Outputter", func() {
 			})
 		})
 
+		Context("when /out outputs to stderr", func() {
+			var logBuffer *gbytes.Buffer
+
+			BeforeEach(func() {
+				outStderr = "some stderr data"
+
+				logBuffer = gbytes.NewBuffer()
+				logs = logBuffer
+			})
+
+			It("emits it to the log sink", func() {
+				Ω(outputError).ShouldNot(HaveOccurred())
+
+				Ω(string(logBuffer.Contents())).Should(Equal("some stderr data"))
+			})
+		})
 		Context("when creating the container fails", func() {
 			disaster := errors.New("oh no!")
 

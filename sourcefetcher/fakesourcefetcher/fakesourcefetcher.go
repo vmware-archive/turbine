@@ -10,7 +10,7 @@ import (
 
 type Fetcher struct {
 	fetched      []builds.Input
-	WhenFetching func(builds.Input) (builds.Config, builds.Source, io.Reader, error)
+	WhenFetching func(builds.Input, io.Writer) (builds.Config, builds.Source, io.Reader, error)
 	FetchError   error
 
 	sync.RWMutex
@@ -20,7 +20,7 @@ func New() *Fetcher {
 	return &Fetcher{}
 }
 
-func (fetcher *Fetcher) Fetch(input builds.Input) (builds.Config, builds.Source, io.Reader, error) {
+func (fetcher *Fetcher) Fetch(input builds.Input, logs io.Writer) (builds.Config, builds.Source, io.Reader, error) {
 	if fetcher.FetchError != nil {
 		return builds.Config{}, nil, nil, fetcher.FetchError
 	}
@@ -30,7 +30,7 @@ func (fetcher *Fetcher) Fetch(input builds.Input) (builds.Config, builds.Source,
 	var result io.Reader
 
 	if fetcher.WhenFetching != nil {
-		config, source, stream, err := fetcher.WhenFetching(input)
+		config, source, stream, err := fetcher.WhenFetching(input, logs)
 		if err != nil {
 			return builds.Config{}, nil, nil, err
 		}

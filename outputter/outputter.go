@@ -30,7 +30,7 @@ func NewOutputter(
 	}
 }
 
-func (outputter *Outputter) PerformOutput(output builds.Output, sourceStream io.Reader) (builds.Source, error) {
+func (outputter *Outputter) PerformOutput(output builds.Output, sourceStream io.Reader, logs io.Writer) (builds.Source, error) {
 	resourceType, found := outputter.resourceTypes.Lookup(output.Type)
 	if !found {
 		return nil, ErrUnknownSourceType
@@ -53,7 +53,7 @@ func (outputter *Outputter) PerformOutput(output builds.Output, sourceStream io.
 	err = scriptrunner.Run(
 		container,
 		fmt.Sprintf("/tmp/resource/out %s", path.Join("/tmp/build/src", output.SourcePath)),
-		nil,
+		logs,
 		output.Params,
 		&source,
 	)

@@ -106,12 +106,11 @@ var _ = Describe("Builder", func() {
 		})
 
 		BeforeEach(func() {
-
 			wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
 				return "some-handle", nil
 			}
 
-			sourceFetcher.WhenFetching = func(builds.Input) (builds.Config, builds.Source, io.Reader, error) {
+			sourceFetcher.WhenFetching = func(builds.Input, io.Writer) (builds.Config, builds.Source, io.Reader, error) {
 				return builds.Config{}, nil, bytes.NewBufferString("some-data"), nil
 			}
 		})
@@ -132,7 +131,7 @@ var _ = Describe("Builder", func() {
 				sourceStream1 := bytes.NewBufferString("some-data-1")
 				sourceStream2 := bytes.NewBufferString("some-data-2")
 
-				sourceFetcher.WhenFetching = func(input builds.Input) (builds.Config, builds.Source, io.Reader, error) {
+				sourceFetcher.WhenFetching = func(input builds.Input, logs io.Writer) (builds.Config, builds.Source, io.Reader, error) {
 					if input.Name == "name1" {
 						return builds.Config{}, source1, sourceStream1, nil
 					}
@@ -276,6 +275,28 @@ var _ = Describe("Builder", func() {
 					Eventually(started).Should(Receive(&runningBuild))
 
 					runningBuild.LogStream.Close()
+				})
+
+				Context("and fetching sources emits logs", func() {
+					BeforeEach(func() {
+						sourceFetcher.WhenFetching = func(input builds.Input, logs io.Writer) (builds.Config, builds.Source, io.Reader, error) {
+							defer GinkgoRecover()
+
+							Ω(logs).ShouldNot(BeNil())
+							logs.Write([]byte("hello from source fetcher"))
+
+							return builds.Config{}, nil, bytes.NewBufferString("some-data"), nil
+						}
+					})
+
+					It("emits them to the sink", func() {
+						Eventually(logBuffer).Should(gbytes.Say("hello from source fetcher"))
+
+						var runningBuild RunningBuild
+						Eventually(started).Should(Receive(&runningBuild))
+
+						runningBuild.LogStream.Close()
+					})
 				})
 			})
 
@@ -636,7 +657,7 @@ var _ = Describe("Builder", func() {
 
 					sync := make(chan bool)
 
-					outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader) (builds.Source, error) {
+					outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader, logs io.Writer) (builds.Source, error) {
 						if string(output.Params) == "123" {
 							<-sync
 							return builds.Source("output-1"), nil
@@ -716,6 +737,55 @@ var _ = Describe("Builder", func() {
 
 				It("sends the error result", func() {
 					Eventually(errored).Should(Receive(Equal(disaster)))
+				})
+			})
+
+			Context("when the outputs emit logs", func() {
+				var logBuffer *gbytes.Buffer
+
+				BeforeEach(func() {
+					logBuffer = gbytes.NewBuffer()
+
+					outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader, logs io.Writer) (builds.Source, error) {
+						defer GinkgoRecover()
+
+						Ω(logs).ShouldNot(BeNil())
+						logs.Write([]byte("hello from outputter"))
+
+						return builds.Source("output-1"), nil
+					}
+				})
+
+				Context("and the running build already has a log stream", func() {
+					BeforeEach(func() {
+						succeededBuild.LogStream = logBuffer
+					})
+
+					It("emits the build's output to it", func() {
+						Eventually(logBuffer).Should(gbytes.Say("hello from outputter"))
+					})
+				})
+
+				Context("and a logs url is configured", func() {
+					var websocketSink *ghttp.Server
+
+					BeforeEach(func() {
+						succeededBuild.Build.LogsURL, websocketSink = websocketListener(logBuffer)
+					})
+
+					It("emits the build's output via websockets", func() {
+						Eventually(logBuffer).Should(gbytes.Say("hello from outputter"))
+					})
+
+					Context("but the sink is not listening", func() {
+						BeforeEach(func() {
+							websocketSink.Close()
+						})
+
+						It("sends the error result", func() {
+							Eventually(errored).Should(Receive())
+						})
+					})
 				})
 			})
 		})

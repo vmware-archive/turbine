@@ -25,6 +25,7 @@ var _ = Describe("SourceFetcher", func() {
 		sourceFetcher *SourceFetcher
 
 		input builds.Input
+		logs  io.Writer
 
 		inStdout     string
 		inStderr     string
@@ -45,6 +46,8 @@ var _ = Describe("SourceFetcher", func() {
 			Type:   "some-resource",
 			Source: builds.Source(`{"some":"source"}`),
 		}
+
+		logs = nil
 
 		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
 			return "some-handle", nil
@@ -89,7 +92,7 @@ var _ = Describe("SourceFetcher", func() {
 
 		sourceFetcher = NewSourceFetcher(resourceTypes, wardenClient)
 
-		extractedConfig, fetchedSource, fetchedStream, fetchError = sourceFetcher.Fetch(input)
+		extractedConfig, fetchedSource, fetchedStream, fetchError = sourceFetcher.Fetch(input, logs)
 	})
 
 	Context("when the source's resource type is configured", func() {
@@ -160,6 +163,23 @@ var _ = Describe("SourceFetcher", func() {
 
 			It("returns the build source printed out by /tmp/resource/in", func() {
 				Ω(fetchedSource).Should(Equal(builds.Source(`{"some":"new-source"}`)))
+			})
+		})
+
+		Context("when /in outputs to stderr", func() {
+			var logBuffer *gbytes.Buffer
+
+			BeforeEach(func() {
+				inStderr = "some stderr data"
+
+				logBuffer = gbytes.NewBuffer()
+				logs = logBuffer
+			})
+
+			It("emits it to the log sink", func() {
+				Ω(fetchError).ShouldNot(HaveOccurred())
+
+				Ω(string(logBuffer.Contents())).Should(Equal("some stderr data"))
 			})
 		})
 

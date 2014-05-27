@@ -43,7 +43,7 @@ func Run(
 		return err
 	}
 
-	rawOutput, err := waitForRunToEnd(stream)
+	rawOutput, err := waitForRunToEnd(stream, logs)
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func injectInput(container warden.Container, input interface{}) error {
 	return nil
 }
 
-func waitForRunToEnd(stream <-chan warden.ProcessStream) ([]byte, error) {
+func waitForRunToEnd(stream <-chan warden.ProcessStream, logs io.Writer) ([]byte, error) {
 	stdout := []byte{}
 	stderr := []byte{}
 
@@ -112,6 +112,10 @@ func waitForRunToEnd(stream <-chan warden.ProcessStream) ([]byte, error) {
 		case warden.ProcessStreamSourceStdout:
 			stdout = append(stdout, chunk.Data...)
 		case warden.ProcessStreamSourceStderr:
+			if logs != nil {
+				logs.Write(chunk.Data)
+			}
+
 			stderr = append(stderr, chunk.Data...)
 		}
 	}

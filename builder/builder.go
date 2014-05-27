@@ -17,11 +17,11 @@ type Builder interface {
 }
 
 type SourceFetcher interface {
-	Fetch(input builds.Input) (config builds.Config, source builds.Source, tarStream io.Reader, err error)
+	Fetch(input builds.Input, logs io.Writer) (config builds.Config, source builds.Source, tarStream io.Reader, err error)
 }
 
 type Outputter interface {
-	PerformOutput(builds.Output, io.Reader) (builds.Source, error)
+	PerformOutput(output builds.Output, source io.Reader, logs io.Writer) (builds.Source, error)
 }
 
 type RunningBuild struct {
@@ -41,6 +41,8 @@ type SucceededBuild struct {
 
 	ContainerHandle string
 	Container       warden.Container
+
+	LogStream io.WriteCloser
 }
 
 type builder struct {
@@ -104,7 +106,7 @@ func (builder *builder) start(build builds.Build, started chan<- RunningBuild, e
 	resources := map[string]io.Reader{}
 
 	for i, input := range build.Inputs {
-		buildConfig, source, tarStream, err := builder.sourceFetcher.Fetch(input)
+		buildConfig, source, tarStream, err := builder.sourceFetcher.Fetch(input, logs)
 		if err != nil {
 			errored <- err
 			logs.Close()
@@ -182,8 +184,6 @@ func (builder *builder) attach(running RunningBuild, succeeded chan<- SucceededB
 		}
 	}
 
-	defer logs.Close()
-
 	var stream <-chan warden.ProcessStream
 
 	if running.ProcessStream != nil {
@@ -212,11 +212,29 @@ func (builder *builder) attach(running RunningBuild, succeeded chan<- SucceededB
 	succeeded <- SucceededBuild{
 		Build:     running.Build,
 		Container: container,
+
+		LogStream: logs,
 	}
 }
 
 func (builder *builder) complete(succeeded SucceededBuild, finished chan<- builds.Build, errored chan<- error) {
-	outputs, err := builder.performOutputs(succeeded.Container, succeeded.Build)
+	var logs io.WriteCloser
+
+	if succeeded.LogStream != nil {
+		logs = succeeded.LogStream
+	} else {
+		var err error
+
+		logs, err = builder.logsFor(succeeded.Build.LogsURL)
+		if err != nil {
+			errored <- err
+			return
+		}
+	}
+
+	defer logs.Close()
+
+	outputs, err := builder.performOutputs(succeeded.Container, succeeded.Build, logs)
 	if err != nil {
 		errored <- err
 		return
@@ -318,7 +336,7 @@ func (builder *builder) waitForRunToEnd(
 	return 0, fmt.Errorf("output stream interrupted")
 }
 
-func (builder *builder) performOutputs(container warden.Container, build builds.Build) ([]builds.Output, error) {
+func (builder *builder) performOutputs(container warden.Container, build builds.Build, logs io.Writer) ([]builds.Output, error) {
 	allOutputs := map[string]builds.Output{}
 	for _, input := range build.Inputs {
 		allOutputs[input.Name] = builds.Output{
@@ -334,7 +352,7 @@ func (builder *builder) performOutputs(container warden.Container, build builds.
 
 		for _, output := range build.Outputs {
 			go func(output builds.Output) {
-				source, err := builder.performOutput(container, output)
+				source, err := builder.performOutput(container, output, logs)
 
 				errs <- err
 
@@ -371,11 +389,11 @@ func (builder *builder) performOutputs(container warden.Container, build builds.
 	return outputs, nil
 }
 
-func (builder *builder) performOutput(container warden.Container, output builds.Output) (builds.Source, error) {
+func (builder *builder) performOutput(container warden.Container, output builds.Output, logs io.Writer) (builds.Source, error) {
 	streamOut, err := container.StreamOut("/tmp/build/src/")
 	if err != nil {
 		return nil, err
 	}
 
-	return builder.outputter.PerformOutput(output, streamOut)
+	return builder.outputter.PerformOutput(output, streamOut, logs)
 }
