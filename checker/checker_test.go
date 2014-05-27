@@ -29,7 +29,10 @@ var _ = Describe("Checker", func() {
 		checkStdout     string
 		checkStderr     string
 		checkExitStatus uint32
-		checkError      error
+		runCheckError   error
+
+		checkResult []builds.Source
+		checkErr    error
 	)
 
 	primedStream := func(payloads ...warden.ProcessStream) <-chan warden.ProcessStream {
@@ -56,7 +59,10 @@ var _ = Describe("Checker", func() {
 		checkStdout = "[]"
 		checkStderr = ""
 		checkExitStatus = 0
-		checkError = nil
+		runCheckError = nil
+
+		checkResult = nil
+		checkErr = nil
 
 		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
 			return "some-handle", nil
@@ -79,10 +85,12 @@ var _ = Describe("Checker", func() {
 		)
 
 		wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-			return 1, checkStream, checkError
+			return 1, checkStream, runCheckError
 		}
 
 		checker = NewChecker(resourceTypes, wardenClient)
+
+		checkResult, checkErr = checker.Check(input)
 	})
 
 	Context("when the source's resource type is configured", func() {
@@ -94,9 +102,6 @@ var _ = Describe("Checker", func() {
 		})
 
 		It("creates a container with the image configured via the source's type", func() {
-			_, err := checker.Check(input)
-			Ω(err).ShouldNot(HaveOccurred())
-
 			Ω(wardenClient.Connection.Created()).Should(Equal([]warden.ContainerSpec{
 				{
 					RootFSPath: "docker:///some-resource-image",
@@ -104,50 +109,53 @@ var _ = Describe("Checker", func() {
 			}))
 		})
 
-		It("creates a file with the input configuration", func() {
-			buffer := gbytes.NewBuffer()
+		Context("when streaming in the input configuration succeeds", func() {
+			var streamedIn *gbytes.Buffer
 
-			wardenClient.Connection.WhenStreamingIn = func(handle string, destination string) (io.WriteCloser, error) {
-				Ω(handle).Should(Equal("some-handle"))
-				Ω(destination).Should(Equal("/tmp/resource-artifacts"))
-				return buffer, nil
-			}
+			BeforeEach(func() {
+				streamedIn = gbytes.NewBuffer()
 
-			_, err := checker.Check(input)
-			Ω(err).ShouldNot(HaveOccurred())
+				wardenClient.Connection.WhenStreamingIn = func(handle string, destination string) (io.WriteCloser, error) {
+					Ω(handle).Should(Equal("some-handle"))
+					Ω(destination).Should(Equal("/tmp/resource-artifacts"))
+					return streamedIn, nil
+				}
+			})
 
-			tarReader := tar.NewReader(bytes.NewBuffer(buffer.Contents()))
+			It("creates a file with the input configuration", func() {
+				Ω(checkErr).ShouldNot(HaveOccurred())
 
-			hdr, err := tarReader.Next()
-			Ω(err).ShouldNot(HaveOccurred())
-			Ω(hdr.Name).Should(Equal("./stdin"))
-			Ω(hdr.Mode).Should(Equal(int64(0644)))
+				tarReader := tar.NewReader(bytes.NewBuffer(streamedIn.Contents()))
 
-			inputConfig, err := ioutil.ReadAll(tarReader)
-			Ω(err).ShouldNot(HaveOccurred())
+				hdr, err := tarReader.Next()
+				Ω(err).ShouldNot(HaveOccurred())
+				Ω(hdr.Name).Should(Equal("./stdin"))
+				Ω(hdr.Mode).Should(Equal(int64(0644)))
 
-			Ω(string(inputConfig)).Should(Equal(`{"some":"source"}`))
+				inputConfig, err := ioutil.ReadAll(tarReader)
+				Ω(err).ShouldNot(HaveOccurred())
 
-			_, err = tarReader.Next()
-			Ω(err).Should(Equal(io.EOF))
+				Ω(string(inputConfig)).Should(Equal(`{"some":"source"}`))
 
-			Ω(buffer.Closed()).Should(BeTrue())
-		})
+				_, err = tarReader.Next()
+				Ω(err).Should(Equal(io.EOF))
 
-		It("runs /tmp/resource/check with the contents of the input config file on stdin", func() {
-			_, err := checker.Check(input)
-			Ω(err).ShouldNot(HaveOccurred())
+				Ω(streamedIn.Closed()).Should(BeTrue())
+			})
 
-			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
-				{
-					Script: "/tmp/resource/check < /tmp/resource-artifacts/stdin",
-				},
-			}))
+			It("runs /tmp/resource/check with the contents of the input config file on stdin", func() {
+				Ω(checkErr).ShouldNot(HaveOccurred())
+
+				Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
+					{
+						Script: "/tmp/resource/check < /tmp/resource-artifacts/stdin",
+					},
+				}))
+			})
 		})
 
 		It("destroys the container", func() {
-			_, err := checker.Check(input)
-			Ω(err).ShouldNot(HaveOccurred())
+			Ω(checkErr).ShouldNot(HaveOccurred())
 
 			Ω(wardenClient.Connection.Destroyed()).Should(ContainElement("some-handle"))
 		})
@@ -158,10 +166,9 @@ var _ = Describe("Checker", func() {
 			})
 
 			It("returns the raw parsed contents", func() {
-				sources, err := checker.Check(input)
-				Ω(err).ShouldNot(HaveOccurred())
+				Ω(checkErr).ShouldNot(HaveOccurred())
 
-				Ω(sources).Should(Equal([]builds.Source{
+				Ω(checkResult).Should(Equal([]builds.Source{
 					builds.Source(`"abc"`),
 					builds.Source(`"def"`),
 					builds.Source(`"ghi"`),
@@ -179,8 +186,7 @@ var _ = Describe("Checker", func() {
 			})
 
 			It("returns the error", func() {
-				_, err := checker.Check(input)
-				Ω(err).Should(Equal(disaster))
+				Ω(checkErr).Should(Equal(disaster))
 			})
 		})
 
@@ -194,8 +200,7 @@ var _ = Describe("Checker", func() {
 			})
 
 			It("returns the error", func() {
-				_, err := checker.Check(input)
-				Ω(err).Should(Equal(disaster))
+				Ω(checkErr).Should(Equal(disaster))
 			})
 		})
 
@@ -203,12 +208,11 @@ var _ = Describe("Checker", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
-				checkError = disaster
+				runCheckError = disaster
 			})
 
 			It("returns an err containing stdout/stderr of the process", func() {
-				_, err := checker.Check(input)
-				Ω(err).Should(Equal(disaster))
+				Ω(checkErr).Should(Equal(disaster))
 			})
 		})
 
@@ -220,11 +224,11 @@ var _ = Describe("Checker", func() {
 			})
 
 			It("returns an err containing stdout/stderr of the process", func() {
-				_, err := checker.Check(input)
-				Ω(err).Should(HaveOccurred())
-				Ω(err.Error()).Should(ContainSubstring("some-stdout-data"))
-				Ω(err.Error()).Should(ContainSubstring("some-stderr-data"))
-				Ω(err.Error()).Should(ContainSubstring("exit status 9"))
+				Ω(checkErr).Should(HaveOccurred())
+
+				Ω(checkErr.Error()).Should(ContainSubstring("some-stdout-data"))
+				Ω(checkErr.Error()).Should(ContainSubstring("some-stderr-data"))
+				Ω(checkErr.Error()).Should(ContainSubstring("exit status 9"))
 			})
 		})
 
@@ -234,25 +238,24 @@ var _ = Describe("Checker", func() {
 			})
 
 			It("returns an error", func() {
-				_, err := checker.Check(input)
-				Ω(err).Should(HaveOccurred())
+				Ω(checkErr).Should(HaveOccurred())
 			})
 		})
 	})
 
 	Context("when the source's resource type is unknown", func() {
-		It("returns ErrUnknownSourceType", func() {
-			_, err := checker.Check(builds.Input{
+		BeforeEach(func() {
+			input = builds.Input{
 				Type: "lol-butts",
-			})
-			Ω(err).Should(Equal(ErrUnknownSourceType))
+			}
+		})
+
+		It("returns ErrUnknownSourceType", func() {
+			Ω(checkErr).Should(Equal(ErrUnknownSourceType))
 		})
 
 		It("does not create a container", func() {
-			_, err := checker.Check(builds.Input{
-				Type: "lol-butts",
-			})
-			Ω(err).Should(HaveOccurred())
+			Ω(checkErr).Should(HaveOccurred())
 
 			Ω(wardenClient.Connection.Created()).Should(BeEmpty())
 		})
