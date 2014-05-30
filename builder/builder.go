@@ -17,11 +17,21 @@ type Builder interface {
 }
 
 type SourceFetcher interface {
-	Fetch(input builds.Input, logs io.Writer) (config builds.Config, source builds.Source, tarStream io.Reader, err error)
+	Fetch(input builds.Input, logs io.Writer) (
+		config builds.Config,
+		version builds.Version,
+		metadata []builds.MetadataField,
+		tarStream io.Reader,
+		err error,
+	)
 }
 
 type Outputter interface {
-	PerformOutput(output builds.Output, source io.Reader, logs io.Writer) (builds.Source, error)
+	PerformOutput(
+		output builds.Output,
+		tarStream io.Reader,
+		logs io.Writer,
+	) (builds.Version, []builds.MetadataField, error)
 }
 
 type RunningBuild struct {
@@ -106,14 +116,15 @@ func (builder *builder) start(build builds.Build, started chan<- RunningBuild, e
 	resources := map[string]io.Reader{}
 
 	for i, input := range build.Inputs {
-		buildConfig, source, tarStream, err := builder.sourceFetcher.Fetch(input, logs)
+		buildConfig, version, metadata, tarStream, err := builder.sourceFetcher.Fetch(input, logs)
 		if err != nil {
 			errored <- err
 			logs.Close()
 			return
 		}
 
-		build.Inputs[i].Source = source
+		build.Inputs[i].Version = version
+		build.Inputs[i].Metadata = metadata
 
 		if input.ConfigPath != "" {
 			build.Config = buildConfig
@@ -336,13 +347,19 @@ func (builder *builder) waitForRunToEnd(
 	return 0, fmt.Errorf("output stream interrupted")
 }
 
-func (builder *builder) performOutputs(container warden.Container, build builds.Build, logs io.Writer) ([]builds.Output, error) {
+func (builder *builder) performOutputs(
+	container warden.Container,
+	build builds.Build,
+	logs io.Writer,
+) ([]builds.Output, error) {
 	allOutputs := map[string]builds.Output{}
+
+	// Implicit outputs
 	for _, input := range build.Inputs {
 		allOutputs[input.Name] = builds.Output{
-			Name:   input.Name,
-			Type:   input.Type,
-			Source: input.Source,
+			Name:    input.Name,
+			Type:    input.Type,
+			Version: input.Version,
 		}
 	}
 
@@ -352,12 +369,19 @@ func (builder *builder) performOutputs(container warden.Container, build builds.
 
 		for _, output := range build.Outputs {
 			go func(output builds.Output) {
-				source, err := builder.performOutput(container, output, logs)
+				streamOut, err := container.StreamOut("/tmp/build/src/")
+				if err != nil {
+					errs <- err
+					return
+				}
+
+				version, metadata, err := builder.outputter.PerformOutput(output, streamOut, logs)
 
 				errs <- err
 
 				if err == nil {
-					output.Source = source
+					output.Version = version
+					output.Metadata = metadata
 					results <- output
 				}
 			}(output)
@@ -387,13 +411,4 @@ func (builder *builder) performOutputs(container warden.Container, build builds.
 	}
 
 	return outputs, nil
-}
-
-func (builder *builder) performOutput(container warden.Container, output builds.Output, logs io.Writer) (builds.Source, error) {
-	streamOut, err := container.StreamOut("/tmp/build/src/")
-	if err != nil {
-		return nil, err
-	}
-
-	return builder.outputter.PerformOutput(output, streamOut, logs)
 }

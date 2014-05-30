@@ -9,7 +9,7 @@ import (
 type FakeChecker struct {
 	checked      []builds.Input
 	checkedMutex *sync.Mutex
-	CheckResult  []builds.Source
+	CheckResult  []builds.Version
 	CheckError   error
 }
 
@@ -19,7 +19,7 @@ func New() *FakeChecker {
 	}
 }
 
-func (checker *FakeChecker) Check(input builds.Input) ([]builds.Source, error) {
+func (checker *FakeChecker) Check(input builds.Input) ([]builds.Version, error) {
 	if checker.CheckError != nil {
 		return nil, checker.CheckError
 	}

@@ -110,8 +110,8 @@ var _ = Describe("Builder", func() {
 				return "some-handle", nil
 			}
 
-			sourceFetcher.WhenFetching = func(builds.Input, io.Writer) (builds.Config, builds.Source, io.Reader, error) {
-				return builds.Config{}, nil, bytes.NewBufferString("some-data"), nil
+			sourceFetcher.WhenFetching = func(builds.Input, io.Writer) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
+				return builds.Config{}, nil, nil, bytes.NewBufferString("some-data"), nil
 			}
 		})
 
@@ -123,22 +123,22 @@ var _ = Describe("Builder", func() {
 			Ω(created[0].RootFSPath).Should(Equal("docker:///some-image-name"))
 		})
 
-		Context("when fetching the build's sources succeeds", func() {
+		Context("when fetching the build's inputs succeeds", func() {
 			BeforeEach(func() {
-				source1 := builds.Source("some-source-1")
-				source2 := builds.Source("some-source-2")
-
-				sourceStream1 := bytes.NewBufferString("some-data-1")
-				sourceStream2 := bytes.NewBufferString("some-data-2")
-
-				sourceFetcher.WhenFetching = func(input builds.Input, logs io.Writer) (builds.Config, builds.Source, io.Reader, error) {
+				sourceFetcher.WhenFetching = func(input builds.Input, logs io.Writer) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
 					if input.Name == "name1" {
-						return builds.Config{}, source1, sourceStream1, nil
+						version := builds.Version{"key": "version-1"}
+						metadata := []builds.MetadataField{{Name: "key", Value: "meta-1"}}
+						sourceStream := bytes.NewBufferString("some-data-1")
+						return builds.Config{}, version, metadata, sourceStream, nil
 					}
 
 					if input.Name == "name2" {
 						config := builds.Config{Image: "some-reconfigured-image"}
-						return config, source2, sourceStream2, nil
+						version := builds.Version{"key": "version-2"}
+						metadata := []builds.MetadataField{{Name: "key", Value: "meta-2"}}
+						sourceStream := bytes.NewBufferString("some-data-2")
+						return config, version, metadata, sourceStream, nil
 					}
 
 					panic("unknown stream")
@@ -185,12 +185,17 @@ var _ = Describe("Builder", func() {
 					}
 				})
 
-				It("notifies that the build is started, with updated sources and config", func() {
+				It("notifies that the build is started, with updated inputs (version + metadata)", func() {
 					var runningBuild RunningBuild
 					Eventually(started).Should(Receive(&runningBuild))
 
-					Ω(runningBuild.Build.Inputs[0].Source).Should(Equal(builds.Source("some-source-1")))
-					Ω(runningBuild.Build.Inputs[1].Source).Should(Equal(builds.Source("some-source-2")))
+					inputs := runningBuild.Build.Inputs
+
+					Ω(inputs[0].Version).Should(Equal(builds.Version{"key": "version-1"}))
+					Ω(inputs[0].Metadata).Should(Equal([]builds.MetadataField{{Name: "key", Value: "meta-1"}}))
+
+					Ω(inputs[1].Version).Should(Equal(builds.Version{"key": "version-2"}))
+					Ω(inputs[1].Metadata).Should(Equal([]builds.MetadataField{{Name: "key", Value: "meta-2"}}))
 				})
 
 				It("returns the container, container handle, process ID, process stream, and logs", func() {
@@ -205,7 +210,7 @@ var _ = Describe("Builder", func() {
 				})
 			})
 
-			Context("and a source reconfigured the build", func() {
+			Context("and an input reconfigured the build", func() {
 				BeforeEach(func() {
 					build.Inputs[1].ConfigPath = "some/config/path.yml"
 				})
@@ -277,15 +282,15 @@ var _ = Describe("Builder", func() {
 					runningBuild.LogStream.Close()
 				})
 
-				Context("and fetching sources emits logs", func() {
+				Context("and fetching inputs emits logs", func() {
 					BeforeEach(func() {
-						sourceFetcher.WhenFetching = func(input builds.Input, logs io.Writer) (builds.Config, builds.Source, io.Reader, error) {
+						sourceFetcher.WhenFetching = func(input builds.Input, logs io.Writer) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
 							defer GinkgoRecover()
 
 							Ω(logs).ShouldNot(BeNil())
 							logs.Write([]byte("hello from source fetcher"))
 
-							return builds.Config{}, nil, bytes.NewBufferString("some-data"), nil
+							return builds.Config{}, nil, nil, bytes.NewBufferString("some-data"), nil
 						}
 					})
 
@@ -382,13 +387,13 @@ var _ = Describe("Builder", func() {
 					Name:            "name1",
 					Type:            "raw",
 					DestinationPath: "some/source/path",
-					Source:          builds.Source("some-source-1"),
+					// Source:          builds.Source("some-source-1"),
 				},
 				{
 					Name:            "name2",
 					Type:            "raw",
 					DestinationPath: "another/source/path",
-					Source:          builds.Source("some-source-2"),
+					// Source:          builds.Source("some-source-2"),
 				},
 			}
 
@@ -589,13 +594,13 @@ var _ = Describe("Builder", func() {
 					Name:            "name1",
 					Type:            "raw",
 					DestinationPath: "some/source/path",
-					Source:          builds.Source("some-source-1"),
+					Version:         builds.Version{"key": "in-version-1"},
 				},
 				{
 					Name:            "name2",
 					Type:            "raw",
 					DestinationPath: "another/source/path",
-					Source:          builds.Source("some-source-2"),
+					Version:         builds.Version{"key": "in-version-2"},
 				},
 			}
 
@@ -614,22 +619,22 @@ var _ = Describe("Builder", func() {
 			}
 		})
 
-		It("reports regular inputs as output sources", func() {
+		It("reports inputs as implicit outputs", func() {
 			var finishedBuild builds.Build
 			Eventually(finished).Should(Receive(&finishedBuild))
 
 			Ω(finishedBuild.Outputs).Should(HaveLen(2))
 
 			Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
-				Name:   "name1",
-				Type:   "raw",
-				Source: builds.Source("some-source-1"),
+				Name:    "name1",
+				Type:    "raw",
+				Version: builds.Version{"key": "in-version-1"},
 			}))
 
 			Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
-				Name:   "name2",
-				Type:   "raw",
-				Source: builds.Source("some-source-2"),
+				Name:    "name2",
+				Type:    "raw",
+				Version: builds.Version{"key": "in-version-2"},
 			}))
 		})
 
@@ -639,12 +644,12 @@ var _ = Describe("Builder", func() {
 					{
 						Name:   "name1",
 						Type:   "git",
-						Params: builds.Params("123"),
+						Params: builds.Params{"key": "param-1"},
 					},
 					{
 						Name:   "someoutput",
 						Type:   "git",
-						Params: builds.Params("456"),
+						Params: builds.Params{"key": "param-2"},
 					},
 				}
 			})
@@ -657,14 +662,29 @@ var _ = Describe("Builder", func() {
 
 					sync := make(chan bool)
 
-					outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader, logs io.Writer) (builds.Source, error) {
-						if string(output.Params) == "123" {
+					outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader, logs io.Writer) (builds.Version, []builds.MetadataField, error) {
+						if output.Params["key"] == "param-1" {
 							<-sync
-							return builds.Source("output-1"), nil
-						} else {
-							close(sync)
-							return builds.Source("output-2"), nil
+							version := builds.Version{"key": "out-version-1"}
+							metadata := []builds.MetadataField{{Name: "name", Value: "out-meta-1"}}
+							return version, metadata, nil
 						}
+
+						// Implicit output created for an input 'name2'
+						if len(output.Params) == 0 {
+							version := builds.Version{"key": "in-version-2"}
+							metadata := []builds.MetadataField{{Name: "name", Value: "out-meta-2"}}
+							return version, metadata, nil
+						}
+
+						if output.Params["key"] == "param-2" {
+							close(sync)
+							version := builds.Version{"key": "out-version-3"}
+							metadata := []builds.MetadataField{{Name: "name", Value: "out-meta-3"}}
+							return version, metadata, nil
+						}
+
+						panic("unknown output")
 					}
 				})
 
@@ -686,30 +706,35 @@ var _ = Describe("Builder", func() {
 					Ω(outputs).Should(ContainElement(succeededBuild.Build.Outputs[1]))
 				})
 
-				It("reports the output sources", func() {
+				It("reports the outputs", func() {
 					var finishedBuild builds.Build
 					Eventually(finished).Should(Receive(&finishedBuild))
 
 					Ω(finishedBuild.Outputs).Should(HaveLen(3))
 
 					Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
-						Name:   "name1",
-						Type:   "git",
-						Params: builds.Params("123"),
-						Source: builds.Source("output-1"),
+						Name:     "name1",
+						Type:     "git",
+						Params:   builds.Params{"key": "param-1"},
+						Version:  builds.Version{"key": "out-version-1"},
+						Metadata: []builds.MetadataField{{Name: "name", Value: "out-meta-1"}},
+					}))
+
+					// Implicit output created for an input 'name2'
+					Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
+						Name:     "name2",
+						Type:     "raw",
+						Params:   nil,
+						Version:  builds.Version{"key": "in-version-2"},
+						Metadata: nil,
 					}))
 
 					Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
-						Name:   "name2",
-						Type:   "raw",
-						Source: builds.Source("some-source-2"),
-					}))
-
-					Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
-						Name:   "someoutput",
-						Type:   "git",
-						Params: builds.Params("456"),
-						Source: builds.Source("output-2"),
+						Name:     "someoutput",
+						Type:     "git",
+						Params:   builds.Params{"key": "param-2"},
+						Version:  builds.Version{"key": "out-version-3"},
+						Metadata: []builds.MetadataField{{Name: "name", Value: "out-meta-3"}},
 					}))
 				})
 
@@ -740,19 +765,19 @@ var _ = Describe("Builder", func() {
 				})
 			})
 
-			Context("when the outputs emit logs", func() {
+			Describe("logs emitted by output", func() {
 				var logBuffer *gbytes.Buffer
 
 				BeforeEach(func() {
 					logBuffer = gbytes.NewBuffer()
 
-					outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader, logs io.Writer) (builds.Source, error) {
+					outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader, logs io.Writer) (builds.Version, []builds.MetadataField, error) {
 						defer GinkgoRecover()
 
 						Ω(logs).ShouldNot(BeNil())
 						logs.Write([]byte("hello from outputter"))
 
-						return builds.Source("output-1"), nil
+						return nil, nil, nil
 					}
 				})
 

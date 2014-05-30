@@ -10,7 +10,7 @@ import (
 )
 
 type Checker interface {
-	Check(builds.Input) ([]builds.Source, error)
+	Check(builds.Input) ([]builds.Version, error)
 }
 
 var ErrUnknownSourceType = errors.New("unknown source type")
@@ -18,6 +18,11 @@ var ErrUnknownSourceType = errors.New("unknown source type")
 type checker struct {
 	resourceTypes config.ResourceTypes
 	wardenClient  warden.Client
+}
+
+type versionAndSource struct {
+	Version builds.Version `json:"version"`
+	Source  builds.Source  `json:"source"`
 }
 
 func NewChecker(
@@ -30,7 +35,7 @@ func NewChecker(
 	}
 }
 
-func (checker *checker) Check(input builds.Input) ([]builds.Source, error) {
+func (checker *checker) Check(input builds.Input) ([]builds.Version, error) {
 	resourceType, found := checker.resourceTypes.Lookup(input.Type)
 	if !found {
 		return nil, ErrUnknownSourceType
@@ -45,18 +50,18 @@ func (checker *checker) Check(input builds.Input) ([]builds.Source, error) {
 
 	defer checker.wardenClient.Destroy(container.Handle())
 
-	var sources []builds.Source
+	var versions []builds.Version
 
 	err = scriptrunner.Run(
 		container,
 		"/tmp/resource/check",
 		nil,
-		input.Source,
-		&sources,
+		versionAndSource{input.Version, input.Source},
+		&versions,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return sources, nil
+	return versions, nil
 }

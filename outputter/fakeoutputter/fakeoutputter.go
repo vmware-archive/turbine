@@ -8,9 +8,11 @@ import (
 	"github.com/winston-ci/prole/api/builds"
 )
 
+type OutputterFunc func(builds.Output, io.Reader, io.Writer) (builds.Version, []builds.MetadataField, error)
+
 type Outputter struct {
 	performedOutputs     []PerformSpec
-	WhenPerformingOutput func(builds.Output, io.Reader, io.Writer) (builds.Source, error)
+	WhenPerformingOutput OutputterFunc
 	PerformOutputError   error
 
 	sync.RWMutex
@@ -24,15 +26,15 @@ type PerformSpec struct {
 
 func New() *Outputter {
 	return &Outputter{
-		WhenPerformingOutput: func(builds.Output, io.Reader, io.Writer) (builds.Source, error) {
-			return nil, nil
+		WhenPerformingOutput: func(builds.Output, io.Reader, io.Writer) (builds.Version, []builds.MetadataField, error) {
+			return nil, nil, nil
 		},
 	}
 }
 
-func (outputter *Outputter) PerformOutput(output builds.Output, streamIn io.Reader, logs io.Writer) (builds.Source, error) {
+func (outputter *Outputter) PerformOutput(output builds.Output, streamIn io.Reader, logs io.Writer) (builds.Version, []builds.MetadataField, error) {
 	if outputter.PerformOutputError != nil {
-		return nil, outputter.PerformOutputError
+		return nil, nil, outputter.PerformOutputError
 	}
 
 	streamedIn := gbytes.NewBuffer()

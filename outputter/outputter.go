@@ -2,7 +2,6 @@ package outputter
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"path"
 
@@ -20,6 +19,17 @@ type Outputter struct {
 	wardenClient  warden.Client
 }
 
+// Request payload fromoutputter to /tmp/resource/out script
+type outRequest struct {
+	Params builds.Params `json:"params"`
+}
+
+// Response payload from /tmp/resource/out script to outputter
+type outResponse struct {
+	Version  builds.Version         `json:"version"`
+	Metadata []builds.MetadataField `json:"metadata"`
+}
+
 func NewOutputter(
 	resourceTypes config.ResourceTypes,
 	wardenClient warden.Client,
@@ -30,38 +40,42 @@ func NewOutputter(
 	}
 }
 
-func (outputter *Outputter) PerformOutput(output builds.Output, sourceStream io.Reader, logs io.Writer) (builds.Source, error) {
+func (outputter *Outputter) PerformOutput(
+	output builds.Output,
+	sourceStream io.Reader,
+	logs io.Writer,
+) (builds.Version, []builds.MetadataField, error) {
 	resourceType, found := outputter.resourceTypes.Lookup(output.Type)
 	if !found {
-		return nil, ErrUnknownSourceType
+		return nil, nil, ErrUnknownSourceType
 	}
 
 	container, err := outputter.wardenClient.Create(warden.ContainerSpec{
 		RootFSPath: "docker:///" + resourceType.Image,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	err = outputter.streamInSource(container, sourceStream)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	var source builds.Source
+	var resp outResponse
 
 	err = scriptrunner.Run(
 		container,
-		fmt.Sprintf("/tmp/resource/out %s", path.Join("/tmp/build/src", output.SourcePath)),
+		"/tmp/resource/out "+path.Join("/tmp/build/src", output.SourcePath),
 		logs,
-		output.Params,
-		&source,
+		outRequest{output.Params},
+		&resp,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return source, nil
+	return resp.Version, resp.Metadata, nil
 }
 
 func (outputter *Outputter) streamInSource(

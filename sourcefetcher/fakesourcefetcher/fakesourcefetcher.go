@@ -8,9 +8,17 @@ import (
 	"github.com/winston-ci/prole/api/builds"
 )
 
+type FetcherFunc func(builds.Input, io.Writer) (
+	builds.Config,
+	builds.Version,
+	[]builds.MetadataField,
+	io.Reader,
+	error,
+)
+
 type Fetcher struct {
 	fetched      []builds.Input
-	WhenFetching func(builds.Input, io.Writer) (builds.Config, builds.Source, io.Reader, error)
+	WhenFetching FetcherFunc
 	FetchError   error
 
 	sync.RWMutex
@@ -20,23 +28,25 @@ func New() *Fetcher {
 	return &Fetcher{}
 }
 
-func (fetcher *Fetcher) Fetch(input builds.Input, logs io.Writer) (builds.Config, builds.Source, io.Reader, error) {
+func (fetcher *Fetcher) Fetch(input builds.Input, logs io.Writer) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
 	if fetcher.FetchError != nil {
-		return builds.Config{}, nil, nil, fetcher.FetchError
+		return builds.Config{}, nil, nil, nil, fetcher.FetchError
 	}
 
 	var buildConfig builds.Config
-	var fetchedSource builds.Source
+	var fetchedVersion builds.Version
+	var fetchedMetadata []builds.MetadataField
 	var result io.Reader
 
 	if fetcher.WhenFetching != nil {
-		config, source, stream, err := fetcher.WhenFetching(input, logs)
+		config, version, metadata, stream, err := fetcher.WhenFetching(input, logs)
 		if err != nil {
-			return builds.Config{}, nil, nil, err
+			return builds.Config{}, nil, nil, nil, err
 		}
 
 		buildConfig = config
-		fetchedSource = source
+		fetchedVersion = version
+		fetchedMetadata = metadata
 		result = stream
 	} else {
 		result = new(bytes.Buffer)
@@ -46,7 +56,7 @@ func (fetcher *Fetcher) Fetch(input builds.Input, logs io.Writer) (builds.Config
 	fetcher.fetched = append(fetcher.fetched, input)
 	fetcher.Unlock()
 
-	return buildConfig, fetchedSource, result, nil
+	return buildConfig, fetchedVersion, fetchedMetadata, result, nil
 }
 
 func (fetcher *Fetcher) Fetched() []builds.Input {

@@ -33,7 +33,8 @@ var _ = Describe("SourceFetcher", func() {
 		inError      error
 
 		extractedConfig builds.Config
-		fetchedSource   builds.Source
+		fetchedVersion  builds.Version
+		fetchedMetadata []builds.MetadataField
 		fetchedStream   io.Reader
 		fetchError      error
 	)
@@ -43,8 +44,9 @@ var _ = Describe("SourceFetcher", func() {
 		wardenClient = fake_warden_client.New()
 
 		input = builds.Input{
-			Type:   "some-resource",
-			Source: builds.Source(`{"some":"source"}`),
+			Type:    "some-resource",
+			Source:  builds.Source{"some": "source"},
+			Version: builds.Version{"some": "version"},
 		}
 
 		logs = nil
@@ -53,7 +55,7 @@ var _ = Describe("SourceFetcher", func() {
 			return "some-handle", nil
 		}
 
-		inStdout = "[]"
+		inStdout = "{}"
 		inStderr = ""
 		inExitStatus = 0
 		inError = nil
@@ -92,7 +94,7 @@ var _ = Describe("SourceFetcher", func() {
 
 		sourceFetcher = NewSourceFetcher(resourceTypes, wardenClient)
 
-		extractedConfig, fetchedSource, fetchedStream, fetchError = sourceFetcher.Fetch(input, logs)
+		extractedConfig, fetchedVersion, fetchedMetadata, fetchedStream, fetchError = sourceFetcher.Fetch(input, logs)
 	})
 
 	Context("when the source's resource type is configured", func() {
@@ -137,7 +139,7 @@ var _ = Describe("SourceFetcher", func() {
 				inputConfig, err := ioutil.ReadAll(tarReader)
 				Ω(err).ShouldNot(HaveOccurred())
 
-				Ω(string(inputConfig)).Should(Equal(`{"some":"source"}`))
+				Ω(string(inputConfig)).Should(Equal(`{"version":{"some":"version"},"source":{"some":"source"}}`))
 
 				_, err = tarReader.Next()
 				Ω(err).Should(Equal(io.EOF))
@@ -158,11 +160,21 @@ var _ = Describe("SourceFetcher", func() {
 
 		Context("when /tmp/resource/in prints the source", func() {
 			BeforeEach(func() {
-				inStdout = `{"some":"new-source"}`
+				inStdout = `{
+					"version": {"some": "new-version"},
+					"metadata": [
+						{"name": "a", "value":"a-value"},
+						{"name": "b","value": "b-value"}
+					]
+				}`
 			})
 
 			It("returns the build source printed out by /tmp/resource/in", func() {
-				Ω(fetchedSource).Should(Equal(builds.Source(`{"some":"new-source"}`)))
+				Ω(fetchedVersion).Should(Equal(builds.Version{"some": "new-version"}))
+				Ω(fetchedMetadata).Should(Equal([]builds.MetadataField{
+					{Name: "a", Value: "a-value"},
+					{Name: "b", Value: "b-value"},
+				}))
 			})
 		})
 

@@ -32,8 +32,9 @@ var _ = Describe("Outputter", func() {
 		outExitStatus uint32
 		outError      error
 
-		outputSource builds.Source
-		outputError  error
+		outputVersion  builds.Version
+		outputMetadata []builds.MetadataField
+		outputError    error
 	)
 
 	BeforeEach(func() {
@@ -42,7 +43,7 @@ var _ = Describe("Outputter", func() {
 
 		output = builds.Output{
 			Type:   "some-resource",
-			Params: builds.Params(`{"some":"params"}`),
+			Params: builds.Params{"some": "params"},
 
 			SourcePath: "some-resource",
 		}
@@ -53,7 +54,7 @@ var _ = Describe("Outputter", func() {
 			return "some-handle", nil
 		}
 
-		outStdout = "[]"
+		outStdout = "{}"
 		outStderr = ""
 		outExitStatus = 0
 		outError = nil
@@ -92,7 +93,7 @@ var _ = Describe("Outputter", func() {
 
 		outputter = NewOutputter(resourceTypes, wardenClient)
 
-		outputSource, outputError = outputter.PerformOutput(output, bytes.NewBufferString("the-source"), logs)
+		outputVersion, outputMetadata, outputError = outputter.PerformOutput(output, bytes.NewBufferString("the-source"), logs)
 	})
 
 	Context("when the source's resource type is configured", func() {
@@ -128,7 +129,7 @@ var _ = Describe("Outputter", func() {
 				}
 			})
 
-			It("creates a file with the input configuration", func() {
+			It("creates a file with the output params", func() {
 				Ω(outputError).ShouldNot(HaveOccurred())
 
 				tarReader := tar.NewReader(bytes.NewBuffer(streamedIn.Contents()))
@@ -141,7 +142,7 @@ var _ = Describe("Outputter", func() {
 				inputConfig, err := ioutil.ReadAll(tarReader)
 				Ω(err).ShouldNot(HaveOccurred())
 
-				Ω(string(inputConfig)).Should(Equal(`{"some":"params"}`))
+				Ω(string(inputConfig)).Should(Equal(`{"params":{"some":"params"}}`))
 
 				_, err = tarReader.Next()
 				Ω(err).Should(Equal(io.EOF))
@@ -184,13 +185,23 @@ var _ = Describe("Outputter", func() {
 			}))
 		})
 
-		Context("when /tmp/resource/out prints the source", func() {
+		Context("when /tmp/resource/out prints the version and metadata", func() {
 			BeforeEach(func() {
-				outStdout = `{"some":"new-source"}`
+				outStdout = `{
+					"version": {"some": "new-version"},
+					"metadata": [
+						{"name": "a", "value":"a-value"},
+						{"name": "b","value": "b-value"}
+					]
+				}`
 			})
 
 			It("returns the build source printed out by /tmp/resource/out", func() {
-				Ω(outputSource).Should(Equal(builds.Source(`{"some":"new-source"}`)))
+				Ω(outputVersion).Should(Equal(builds.Version{"some": "new-version"}))
+				Ω(outputMetadata).Should(Equal([]builds.MetadataField{
+					{Name: "a", Value: "a-value"},
+					{Name: "b", Value: "b-value"},
+				}))
 			})
 		})
 
@@ -210,6 +221,7 @@ var _ = Describe("Outputter", func() {
 				Ω(string(logBuffer.Contents())).Should(Equal("some stderr data"))
 			})
 		})
+
 		Context("when creating the container fails", func() {
 			disaster := errors.New("oh no!")
 

@@ -31,7 +31,7 @@ var _ = Describe("Checker", func() {
 		checkExitStatus uint32
 		runCheckError   error
 
-		checkResult []builds.Source
+		checkResult []builds.Version
 		checkErr    error
 	)
 
@@ -52,8 +52,9 @@ var _ = Describe("Checker", func() {
 		wardenClient = fake_warden_client.New()
 
 		input = builds.Input{
-			Type:   "some-resource",
-			Source: builds.Source(`{"some":"source"}`),
+			Type:    "some-resource",
+			Source:  builds.Source{"some": "source"},
+			Version: builds.Version{"some": "version"},
 		}
 
 		checkStdout = "[]"
@@ -135,7 +136,7 @@ var _ = Describe("Checker", func() {
 				inputConfig, err := ioutil.ReadAll(tarReader)
 				Ω(err).ShouldNot(HaveOccurred())
 
-				Ω(string(inputConfig)).Should(Equal(`{"some":"source"}`))
+				Ω(string(inputConfig)).Should(Equal(`{"version":{"some":"version"},"source":{"some":"source"}}`))
 
 				_, err = tarReader.Next()
 				Ω(err).Should(Equal(io.EOF))
@@ -162,16 +163,16 @@ var _ = Describe("Checker", func() {
 
 		Context("when /check outputs versions", func() {
 			BeforeEach(func() {
-				checkStdout = `["abc", "def", "ghi"]`
+				checkStdout = `[{"ver":"abc"}, {"ver":"def"}, {"ver":"ghi"}]`
 			})
 
 			It("returns the raw parsed contents", func() {
 				Ω(checkErr).ShouldNot(HaveOccurred())
 
-				Ω(checkResult).Should(Equal([]builds.Source{
-					builds.Source(`"abc"`),
-					builds.Source(`"def"`),
-					builds.Source(`"ghi"`),
+				Ω(checkResult).Should(Equal([]builds.Version{
+					builds.Version{"ver": "abc"},
+					builds.Version{"ver": "def"},
+					builds.Version{"ver": "ghi"},
 				}))
 			})
 		})

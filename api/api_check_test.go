@@ -49,8 +49,9 @@ var _ = Describe("API", func() {
 
 		BeforeEach(func() {
 			input = builds.Input{
-				Type:   "git",
-				Source: builds.Source(`{"ref":"foo"}`),
+				Type:    "git",
+				Source:  builds.Source{"uri": "example.com"},
+				Version: builds.Version{"ref": "foo"},
 			}
 
 			requestBody = inputPayload(input)
@@ -71,27 +72,26 @@ var _ = Describe("API", func() {
 			Ω(response.StatusCode).Should(Equal(http.StatusOK))
 		})
 
-		It("checks for new sources of the given input", func() {
+		It("checks for new versions of the given input", func() {
 			Ω(checker.Checked()).Should(ContainElement(input))
 		})
 
-		Context("when the check returns sources", func() {
-			var source1 builds.Source
-			var source2 builds.Source
+		Context("when the check returns versions", func() {
+			var version1 builds.Version
+			var version2 builds.Version
 
 			BeforeEach(func() {
-				source1 = builds.Source(`{"ref":"a"}`)
-				source2 = builds.Source(`{"ref":"b"}`)
-
-				checker.CheckResult = []builds.Source{source1, source2}
+				version1 = builds.Version{"ref": "a"}
+				version2 = builds.Version{"ref": "b"}
+				checker.CheckResult = []builds.Version{version1, version2}
 			})
 
 			It("responds with them", func() {
-				var sources []builds.Source
-				err := json.NewDecoder(response.Body).Decode(&sources)
+				var versions []builds.Version
+				err := json.NewDecoder(response.Body).Decode(&versions)
 				Ω(err).ShouldNot(HaveOccurred())
 
-				Ω(sources).Should(Equal([]builds.Source{source1, source2}))
+				Ω(versions).Should(Equal([]builds.Version{version1, version2}))
 			})
 		})
 

@@ -21,6 +21,22 @@ type SourceFetcher struct {
 	wardenClient  warden.Client
 }
 
+// Request payload from sourcefetcher to /tmp/resource/in script
+type inRequest struct {
+	Version builds.Version `json:"version,omitempty"`
+	Source  builds.Source  `json:"source"`
+}
+
+// Response payload from /tmp/resource/in script to sourcefetcher
+type inResponse struct {
+	// Version is returned because request payload
+	// may not contain Version to fetch relying on
+	// 'in' script to fetch latest version.
+	Version builds.Version `json:"version"`
+
+	Metadata []builds.MetadataField `json:"metadata,omitempty"`
+}
+
 func NewSourceFetcher(
 	resourceTypes config.ResourceTypes,
 	wardenClient warden.Client,
@@ -31,42 +47,42 @@ func NewSourceFetcher(
 	}
 }
 
-func (fetcher *SourceFetcher) Fetch(input builds.Input, logs io.Writer) (builds.Config, builds.Source, io.Reader, error) {
+func (fetcher *SourceFetcher) Fetch(input builds.Input, logs io.Writer) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
 	var buildConfig builds.Config
 
 	resourceType, found := fetcher.resourceTypes.Lookup(input.Type)
 	if !found {
-		return buildConfig, nil, nil, ErrUnknownSourceType
+		return buildConfig, nil, nil, nil, ErrUnknownSourceType
 	}
 
 	container, err := fetcher.wardenClient.Create(warden.ContainerSpec{
 		RootFSPath: "docker:///" + resourceType.Image,
 	})
 	if err != nil {
-		return buildConfig, nil, nil, err
+		return buildConfig, nil, nil, nil, err
 	}
 
-	var source builds.Source
+	var resp inResponse
 
 	err = scriptrunner.Run(
 		container,
 		"/tmp/resource/in /tmp/resource-destination",
 		logs,
-		input.Source,
-		&source,
+		inRequest{input.Version, input.Source},
+		&resp,
 	)
 	if err != nil {
-		return buildConfig, nil, nil, err
+		return buildConfig, nil, nil, nil, err
 	}
 
 	buildConfig, err = fetcher.extractConfig(container, input.ConfigPath)
 	if err != nil {
-		return buildConfig, nil, nil, err
+		return buildConfig, nil, nil, nil, err
 	}
 
 	outStream, err := container.StreamOut("/tmp/resource-destination/")
 
-	return buildConfig, source, outStream, err
+	return buildConfig, resp.Version, resp.Metadata, outStream, err
 }
 
 func (fetcher *SourceFetcher) extractConfig(container warden.Container, configPath string) (builds.Config, error) {
