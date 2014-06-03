@@ -26,6 +26,7 @@ var _ = Describe("Outputter", func() {
 
 		output builds.Output
 		logs   io.Writer
+		abort  chan struct{}
 
 		outStdout     string
 		outStderr     string
@@ -38,7 +39,13 @@ var _ = Describe("Outputter", func() {
 	)
 
 	BeforeEach(func() {
-		resourceTypes = config.ResourceTypes{}
+		resourceTypes = []config.ResourceType{
+			{
+				Name:  "some-resource",
+				Image: "some-resource-image",
+			},
+		}
+
 		wardenClient = fake_warden_client.New()
 
 		output = builds.Output{
@@ -58,6 +65,10 @@ var _ = Describe("Outputter", func() {
 		outStderr = ""
 		outExitStatus = 0
 		outError = nil
+
+		outputter = NewOutputter(resourceTypes, wardenClient)
+
+		abort = make(chan struct{})
 	})
 
 	primedStream := func(payloads ...warden.ProcessStream) <-chan warden.ProcessStream {
@@ -72,36 +83,27 @@ var _ = Describe("Outputter", func() {
 		return stream
 	}
 
-	JustBeforeEach(func() {
-		outStream := primedStream(
-			warden.ProcessStream{
-				Source: warden.ProcessStreamSourceStdout,
-				Data:   []byte(outStdout),
-			},
-			warden.ProcessStream{
-				Source: warden.ProcessStreamSourceStderr,
-				Data:   []byte(outStderr),
-			},
-			warden.ProcessStream{
-				ExitStatus: &outExitStatus,
-			},
-		)
+	Context("when performing output", func() {
+		JustBeforeEach(func() {
+			outStream := primedStream(
+				warden.ProcessStream{
+					Source: warden.ProcessStreamSourceStdout,
+					Data:   []byte(outStdout),
+				},
+				warden.ProcessStream{
+					Source: warden.ProcessStreamSourceStderr,
+					Data:   []byte(outStderr),
+				},
+				warden.ProcessStream{
+					ExitStatus: &outExitStatus,
+				},
+			)
 
-		wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-			return 1, outStream, outError
-		}
+			wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+				return 1, outStream, outError
+			}
 
-		outputter = NewOutputter(resourceTypes, wardenClient)
-
-		outputVersion, outputMetadata, outputError = outputter.PerformOutput(output, bytes.NewBufferString("the-source"), logs)
-	})
-
-	Context("when the source's resource type is configured", func() {
-		BeforeEach(func() {
-			resourceTypes = append(resourceTypes, config.ResourceType{
-				Name:  "some-resource",
-				Image: "some-resource-image",
-			})
+			outputVersion, outputMetadata, outputError = outputter.PerformOutput(output, bytes.NewBufferString("the-source"), logs, abort)
 		})
 
 		It("creates a container with the image configured via the source's type", func() {
@@ -149,6 +151,16 @@ var _ = Describe("Outputter", func() {
 
 				Ω(streamedIn.Closed()).Should(BeTrue())
 			})
+
+			It("runs /tmp/resource/out <path> with the contents of the input config file on stdin", func() {
+				Ω(outputError).ShouldNot(HaveOccurred())
+
+				Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
+					{
+						Script: "/tmp/resource/out /tmp/build/src/some-resource < /tmp/resource-artifacts/stdin",
+					},
+				}))
+			})
 		})
 
 		Context("when streaming the source in succeeds", func() {
@@ -173,16 +185,6 @@ var _ = Describe("Outputter", func() {
 
 				Ω(string(streamedIn.Contents())).Should(Equal("the-source"))
 			})
-		})
-
-		It("runs /tmp/resource/out <path> with the contents of the input config file on stdin", func() {
-			Ω(outputError).ShouldNot(HaveOccurred())
-
-			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
-				{
-					Script: "/tmp/resource/out /tmp/build/src/some-resource < /tmp/resource-artifacts/stdin",
-				},
-			}))
 		})
 
 		Context("when /tmp/resource/out prints the version and metadata", func() {
@@ -298,19 +300,39 @@ var _ = Describe("Outputter", func() {
 				Ω(outputError.Error()).Should(ContainSubstring("exit status 9"))
 			})
 		})
+
+		Context("when the source's resource type is unknown", func() {
+			BeforeEach(func() {
+				output.Type = "lol-butts"
+			})
+
+			It("returns ErrUnknownSourceType", func() {
+				Ω(outputError).Should(Equal(ErrUnknownSourceType))
+			})
+
+			It("does not create a container", func() {
+				Ω(wardenClient.Connection.Created()).Should(BeEmpty())
+			})
+		})
 	})
 
-	Context("when the source's resource type is unknown", func() {
+	Context("when aborting", func() {
 		BeforeEach(func() {
-			output.Type = "lol-butts"
+			wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+				// cause reading from the stream to block so that it can be
+				// aborted
+				return 1, nil, nil
+			}
 		})
 
-		It("returns ErrUnknownSourceType", func() {
-			Ω(outputError).Should(Equal(ErrUnknownSourceType))
-		})
+		It("stops the container", func() {
+			go outputter.PerformOutput(output, bytes.NewBufferString("the-source"), logs, abort)
 
-		It("does not create a container", func() {
-			Ω(wardenClient.Connection.Created()).Should(BeEmpty())
+			close(abort)
+
+			Eventually(func() interface{} {
+				return wardenClient.Connection.Stopped("some-handle")
+			}).Should(HaveLen(1))
 		})
 	})
 })

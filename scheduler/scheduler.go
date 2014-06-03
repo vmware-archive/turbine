@@ -17,6 +17,7 @@ import (
 type Scheduler interface {
 	Start(builds.Build)
 	Attach(builder.RunningBuild)
+	Abort(guid string)
 
 	Drain() []builder.RunningBuild
 }
@@ -29,6 +30,7 @@ type scheduler struct {
 	inFlight *sync.WaitGroup
 	draining chan struct{}
 	running  map[*builder.RunningBuild]bool
+	aborting map[string]chan struct{}
 
 	mutex *sync.RWMutex
 }
@@ -46,6 +48,7 @@ func NewScheduler(b builder.Builder) Scheduler {
 		inFlight: new(sync.WaitGroup),
 		draining: make(chan struct{}),
 		running:  make(map[*builder.RunningBuild]bool),
+		aborting: make(map[string]chan struct{}),
 
 		mutex: new(sync.RWMutex),
 	}
@@ -62,7 +65,9 @@ func (scheduler *scheduler) Start(build builds.Build) {
 
 	log.Printf("building: %#v\n", build)
 
-	started, errored := scheduler.builder.Start(build)
+	abort := scheduler.abortChannel(build.Guid)
+
+	started, errored := scheduler.builder.Start(build, abort)
 
 	go func() {
 		select {
@@ -80,6 +85,7 @@ func (scheduler *scheduler) Start(build builds.Build) {
 			scheduler.reportBuild(build)
 		}
 
+		scheduler.unregisterAbortChannel(build.Guid)
 		scheduler.inFlight.Done()
 	}()
 }
@@ -92,7 +98,10 @@ func (scheduler *scheduler) Attach(running builder.RunningBuild) {
 
 	scheduler.addRunning(runningRef)
 
-	succeeded, failed, errored := scheduler.builder.Attach(running)
+	abort := scheduler.abortChannel(running.Build.Guid)
+	defer scheduler.unregisterAbortChannel(running.Build.Guid)
+
+	succeeded, failed, errored := scheduler.builder.Attach(running, abort)
 
 	select {
 	case err := <-failed:
@@ -119,8 +128,13 @@ func (scheduler *scheduler) Attach(running builder.RunningBuild) {
 	scheduler.removeRunning(runningRef)
 }
 
+func (scheduler *scheduler) Abort(guid string) {
+	scheduler.abortBuild(guid)
+}
+
 func (scheduler *scheduler) complete(succeeded builder.SucceededBuild) {
-	finished, errored := scheduler.builder.Complete(succeeded)
+	abort := scheduler.abortChannel(succeeded.Build.Guid)
+	finished, errored := scheduler.builder.Complete(succeeded, abort)
 
 	select {
 	case finishedBuild := <-finished:
@@ -160,6 +174,38 @@ func (scheduler *scheduler) removeRunning(running *builder.RunningBuild) {
 	scheduler.mutex.Lock()
 	delete(scheduler.running, running)
 	scheduler.mutex.Unlock()
+}
+
+func (scheduler *scheduler) abortChannel(guid string) chan struct{} {
+	scheduler.mutex.Lock()
+	defer scheduler.mutex.Unlock()
+
+	abort, found := scheduler.aborting[guid]
+	if !found {
+		abort = make(chan struct{})
+		scheduler.aborting[guid] = abort
+	}
+
+	return abort
+}
+
+func (scheduler *scheduler) unregisterAbortChannel(guid string) {
+	scheduler.mutex.Lock()
+	defer scheduler.mutex.Unlock()
+
+	delete(scheduler.aborting, guid)
+}
+
+func (scheduler *scheduler) abortBuild(guid string) {
+	scheduler.mutex.Lock()
+	defer scheduler.mutex.Unlock()
+
+	abort, found := scheduler.aborting[guid]
+	if !found {
+		return
+	}
+
+	close(abort)
 }
 
 func (scheduler *scheduler) runBuild(originalBuild builds.Build, started <-chan builder.RunningBuild, errored <-chan error) {

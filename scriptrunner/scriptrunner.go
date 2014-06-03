@@ -3,11 +3,14 @@ package scriptrunner
 import (
 	"archive/tar"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
 )
+
+var ErrAborted = errors.New("script aborted")
 
 type ErrResourceScriptFailed struct {
 	Stdout     []byte
@@ -28,6 +31,7 @@ func Run(
 	container warden.Container,
 	script string,
 	logs io.Writer,
+	abort <-chan struct{},
 	input interface{},
 	output interface{},
 ) error {
@@ -43,7 +47,7 @@ func Run(
 		return err
 	}
 
-	rawOutput, err := waitForRunToEnd(stream, logs)
+	rawOutput, err := waitForRunToEnd(container, stream, logs, abort)
 	if err != nil {
 		return err
 	}
@@ -91,32 +95,39 @@ func injectInput(container warden.Container, input interface{}) error {
 	return nil
 }
 
-func waitForRunToEnd(stream <-chan warden.ProcessStream, logs io.Writer) ([]byte, error) {
+func waitForRunToEnd(container warden.Container, stream <-chan warden.ProcessStream, logs io.Writer, abort <-chan struct{}) ([]byte, error) {
 	stdout := []byte{}
 	stderr := []byte{}
 
-	for chunk := range stream {
-		if chunk.ExitStatus != nil {
-			if *chunk.ExitStatus != 0 {
-				return nil, ErrResourceScriptFailed{
-					Stdout:     stdout,
-					Stderr:     stderr,
-					ExitStatus: *chunk.ExitStatus,
+script:
+	for {
+		select {
+		case chunk := <-stream:
+			if chunk.ExitStatus != nil {
+				if *chunk.ExitStatus != 0 {
+					return nil, ErrResourceScriptFailed{
+						Stdout:     stdout,
+						Stderr:     stderr,
+						ExitStatus: *chunk.ExitStatus,
+					}
 				}
+
+				break script
 			}
 
-			break
-		}
+			switch chunk.Source {
+			case warden.ProcessStreamSourceStdout:
+				stdout = append(stdout, chunk.Data...)
+			case warden.ProcessStreamSourceStderr:
+				if logs != nil {
+					logs.Write(chunk.Data)
+				}
 
-		switch chunk.Source {
-		case warden.ProcessStreamSourceStdout:
-			stdout = append(stdout, chunk.Data...)
-		case warden.ProcessStreamSourceStderr:
-			if logs != nil {
-				logs.Write(chunk.Data)
+				stderr = append(stderr, chunk.Data...)
 			}
-
-			stderr = append(stderr, chunk.Data...)
+		case <-abort:
+			container.Stop(false)
+			return nil, ErrAborted
 		}
 	}
 

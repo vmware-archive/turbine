@@ -12,12 +12,14 @@ import (
 	"github.com/tedsuo/ifrit/grouper"
 	"github.com/tedsuo/ifrit/http_server"
 	"github.com/tedsuo/ifrit/sigmon"
+	"github.com/tedsuo/router"
 
 	"github.com/winston-ci/prole/api"
 	"github.com/winston-ci/prole/builder"
 	"github.com/winston-ci/prole/checker"
 	"github.com/winston-ci/prole/config"
 	"github.com/winston-ci/prole/outputter"
+	"github.com/winston-ci/prole/routes"
 	"github.com/winston-ci/prole/scheduler"
 	"github.com/winston-ci/prole/snapshotter"
 	"github.com/winston-ci/prole/sourcefetcher"
@@ -27,6 +29,12 @@ var listenAddr = flag.String(
 	"listenAddr",
 	"0.0.0.0:4637",
 	"listening address",
+)
+
+var peerAddr = flag.String(
+	"peerAddr",
+	"127.0.0.1:4637",
+	"external address of the api server, used for callbacks",
 )
 
 var wardenNetwork = flag.String(
@@ -83,7 +91,9 @@ func main() {
 
 	scheduler := scheduler.NewScheduler(builder)
 
-	handler, err := api.New(scheduler, checker)
+	generator := router.NewRequestGenerator("http://"+*peerAddr, routes.Routes)
+
+	handler, err := api.New(scheduler, checker, generator)
 	if err != nil {
 		log.Fatalln("failed to initialize handler:", err)
 	}

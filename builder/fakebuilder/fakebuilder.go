@@ -8,18 +8,18 @@ import (
 )
 
 type Builder struct {
-	WhenStarting func(builds.Build) (<-chan builder.RunningBuild, <-chan error)
+	WhenStarting func(builds.Build, <-chan struct{}) (<-chan builder.RunningBuild, <-chan error)
 	built        []builds.Build
 	StartedBuild *builds.Build
 	StartError   error
 
-	WhenAttaching  func(builder.RunningBuild) (<-chan builder.SucceededBuild, <-chan error, <-chan error)
+	WhenAttaching  func(builder.RunningBuild, <-chan struct{}) (<-chan builder.SucceededBuild, <-chan error, <-chan error)
 	attached       []builder.RunningBuild
 	SucceededBuild *builds.Build
 	BuildFailure   error
 	BuildError     error
 
-	WhenCompleting func(builder.SucceededBuild) (<-chan builds.Build, <-chan error)
+	WhenCompleting func(builder.SucceededBuild, <-chan struct{}) (<-chan builds.Build, <-chan error)
 	completed      []builder.SucceededBuild
 	FinishedBuild  builds.Build
 	CompleteError  error
@@ -31,9 +31,9 @@ func New() *Builder {
 	return &Builder{}
 }
 
-func (fake *Builder) Start(build builds.Build) (<-chan builder.RunningBuild, <-chan error) {
+func (fake *Builder) Start(build builds.Build, abort <-chan struct{}) (<-chan builder.RunningBuild, <-chan error) {
 	if fake.WhenStarting != nil {
-		return fake.WhenStarting(build)
+		return fake.WhenStarting(build, abort)
 	}
 
 	started := make(chan builder.RunningBuild)
@@ -56,9 +56,9 @@ func (fake *Builder) Start(build builds.Build) (<-chan builder.RunningBuild, <-c
 	return started, errored
 }
 
-func (fake *Builder) Attach(runningBuild builder.RunningBuild) (<-chan builder.SucceededBuild, <-chan error, <-chan error) {
+func (fake *Builder) Attach(runningBuild builder.RunningBuild, abort <-chan struct{}) (<-chan builder.SucceededBuild, <-chan error, <-chan error) {
 	if fake.WhenAttaching != nil {
-		return fake.WhenAttaching(runningBuild)
+		return fake.WhenAttaching(runningBuild, abort)
 	}
 
 	succeeded := make(chan builder.SucceededBuild)
@@ -84,9 +84,9 @@ func (fake *Builder) Attach(runningBuild builder.RunningBuild) (<-chan builder.S
 	return succeeded, failed, errored
 }
 
-func (fake *Builder) Complete(succeededBuild builder.SucceededBuild) (<-chan builds.Build, <-chan error) {
+func (fake *Builder) Complete(succeededBuild builder.SucceededBuild, abort <-chan struct{}) (<-chan builds.Build, <-chan error) {
 	if fake.WhenCompleting != nil {
-		return fake.WhenCompleting(succeededBuild)
+		return fake.WhenCompleting(succeededBuild, abort)
 	}
 
 	finished := make(chan builds.Build)

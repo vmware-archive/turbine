@@ -8,7 +8,7 @@ import (
 	"github.com/winston-ci/prole/api/builds"
 )
 
-type OutputterFunc func(builds.Output, io.Reader, io.Writer) (builds.Version, []builds.MetadataField, error)
+type OutputterFunc func(builds.Output, io.Reader, io.Writer, <-chan struct{}) (builds.Version, []builds.MetadataField, error)
 
 type Outputter struct {
 	performedOutputs     []PerformSpec
@@ -26,13 +26,13 @@ type PerformSpec struct {
 
 func New() *Outputter {
 	return &Outputter{
-		WhenPerformingOutput: func(builds.Output, io.Reader, io.Writer) (builds.Version, []builds.MetadataField, error) {
+		WhenPerformingOutput: func(builds.Output, io.Reader, io.Writer, <-chan struct{}) (builds.Version, []builds.MetadataField, error) {
 			return nil, nil, nil
 		},
 	}
 }
 
-func (outputter *Outputter) PerformOutput(output builds.Output, streamIn io.Reader, logs io.Writer) (builds.Version, []builds.MetadataField, error) {
+func (outputter *Outputter) PerformOutput(output builds.Output, streamIn io.Reader, logs io.Writer, abort <-chan struct{}) (builds.Version, []builds.MetadataField, error) {
 	if outputter.PerformOutputError != nil {
 		return nil, nil, outputter.PerformOutputError
 	}
@@ -52,7 +52,7 @@ func (outputter *Outputter) PerformOutput(output builds.Output, streamIn io.Read
 	})
 	outputter.Unlock()
 
-	return outputter.WhenPerformingOutput(output, streamIn, logs)
+	return outputter.WhenPerformingOutput(output, streamIn, logs, abort)
 }
 
 func (outputter *Outputter) PerformedOutputs() []PerformSpec {

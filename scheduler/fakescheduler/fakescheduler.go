@@ -10,6 +10,7 @@ import (
 type FakeScheduler struct {
 	scheduled []builds.Build
 	attached  []builder.RunningBuild
+	aborted   []string
 
 	DrainResult []builder.RunningBuild
 
@@ -36,6 +37,12 @@ func (scheduler *FakeScheduler) Drain() []builder.RunningBuild {
 	return scheduler.DrainResult
 }
 
+func (scheduler *FakeScheduler) Abort(guid string) {
+	scheduler.Lock()
+	scheduler.aborted = append(scheduler.aborted, guid)
+	scheduler.Unlock()
+}
+
 func (scheduler *FakeScheduler) Scheduled() []builds.Build {
 	scheduler.RLock()
 
@@ -56,4 +63,15 @@ func (scheduler *FakeScheduler) Attached() []builder.RunningBuild {
 	scheduler.RUnlock()
 
 	return attached
+}
+
+func (scheduler *FakeScheduler) Aborted() []string {
+	scheduler.RLock()
+
+	aborted := make([]string, len(scheduler.aborted))
+	copy(aborted, scheduler.aborted)
+
+	scheduler.RUnlock()
+
+	return aborted
 }

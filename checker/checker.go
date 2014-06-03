@@ -56,6 +56,7 @@ func (checker *checker) Check(input builds.Input) ([]builds.Version, error) {
 		container,
 		"/tmp/resource/check",
 		nil,
+		nil,
 		versionAndSource{input.Version, input.Source},
 		&versions,
 	)

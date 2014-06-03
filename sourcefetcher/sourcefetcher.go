@@ -47,7 +47,7 @@ func NewSourceFetcher(
 	}
 }
 
-func (fetcher *SourceFetcher) Fetch(input builds.Input, logs io.Writer) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
+func (fetcher *SourceFetcher) Fetch(input builds.Input, logs io.Writer, abort <-chan struct{}) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
 	var buildConfig builds.Config
 
 	resourceType, found := fetcher.resourceTypes.Lookup(input.Type)
@@ -68,6 +68,7 @@ func (fetcher *SourceFetcher) Fetch(input builds.Input, logs io.Writer) (builds.
 		container,
 		"/tmp/resource/in /tmp/resource-destination",
 		logs,
+		abort,
 		inRequest{input.Version, input.Source},
 		&resp,
 	)

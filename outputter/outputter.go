@@ -44,6 +44,7 @@ func (outputter *Outputter) PerformOutput(
 	output builds.Output,
 	sourceStream io.Reader,
 	logs io.Writer,
+	abort <-chan struct{},
 ) (builds.Version, []builds.MetadataField, error) {
 	resourceType, found := outputter.resourceTypes.Lookup(output.Type)
 	if !found {
@@ -68,6 +69,7 @@ func (outputter *Outputter) PerformOutput(
 		container,
 		"/tmp/resource/out "+path.Join("/tmp/build/src", output.SourcePath),
 		logs,
+		abort,
 		outRequest{output.Params},
 		&resp,
 	)

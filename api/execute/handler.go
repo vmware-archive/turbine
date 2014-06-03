@@ -6,17 +6,26 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/nu7hatch/gouuid"
+	"github.com/tedsuo/router"
+
 	"github.com/winston-ci/prole/api/builds"
+	"github.com/winston-ci/prole/routes"
 	"github.com/winston-ci/prole/scheduler"
 )
 
 type handler struct {
-	scheduler scheduler.Scheduler
+	scheduler     scheduler.Scheduler
+	proleEndpoint *router.RequestGenerator
 }
 
-func NewHandler(scheduler scheduler.Scheduler) http.Handler {
+func NewHandler(
+	scheduler scheduler.Scheduler,
+	proleEndpoint *router.RequestGenerator,
+) http.Handler {
 	return &handler{
-		scheduler: scheduler,
+		scheduler:     scheduler,
+		proleEndpoint: proleEndpoint,
 	}
 }
 
@@ -37,6 +46,28 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(err.Error()))
 		return
 	}
+
+	guid, err := uuid.NewV4()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	build.Guid = guid.String()
+
+	abortReq, err := handler.proleEndpoint.RequestForHandler(
+		routes.AbortBuild,
+		router.Params{"guid": build.Guid},
+		nil,
+	)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	build.AbortURL = abortReq.URL.String()
 
 	log.Println("scheduling", build.Guid)
 

@@ -26,6 +26,7 @@ var _ = Describe("SourceFetcher", func() {
 
 		input builds.Input
 		logs  io.Writer
+		abort chan struct{}
 
 		inStdout     string
 		inStderr     string
@@ -40,7 +41,13 @@ var _ = Describe("SourceFetcher", func() {
 	)
 
 	BeforeEach(func() {
-		resourceTypes = config.ResourceTypes{}
+		resourceTypes = []config.ResourceType{
+			{
+				Name:  "some-resource",
+				Image: "some-resource-image",
+			},
+		}
+
 		wardenClient = fake_warden_client.New()
 
 		input = builds.Input{
@@ -51,6 +58,8 @@ var _ = Describe("SourceFetcher", func() {
 
 		logs = nil
 
+		abort = make(chan struct{})
+
 		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
 			return "some-handle", nil
 		}
@@ -59,6 +68,8 @@ var _ = Describe("SourceFetcher", func() {
 		inStderr = ""
 		inExitStatus = 0
 		inError = nil
+
+		sourceFetcher = NewSourceFetcher(resourceTypes, wardenClient)
 	})
 
 	primedStream := func(payloads ...warden.ProcessStream) <-chan warden.ProcessStream {
@@ -73,36 +84,27 @@ var _ = Describe("SourceFetcher", func() {
 		return stream
 	}
 
-	JustBeforeEach(func() {
-		inStream := primedStream(
-			warden.ProcessStream{
-				Source: warden.ProcessStreamSourceStdout,
-				Data:   []byte(inStdout),
-			},
-			warden.ProcessStream{
-				Source: warden.ProcessStreamSourceStderr,
-				Data:   []byte(inStderr),
-			},
-			warden.ProcessStream{
-				ExitStatus: &inExitStatus,
-			},
-		)
+	Context("when fetching the resource", func() {
+		JustBeforeEach(func() {
+			inStream := primedStream(
+				warden.ProcessStream{
+					Source: warden.ProcessStreamSourceStdout,
+					Data:   []byte(inStdout),
+				},
+				warden.ProcessStream{
+					Source: warden.ProcessStreamSourceStderr,
+					Data:   []byte(inStderr),
+				},
+				warden.ProcessStream{
+					ExitStatus: &inExitStatus,
+				},
+			)
 
-		wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-			return 1, inStream, inError
-		}
+			wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+				return 1, inStream, inError
+			}
 
-		sourceFetcher = NewSourceFetcher(resourceTypes, wardenClient)
-
-		extractedConfig, fetchedVersion, fetchedMetadata, fetchedStream, fetchError = sourceFetcher.Fetch(input, logs)
-	})
-
-	Context("when the source's resource type is configured", func() {
-		BeforeEach(func() {
-			resourceTypes = append(resourceTypes, config.ResourceType{
-				Name:  "some-resource",
-				Image: "some-resource-image",
-			})
+			extractedConfig, fetchedVersion, fetchedMetadata, fetchedStream, fetchError = sourceFetcher.Fetch(input, logs, abort)
 		})
 
 		It("creates a container with the image configured via the source's type", func() {
@@ -377,19 +379,39 @@ var _ = Describe("SourceFetcher", func() {
 				Ω(fetchError).Should(Equal(disaster))
 			})
 		})
+
+		Context("when the source's resource type is unknown", func() {
+			BeforeEach(func() {
+				input.Type = "lol-butts"
+			})
+
+			It("returns ErrUnknownSourceType", func() {
+				Ω(fetchError).Should(Equal(ErrUnknownSourceType))
+			})
+
+			It("does not create a container", func() {
+				Ω(wardenClient.Connection.Created()).Should(BeEmpty())
+			})
+		})
 	})
 
-	Context("when the source's resource type is unknown", func() {
+	Context("when aborting", func() {
 		BeforeEach(func() {
-			input.Type = "lol-butts"
+			wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+				// cause reading from the stream to block so that it can be
+				// aborted
+				return 1, nil, nil
+			}
 		})
 
-		It("returns ErrUnknownSourceType", func() {
-			Ω(fetchError).Should(Equal(ErrUnknownSourceType))
-		})
+		It("stops the container", func() {
+			go sourceFetcher.Fetch(input, logs, abort)
 
-		It("does not create a container", func() {
-			Ω(wardenClient.Connection.Created()).Should(BeEmpty())
+			close(abort)
+
+			Eventually(func() interface{} {
+				return wardenClient.Connection.Stopped("some-handle")
+			}).Should(HaveLen(1))
 		})
 	})
 })

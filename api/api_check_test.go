@@ -9,10 +9,12 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tedsuo/router"
 
 	"github.com/winston-ci/prole/api"
 	"github.com/winston-ci/prole/api/builds"
 	"github.com/winston-ci/prole/checker/fakechecker"
+	"github.com/winston-ci/prole/routes"
 	"github.com/winston-ci/prole/scheduler/fakescheduler"
 )
 
@@ -26,7 +28,9 @@ var _ = Describe("API", func() {
 		scheduler := fakescheduler.New()
 		checker = fakechecker.New()
 
-		handler, err := api.New(scheduler, checker)
+		proleEndpoint := router.NewRequestGenerator("http://some-prole", routes.Routes)
+
+		handler, err := api.New(scheduler, checker, proleEndpoint)
 		Ω(err).ShouldNot(HaveOccurred())
 
 		server = httptest.NewServer(handler)

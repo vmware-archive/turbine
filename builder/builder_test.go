@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"code.google.com/p/go.net/websocket"
+	"github.com/cloudfoundry-incubator/garden/client/connection/fake_connection"
 	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
 	"github.com/cloudfoundry-incubator/garden/warden"
 	. "github.com/onsi/ginkgo"
@@ -101,8 +102,11 @@ var _ = Describe("Builder", func() {
 		var started <-chan RunningBuild
 		var errored <-chan error
 
+		var abort chan struct{}
+
 		JustBeforeEach(func() {
-			started, errored = builder.Start(build)
+			abort = make(chan struct{})
+			started, errored = builder.Start(build, abort)
 		})
 
 		BeforeEach(func() {
@@ -110,7 +114,7 @@ var _ = Describe("Builder", func() {
 				return "some-handle", nil
 			}
 
-			sourceFetcher.WhenFetching = func(builds.Input, io.Writer) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
+			sourceFetcher.WhenFetching = func(builds.Input, io.Writer, <-chan struct{}) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
 				return builds.Config{}, nil, nil, bytes.NewBufferString("some-data"), nil
 			}
 		})
@@ -125,7 +129,7 @@ var _ = Describe("Builder", func() {
 
 		Context("when fetching the build's inputs succeeds", func() {
 			BeforeEach(func() {
-				sourceFetcher.WhenFetching = func(input builds.Input, logs io.Writer) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
+				sourceFetcher.WhenFetching = func(input builds.Input, logs io.Writer, abort <-chan struct{}) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
 					if input.Name == "name1" {
 						version := builds.Version{"key": "version-1"}
 						metadata := []builds.MetadataField{{Name: "key", Value: "meta-1"}}
@@ -224,6 +228,35 @@ var _ = Describe("Builder", func() {
 			})
 		})
 
+		Context("when the build is aborted", func() {
+			var gotAborts chan (<-chan struct{})
+
+			BeforeEach(func() {
+				gotAborts = make(chan (<-chan struct{}), 1)
+
+				sourceFetcher.WhenFetching = func(input builds.Input, logs io.Writer, abort <-chan struct{}) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
+					gotAborts <- abort
+
+					// return abort error to simulate fetching being aborted;
+					// assert that the channel closed below
+					return builds.Config{}, builds.Version{}, nil, nil, ErrAborted
+				}
+			})
+
+			It("aborts source fetching", func() {
+				Eventually(errored).Should(Receive(Equal(ErrAborted)))
+
+				var abortFetch <-chan struct{}
+				Ω(gotAborts).Should(Receive(&abortFetch))
+
+				Ω(abortFetch).ShouldNot(BeClosed())
+
+				close(abort)
+
+				Ω(abortFetch).Should(BeClosed())
+			})
+		})
+
 		It("runs the build's script in the container", func() {
 			Eventually(started).Should(Receive())
 
@@ -284,7 +317,7 @@ var _ = Describe("Builder", func() {
 
 				Context("and fetching inputs emits logs", func() {
 					BeforeEach(func() {
-						sourceFetcher.WhenFetching = func(input builds.Input, logs io.Writer) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
+						sourceFetcher.WhenFetching = func(input builds.Input, logs io.Writer, abort <-chan struct{}) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
 							defer GinkgoRecover()
 
 							Ω(logs).ShouldNot(BeNil())
@@ -375,10 +408,13 @@ var _ = Describe("Builder", func() {
 		var succeeded <-chan SucceededBuild
 		var failed <-chan error
 		var errored <-chan error
+
 		var runningBuild RunningBuild
+		var abort chan struct{}
 
 		JustBeforeEach(func() {
-			succeeded, failed, errored = builder.Attach(runningBuild)
+			abort = make(chan struct{})
+			succeeded, failed, errored = builder.Attach(runningBuild, abort)
 		})
 
 		BeforeEach(func() {
@@ -387,13 +423,11 @@ var _ = Describe("Builder", func() {
 					Name:            "name1",
 					Type:            "raw",
 					DestinationPath: "some/source/path",
-					// Source:          builds.Source("some-source-1"),
 				},
 				{
 					Name:            "name2",
 					Type:            "raw",
 					DestinationPath: "another/source/path",
-					// Source:          builds.Source("some-source-2"),
 				},
 			}
 
@@ -501,6 +535,20 @@ var _ = Describe("Builder", func() {
 			})
 		})
 
+		Context("when the build is aborted", func() {
+			BeforeEach(func() {
+				runningBuild.ProcessStream = make(chan warden.ProcessStream)
+			})
+
+			It("stops the container", func() {
+				close(abort)
+
+				Eventually(func() interface{} {
+					return wardenClient.Connection.Stopped("the-attached-container")
+				}).Should(Equal([]fake_connection.StopSpec{{}}))
+			})
+		})
+
 		Context("when the build's script exits 0", func() {
 			BeforeEach(func() {
 				runningBuild.ProcessStream = exitedStream(0)
@@ -583,9 +631,11 @@ var _ = Describe("Builder", func() {
 		var finished <-chan builds.Build
 		var errored <-chan error
 		var succeededBuild SucceededBuild
+		var abort chan struct{}
 
 		JustBeforeEach(func() {
-			finished, errored = builder.Complete(succeededBuild)
+			abort = make(chan struct{})
+			finished, errored = builder.Complete(succeededBuild, abort)
 		})
 
 		BeforeEach(func() {
@@ -662,7 +712,7 @@ var _ = Describe("Builder", func() {
 
 					sync := make(chan bool)
 
-					outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader, logs io.Writer) (builds.Version, []builds.MetadataField, error) {
+					outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader, logs io.Writer, abort <-chan struct{}) (builds.Version, []builds.MetadataField, error) {
 						if output.Params["key"] == "param-1" {
 							<-sync
 							version := builds.Version{"key": "out-version-1"}
@@ -751,6 +801,40 @@ var _ = Describe("Builder", func() {
 				})
 			})
 
+			Context("when the build is aborted", func() {
+				var gotAborts chan (<-chan struct{})
+
+				BeforeEach(func() {
+					gotAborts = make(chan (<-chan struct{}), len(succeededBuild.Build.Outputs))
+
+					outputter.WhenPerformingOutput = func(
+						output builds.Output,
+						tarStream io.Reader,
+						logs io.Writer,
+						abort <-chan struct{},
+					) (builds.Version, []builds.MetadataField, error) {
+						gotAborts <- abort
+
+						// return abort error to simulate fetching being aborted;
+						// assert that the channel closed below
+						return builds.Version{}, nil, ErrAborted
+					}
+				})
+
+				It("aborts performing the outputs", func() {
+					Eventually(errored).Should(Receive(Equal(ErrAborted)))
+
+					var abortFetch <-chan struct{}
+					Ω(gotAborts).Should(Receive(&abortFetch))
+
+					Ω(abortFetch).ShouldNot(BeClosed())
+
+					close(abort)
+
+					Ω(abortFetch).Should(BeClosed())
+				})
+			})
+
 			Context("and streaming out fails", func() {
 				disaster := errors.New("oh no!")
 
@@ -771,7 +855,7 @@ var _ = Describe("Builder", func() {
 				BeforeEach(func() {
 					logBuffer = gbytes.NewBuffer()
 
-					outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader, logs io.Writer) (builds.Version, []builds.MetadataField, error) {
+					outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader, logs io.Writer, abort <-chan struct{}) (builds.Version, []builds.MetadataField, error) {
 						defer GinkgoRecover()
 
 						Ω(logs).ShouldNot(BeNil())

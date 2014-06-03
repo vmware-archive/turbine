@@ -8,7 +8,7 @@ import (
 	"github.com/winston-ci/prole/api/builds"
 )
 
-type FetcherFunc func(builds.Input, io.Writer) (
+type FetcherFunc func(builds.Input, io.Writer, <-chan struct{}) (
 	builds.Config,
 	builds.Version,
 	[]builds.MetadataField,
@@ -28,7 +28,7 @@ func New() *Fetcher {
 	return &Fetcher{}
 }
 
-func (fetcher *Fetcher) Fetch(input builds.Input, logs io.Writer) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
+func (fetcher *Fetcher) Fetch(input builds.Input, logs io.Writer, abort <-chan struct{}) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
 	if fetcher.FetchError != nil {
 		return builds.Config{}, nil, nil, nil, fetcher.FetchError
 	}
@@ -39,7 +39,7 @@ func (fetcher *Fetcher) Fetch(input builds.Input, logs io.Writer) (builds.Config
 	var result io.Reader
 
 	if fetcher.WhenFetching != nil {
-		config, version, metadata, stream, err := fetcher.WhenFetching(input, logs)
+		config, version, metadata, stream, err := fetcher.WhenFetching(input, logs, abort)
 		if err != nil {
 			return builds.Config{}, nil, nil, nil, err
 		}
