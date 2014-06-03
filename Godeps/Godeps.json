@@ -44,6 +44,10 @@
 			"Rev": "84842532f8194fe186b48a009251dfaec9924ccd"
 		},
 		{
+			"ImportPath": "github.com/nu7hatch/gouuid",
+			"Rev": "179d4d0c4d8d407a32af483c2354df1d2c91e6c3"
+		},
+		{
 			"ImportPath": "github.com/onsi/ginkgo",
 			"Comment": "v1.0.0-2-g4cf6831",
 			"Rev": "4cf683101c36426dc975f4db4d7f01d9c071f31a"
