@@ -338,13 +338,19 @@ var _ = Describe("Builder", func() {
 				})
 			})
 
-			Context("but the sink is not listening", func() {
+			Context("but the sink disconnects", func() {
 				BeforeEach(func() {
-					websocketSink.Close()
+					okHandler := websocketSink.GetHandler(0)
+
+					websocketSink.SetHandler(0, func(w http.ResponseWriter, r *http.Request) {
+						websocketSink.HTTPTestServer.CloseClientConnections()
+					})
+
+					websocketSink.AppendHandlers(okHandler)
 				})
 
-				It("sends the error result", func() {
-					Eventually(errored).Should(Receive())
+				It("retries until it is", func() {
+					Eventually(logBuffer, 2).Should(gbytes.Say("starting...\n"))
 				})
 			})
 		})
@@ -614,13 +620,20 @@ var _ = Describe("Builder", func() {
 					Eventually(logBuffer).Should(gbytes.Say("stderr\n"))
 				})
 
-				Context("but the sink is not listening", func() {
+				Context("but the sink disconnects", func() {
 					BeforeEach(func() {
-						websocketSink.Close()
+						okHandler := websocketSink.GetHandler(0)
+
+						websocketSink.SetHandler(0, func(w http.ResponseWriter, r *http.Request) {
+							websocketSink.HTTPTestServer.CloseClientConnections()
+						})
+
+						websocketSink.AppendHandlers(okHandler)
 					})
 
-					It("sends the error result", func() {
-						Eventually(errored).Should(Receive())
+					It("retries until it is", func() {
+						Eventually(logBuffer, 2).Should(gbytes.Say("stdout\n"))
+						Eventually(logBuffer).Should(gbytes.Say("stderr\n"))
 					})
 				})
 			})
@@ -865,7 +878,7 @@ var _ = Describe("Builder", func() {
 					}
 				})
 
-				Context("and the running build already has a log stream", func() {
+				Context("when the running build already has a log stream", func() {
 					BeforeEach(func() {
 						succeededBuild.LogStream = logBuffer
 					})
@@ -875,7 +888,7 @@ var _ = Describe("Builder", func() {
 					})
 				})
 
-				Context("and a logs url is configured", func() {
+				Context("when a logs url is configured", func() {
 					var websocketSink *ghttp.Server
 
 					BeforeEach(func() {
@@ -886,13 +899,19 @@ var _ = Describe("Builder", func() {
 						Eventually(logBuffer).Should(gbytes.Say("hello from outputter"))
 					})
 
-					Context("but the sink is not listening", func() {
+					Context("but the sink disconnects", func() {
 						BeforeEach(func() {
-							websocketSink.Close()
+							okHandler := websocketSink.GetHandler(0)
+
+							websocketSink.SetHandler(0, func(w http.ResponseWriter, r *http.Request) {
+								websocketSink.HTTPTestServer.CloseClientConnections()
+							})
+
+							websocketSink.AppendHandlers(okHandler)
 						})
 
-						It("sends the error result", func() {
-							Eventually(errored).Should(Receive())
+						It("retries until it is", func() {
+							Eventually(logBuffer, 2).Should(gbytes.Say("hello from outputter"))
 						})
 					})
 				})

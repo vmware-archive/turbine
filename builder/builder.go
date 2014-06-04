@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 
-	"code.google.com/p/go.net/websocket"
 	"github.com/cloudfoundry-incubator/garden/warden"
 
 	"github.com/winston-ci/prole/api/builds"
+	"github.com/winston-ci/prole/logwriter"
 )
 
 var ErrAborted = errors.New("build aborted")
@@ -111,11 +111,7 @@ func (builder *builder) Complete(succeeded SucceededBuild, abort <-chan struct{}
 }
 
 func (builder *builder) start(build builds.Build, abort <-chan struct{}, started chan<- RunningBuild, errored chan<- error) {
-	logs, err := builder.logsFor(build.LogsURL)
-	if err != nil {
-		errored <- err
-		return
-	}
+	logs := builder.logsFor(build.LogsURL)
 
 	resources := map[string]io.Reader{}
 
@@ -173,13 +169,7 @@ func (builder *builder) start(build builds.Build, abort <-chan struct{}, started
 
 func (builder *builder) attach(running RunningBuild, abort <-chan struct{}, succeeded chan<- SucceededBuild, failed chan<- error, errored chan<- error) {
 	if running.LogStream == nil {
-		logs, err := builder.logsFor(running.Build.LogsURL)
-		if err != nil {
-			errored <- err
-			return
-		}
-
-		running.LogStream = logs
+		running.LogStream = builder.logsFor(running.Build.LogsURL)
 	}
 
 	if running.Container == nil {
@@ -226,13 +216,7 @@ func (builder *builder) attach(running RunningBuild, abort <-chan struct{}, succ
 
 func (builder *builder) complete(succeeded SucceededBuild, abort <-chan struct{}, finished chan<- builds.Build, errored chan<- error) {
 	if succeeded.LogStream == nil {
-		logs, err := builder.logsFor(succeeded.Build.LogsURL)
-		if err != nil {
-			errored <- err
-			return
-		}
-
-		succeeded.LogStream = logs
+		succeeded.LogStream = builder.logsFor(succeeded.Build.LogsURL)
 	}
 
 	defer succeeded.LogStream.Close()
@@ -248,19 +232,12 @@ func (builder *builder) complete(succeeded SucceededBuild, abort <-chan struct{}
 	finished <- succeeded.Build
 }
 
-func (builder *builder) logsFor(logURL string) (io.WriteCloser, error) {
+func (builder *builder) logsFor(logURL string) io.WriteCloser {
 	if logURL == "" {
-		return nullSink{}, nil
+		return nullSink{}
 	}
 
-	conn, err := websocket.Dial(logURL, "", "http://0.0.0.0")
-	if err != nil {
-		return nil, err
-	}
-
-	conn.PayloadType = websocket.BinaryFrame
-
-	return conn, nil
+	return logwriter.NewWriter(logURL)
 }
 
 func (builder *builder) createBuildContainer(
