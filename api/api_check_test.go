@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -14,6 +16,7 @@ import (
 
 var _ = Describe("POST /checks", func() {
 	var input builds.Input
+	var requestURL string
 	var requestBody string
 	var response *http.Response
 
@@ -31,6 +34,8 @@ var _ = Describe("POST /checks", func() {
 			Version: builds.Version{"ref": "foo"},
 		}
 
+		requestURL = server.URL + "/checks"
+
 		requestBody = inputPayload(input)
 	})
 
@@ -38,7 +43,7 @@ var _ = Describe("POST /checks", func() {
 		var err error
 
 		response, err = client.Post(
-			server.URL+"/checks",
+			requestURL,
 			"application/json",
 			bytes.NewBufferString(requestBody),
 		)
@@ -85,6 +90,63 @@ var _ = Describe("POST /checks", func() {
 				Ω(err).ShouldNot(HaveOccurred())
 
 				Ω(versions).Should(Equal([]builds.Version{version1, version2}))
+			})
+		})
+
+		Context("when an interval is specified", func() {
+			BeforeEach(func() {
+				requestURL = requestURL + "?interval=100ms"
+			})
+
+			var times chan time.Time
+			var responseStream *json.Decoder
+
+			BeforeEach(func() {
+				times = make(chan time.Time, 100)
+				versions := make(chan []builds.Version, 100)
+
+				versions <- []builds.Version{}
+				versions <- []builds.Version{}
+				versions <- []builds.Version{{"version": "1"}, {"version": "2"}}
+
+				resource.CheckStub = func(builds.Input) ([]builds.Version, error) {
+					times <- time.Now()
+					return <-versions, nil
+				}
+			})
+
+			JustBeforeEach(func() {
+				responseStream = json.NewDecoder(response.Body)
+			})
+
+			It("writes the versions and stops once some show up", func() {
+				var t1, t2, t3 time.Time
+
+				Eventually(times).Should(Receive(&t1))
+
+				var versions []builds.Version
+				err := responseStream.Decode(&versions)
+				Ω(err).ShouldNot(HaveOccurred())
+				Ω(versions).Should(BeEmpty())
+
+				Eventually(times).Should(Receive(&t2))
+
+				err = responseStream.Decode(&versions)
+				Ω(err).ShouldNot(HaveOccurred())
+				Ω(versions).Should(BeEmpty())
+
+				Ω(t2.Sub(t1)).Should(BeNumerically("~", 100*time.Millisecond, 50*time.Millisecond))
+
+				Eventually(times).Should(Receive(&t3))
+
+				err = responseStream.Decode(&versions)
+				Ω(err).ShouldNot(HaveOccurred())
+				Ω(versions).Should(Equal([]builds.Version{{"version": "1"}, {"version": "2"}}))
+
+				Ω(t3.Sub(t2)).Should(BeNumerically("~", 100*time.Millisecond, 50*time.Millisecond))
+
+				err = responseStream.Decode(&versions)
+				Ω(err).Should(Equal(io.EOF))
 			})
 		})
 
