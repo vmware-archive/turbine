@@ -10,17 +10,17 @@ import (
 	"github.com/winston-ci/prole/resource"
 )
 
-type handler struct {
+type Handler struct {
 	tracker resource.Tracker
 }
 
-func NewHandler(tracker resource.Tracker) http.Handler {
-	return &handler{
+func NewHandler(tracker resource.Tracker) *Handler {
+	return &Handler{
 		tracker: tracker,
 	}
 }
 
-func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (handler *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var interval time.Duration
 
 	intervalStr := r.FormValue("interval")

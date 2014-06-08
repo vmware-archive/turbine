@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 
+	"code.google.com/p/go.net/websocket"
+
 	"github.com/tedsuo/router"
 
 	"github.com/winston-ci/prole/api/abort"
@@ -18,10 +20,13 @@ func New(
 	tracker resource.Tracker,
 	proleEndpoint *router.RequestGenerator,
 ) (http.Handler, error) {
+	checkHandler := check.NewHandler(tracker)
+
 	handlers := map[string]http.Handler{
-		routes.ExecuteBuild: execute.NewHandler(scheduler, proleEndpoint),
-		routes.AbortBuild:   abort.NewHandler(scheduler),
-		routes.CheckInput:   check.NewHandler(tracker),
+		routes.ExecuteBuild:     execute.NewHandler(scheduler, proleEndpoint),
+		routes.AbortBuild:       abort.NewHandler(scheduler),
+		routes.CheckInput:       checkHandler,
+		routes.CheckInputStream: websocket.Server{Handler: checkHandler.Stream},
 	}
 
 	return router.NewRouter(routes.Routes, handlers)
