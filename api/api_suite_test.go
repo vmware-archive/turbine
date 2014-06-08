@@ -18,6 +18,7 @@ import (
 
 var scheduler *fakescheduler.FakeScheduler
 var tracker *fakes.FakeTracker
+var drain chan struct{}
 
 var server *httptest.Server
 var client *http.Client
@@ -25,10 +26,11 @@ var client *http.Client
 var _ = BeforeEach(func() {
 	scheduler = fakescheduler.New()
 	tracker = new(fakes.FakeTracker)
+	drain = make(chan struct{})
 
 	proleEndpoint := router.NewRequestGenerator("http://some-prole", routes.Routes)
 
-	handler, err := api.New(scheduler, tracker, proleEndpoint)
+	handler, err := api.New(scheduler, tracker, proleEndpoint, drain)
 	Ω(err).ShouldNot(HaveOccurred())
 
 	server = httptest.NewServer(handler)

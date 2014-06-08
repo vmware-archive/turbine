@@ -89,7 +89,9 @@ func main() {
 
 	generator := router.NewRequestGenerator("http://"+*peerAddr, routes.Routes)
 
-	handler, err := api.New(scheduler, resourceTracker, generator)
+	drain := make(chan struct{})
+
+	handler, err := api.New(scheduler, resourceTracker, generator, drain)
 	if err != nil {
 		log.Fatalln("failed to initialize handler:", err)
 	}
@@ -97,6 +99,12 @@ func main() {
 	group := grouper.EnvokeGroup(grouper.RunGroup{
 		"api":         http_server.New(*listenAddr, handler),
 		"snapshotter": snapshotter.NewSnapshotter(*snapshotPath, scheduler),
+		"drainer": ifrit.RunFunc(func(signals <-chan os.Signal, ready chan<- struct{}) error {
+			close(ready)
+			<-signals
+			close(drain)
+			return nil
+		}),
 	})
 
 	running := ifrit.Envoke(sigmon.New(group))

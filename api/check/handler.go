@@ -12,11 +12,13 @@ import (
 
 type Handler struct {
 	tracker resource.Tracker
+	drain   <-chan struct{}
 }
 
-func NewHandler(tracker resource.Tracker) *Handler {
+func NewHandler(tracker resource.Tracker, drain <-chan struct{}) *Handler {
 	return &Handler{
 		tracker: tracker,
+		drain:   drain,
 	}
 }
 

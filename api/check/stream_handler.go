@@ -11,6 +11,17 @@ import (
 )
 
 func (handler *Handler) Stream(conn *websocket.Conn) {
+	done := make(chan struct{})
+	defer close(done)
+
+	go func() {
+		select {
+		case <-handler.drain:
+			conn.Close()
+		case <-done:
+		}
+	}()
+
 	var input builds.Input
 	err := json.NewDecoder(conn).Decode(&input)
 	if err != nil {
@@ -51,7 +62,12 @@ func (handler *Handler) Stream(conn *websocket.Conn) {
 		}
 
 		if err != nil {
-			log.Println("malformed request:", err)
+			select {
+			case <-handler.drain:
+			default:
+				log.Println("malformed request:", err)
+			}
+
 			return
 		}
 	}

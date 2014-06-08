@@ -19,8 +19,9 @@ func New(
 	scheduler scheduler.Scheduler,
 	tracker resource.Tracker,
 	proleEndpoint *router.RequestGenerator,
+	drain <-chan struct{},
 ) (http.Handler, error) {
-	checkHandler := check.NewHandler(tracker)
+	checkHandler := check.NewHandler(tracker, drain)
 
 	handlers := map[string]http.Handler{
 		routes.ExecuteBuild:     execute.NewHandler(scheduler, proleEndpoint),

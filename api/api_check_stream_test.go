@@ -109,6 +109,17 @@ var _ = Describe("GET /checks/stream", func() {
 		})
 	})
 
+	Describe("draining", func() {
+		It("closes the connection", func() {
+			close(drain)
+
+			Eventually(func() error {
+				_, err := conn.Write([]byte{})
+				return err
+			}).Should(HaveOccurred())
+		})
+	})
+
 	Context("when an invalid payload is sent", func() {
 		JustBeforeEach(func() {
 			_, err := conn.Write([]byte("ß"))
