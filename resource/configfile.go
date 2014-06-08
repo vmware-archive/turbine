@@ -1,4 +1,4 @@
-package sourcefetcher
+package resource
 
 import (
 	"fmt"

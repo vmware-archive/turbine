@@ -6,16 +6,16 @@ import (
 	"net/http"
 
 	"github.com/winston-ci/prole/api/builds"
-	"github.com/winston-ci/prole/checker"
+	"github.com/winston-ci/prole/resource"
 )
 
 type handler struct {
-	checker checker.Checker
+	tracker resource.Tracker
 }
 
-func NewHandler(checker checker.Checker) http.Handler {
+func NewHandler(tracker resource.Tracker) http.Handler {
 	return &handler{
-		checker: checker,
+		tracker: tracker,
 	}
 }
 
@@ -31,7 +31,17 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	log.Println("checking", input)
 
-	versions, err := handler.checker.Check(input)
+	resource, err := handler.tracker.Init(input.Type, nil, nil)
+	if err != nil {
+		log.Println("checking failed:", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	defer handler.tracker.Release(resource)
+
+	versions, err := resource.Check(input)
 	if err != nil {
 		log.Println("checking failed:", err)
 		w.WriteHeader(http.StatusInternalServerError)

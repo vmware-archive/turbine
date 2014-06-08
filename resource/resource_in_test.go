@@ -1,4 +1,4 @@
-package sourcefetcher_test
+package resource_test
 
 import (
 	"archive/tar"
@@ -7,84 +7,43 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
 	"github.com/cloudfoundry-incubator/garden/warden"
+	"github.com/winston-ci/prole/api/builds"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
-
-	"github.com/winston-ci/prole/api/builds"
-	"github.com/winston-ci/prole/config"
-	. "github.com/winston-ci/prole/sourcefetcher"
 )
 
-var _ = Describe("SourceFetcher", func() {
-	var (
-		resourceTypes config.ResourceTypes
-		wardenClient  *fake_warden_client.FakeClient
-		sourceFetcher *SourceFetcher
+var _ = Describe("Resource", func() {
+	Describe("In", func() {
+		var (
+			input builds.Input
 
-		input builds.Input
-		logs  io.Writer
-		abort chan struct{}
+			inStdout     string
+			inStderr     string
+			inExitStatus uint32
+			inError      error
 
-		inStdout     string
-		inStderr     string
-		inExitStatus uint32
-		inError      error
+			fetchedStream io.Reader
+			fetchedConfig builds.Config
+			fetchedInput  builds.Input
+			fetchError    error
+		)
 
-		extractedConfig builds.Config
-		fetchedVersion  builds.Version
-		fetchedMetadata []builds.MetadataField
-		fetchedStream   io.Reader
-		fetchError      error
-	)
+		BeforeEach(func() {
+			input = builds.Input{
+				Type:    "some-resource",
+				Source:  builds.Source{"some": "source"},
+				Version: builds.Version{"some": "version"},
+			}
 
-	BeforeEach(func() {
-		resourceTypes = []config.ResourceType{
-			{
-				Name:  "some-resource",
-				Image: "some-resource-image",
-			},
-		}
+			inStdout = "{}"
+			inStderr = ""
+			inExitStatus = 0
+			inError = nil
+		})
 
-		wardenClient = fake_warden_client.New()
-
-		input = builds.Input{
-			Type:    "some-resource",
-			Source:  builds.Source{"some": "source"},
-			Version: builds.Version{"some": "version"},
-		}
-
-		logs = nil
-
-		abort = make(chan struct{})
-
-		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
-			return "some-handle", nil
-		}
-
-		inStdout = "{}"
-		inStderr = ""
-		inExitStatus = 0
-		inError = nil
-
-		sourceFetcher = NewSourceFetcher(resourceTypes, wardenClient)
-	})
-
-	primedStream := func(payloads ...warden.ProcessStream) <-chan warden.ProcessStream {
-		stream := make(chan warden.ProcessStream, len(payloads))
-
-		for _, payload := range payloads {
-			stream <- payload
-		}
-
-		close(stream)
-
-		return stream
-	}
-
-	Context("when fetching the resource", func() {
 		JustBeforeEach(func() {
 			inStream := primedStream(
 				warden.ProcessStream{
@@ -104,15 +63,7 @@ var _ = Describe("SourceFetcher", func() {
 				return 1, inStream, inError
 			}
 
-			extractedConfig, fetchedVersion, fetchedMetadata, fetchedStream, fetchError = sourceFetcher.Fetch(input, logs, abort)
-		})
-
-		It("creates a container with the image configured via the source's type", func() {
-			Ω(wardenClient.Connection.Created()).Should(Equal([]warden.ContainerSpec{
-				{
-					RootFSPath: "docker:///some-resource-image",
-				},
-			}))
+			fetchedStream, fetchedInput, fetchedConfig, fetchError = resource.In(input)
 		})
 
 		Context("when streaming succeeds", func() {
@@ -172,28 +123,26 @@ var _ = Describe("SourceFetcher", func() {
 			})
 
 			It("returns the build source printed out by /tmp/resource/in", func() {
-				Ω(fetchedVersion).Should(Equal(builds.Version{"some": "new-version"}))
-				Ω(fetchedMetadata).Should(Equal([]builds.MetadataField{
+				expectedFetchedInput := input
+				expectedFetchedInput.Version = builds.Version{"some": "new-version"}
+				expectedFetchedInput.Metadata = []builds.MetadataField{
 					{Name: "a", Value: "a-value"},
 					{Name: "b", Value: "b-value"},
-				}))
+				}
+
+				Ω(fetchedInput).Should(Equal(expectedFetchedInput))
 			})
 		})
 
 		Context("when /in outputs to stderr", func() {
-			var logBuffer *gbytes.Buffer
-
 			BeforeEach(func() {
 				inStderr = "some stderr data"
-
-				logBuffer = gbytes.NewBuffer()
-				logs = logBuffer
 			})
 
 			It("emits it to the log sink", func() {
 				Ω(fetchError).ShouldNot(HaveOccurred())
 
-				Ω(string(logBuffer.Contents())).Should(Equal("some stderr data"))
+				Ω(string(logs.Contents())).Should(Equal("some stderr data"))
 			})
 		})
 
@@ -250,7 +199,7 @@ var _ = Describe("SourceFetcher", func() {
 				})
 
 				It("is parsed and returned as a Build", func() {
-					Ω(extractedConfig.Image).Should(Equal("some-reconfigured-image"))
+					Ω(fetchedConfig.Image).Should(Equal("some-reconfigured-image"))
 				})
 
 				Context("but the output is invalid", func() {
@@ -311,20 +260,6 @@ var _ = Describe("SourceFetcher", func() {
 			})
 		})
 
-		Context("when creating the container fails", func() {
-			disaster := errors.New("oh no!")
-
-			BeforeEach(func() {
-				wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
-					return "", disaster
-				}
-			})
-
-			It("returns the error", func() {
-				Ω(fetchError).Should(Equal(disaster))
-			})
-		})
-
 		Context("when streaming in fails", func() {
 			disaster := errors.New("oh no!")
 
@@ -380,38 +315,25 @@ var _ = Describe("SourceFetcher", func() {
 			})
 		})
 
-		Context("when the source's resource type is unknown", func() {
+		Context("when aborting", func() {
 			BeforeEach(func() {
-				input.Type = "lol-butts"
+				wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+					// cause reading from the stream to block so that it can be
+					// aborted
+					return 1, nil, nil
+				}
 			})
 
-			It("returns ErrUnknownSourceType", func() {
-				Ω(fetchError).Should(Equal(ErrUnknownSourceType))
-			})
+			It("stops the container", func() {
+				go resource.In(input)
 
-			It("does not create a container", func() {
-				Ω(wardenClient.Connection.Created()).Should(BeEmpty())
+				close(abort)
+
+				Eventually(func() interface{} {
+					return wardenClient.Connection.Stopped("some-handle")
+				}).Should(HaveLen(1))
 			})
 		})
 	})
 
-	Context("when aborting", func() {
-		BeforeEach(func() {
-			wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-				// cause reading from the stream to block so that it can be
-				// aborted
-				return 1, nil, nil
-			}
-		})
-
-		It("stops the container", func() {
-			go sourceFetcher.Fetch(input, logs, abort)
-
-			close(abort)
-
-			Eventually(func() interface{} {
-				return wardenClient.Connection.Stopped("some-handle")
-			}).Should(HaveLen(1))
-		})
-	})
 })

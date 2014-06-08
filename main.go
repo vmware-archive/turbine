@@ -16,13 +16,11 @@ import (
 
 	"github.com/winston-ci/prole/api"
 	"github.com/winston-ci/prole/builder"
-	"github.com/winston-ci/prole/checker"
 	"github.com/winston-ci/prole/config"
-	"github.com/winston-ci/prole/outputter"
+	"github.com/winston-ci/prole/resource"
 	"github.com/winston-ci/prole/routes"
 	"github.com/winston-ci/prole/scheduler"
 	"github.com/winston-ci/prole/snapshotter"
-	"github.com/winston-ci/prole/sourcefetcher"
 )
 
 var listenAddr = flag.String(
@@ -83,17 +81,15 @@ func main() {
 		})
 	}
 
-	sourceFetcher := sourcefetcher.NewSourceFetcher(resourceTypesConfig, wardenClient)
-	outputter := outputter.NewOutputter(resourceTypesConfig, wardenClient)
-	builder := builder.NewBuilder(sourceFetcher, outputter, wardenClient)
+	resourceTracker := resource.NewTracker(resourceTypesConfig, wardenClient)
 
-	checker := checker.NewChecker(resourceTypesConfig, wardenClient)
+	builder := builder.NewBuilder(resourceTracker, wardenClient)
 
 	scheduler := scheduler.NewScheduler(builder)
 
 	generator := router.NewRequestGenerator("http://"+*peerAddr, routes.Routes)
 
-	handler, err := api.New(scheduler, checker, generator)
+	handler, err := api.New(scheduler, resourceTracker, generator)
 	if err != nil {
 		log.Fatalln("failed to initialize handler:", err)
 	}

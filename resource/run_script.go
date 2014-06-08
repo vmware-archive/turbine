@@ -1,11 +1,10 @@
-package scriptrunner
+package resource
 
 import (
 	"archive/tar"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
 )
@@ -27,27 +26,20 @@ func (err ErrResourceScriptFailed) Error() string {
 	)
 }
 
-func Run(
-	container warden.Container,
-	script string,
-	logs io.Writer,
-	abort <-chan struct{},
-	input interface{},
-	output interface{},
-) error {
-	err := injectInput(container, input)
+func (resource *resource) runScript(script string, input interface{}, output interface{}) error {
+	err := resource.injectInput(input)
 	if err != nil {
 		return err
 	}
 
-	_, stream, err := container.Run(warden.ProcessSpec{
+	_, stream, err := resource.container.Run(warden.ProcessSpec{
 		Script: script + " < /tmp/resource-artifacts/stdin",
 	})
 	if err != nil {
 		return err
 	}
 
-	rawOutput, err := waitForRunToEnd(container, stream, logs, abort)
+	rawOutput, err := resource.waitForRunToEnd(stream)
 	if err != nil {
 		return err
 	}
@@ -55,13 +47,13 @@ func Run(
 	return json.Unmarshal(rawOutput, output)
 }
 
-func injectInput(container warden.Container, input interface{}) error {
+func (resource *resource) injectInput(input interface{}) error {
 	payload, err := json.Marshal(input)
 	if err != nil {
 		return err
 	}
 
-	streamIn, err := container.StreamIn("/tmp/resource-artifacts")
+	streamIn, err := resource.container.StreamIn("/tmp/resource-artifacts")
 	if err != nil {
 		return err
 	}
@@ -95,7 +87,7 @@ func injectInput(container warden.Container, input interface{}) error {
 	return nil
 }
 
-func waitForRunToEnd(container warden.Container, stream <-chan warden.ProcessStream, logs io.Writer, abort <-chan struct{}) ([]byte, error) {
+func (resource *resource) waitForRunToEnd(stream <-chan warden.ProcessStream) ([]byte, error) {
 	stdout := []byte{}
 	stderr := []byte{}
 
@@ -119,14 +111,14 @@ script:
 			case warden.ProcessStreamSourceStdout:
 				stdout = append(stdout, chunk.Data...)
 			case warden.ProcessStreamSourceStderr:
-				if logs != nil {
-					logs.Write(chunk.Data)
+				if resource.logs != nil {
+					resource.logs.Write(chunk.Data)
 				}
 
 				stderr = append(stderr, chunk.Data...)
 			}
-		case <-abort:
-			container.Stop(false)
+		case <-resource.abort:
+			resource.container.Stop(false)
 			return nil, ErrAborted
 		}
 	}

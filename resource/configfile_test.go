@@ -1,10 +1,10 @@
-package sourcefetcher_test
+package resource_test
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	. "github.com/winston-ci/prole/sourcefetcher"
+	. "github.com/winston-ci/prole/resource"
 )
 
 var _ = Describe("ConfigFile", func() {

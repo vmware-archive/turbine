@@ -9,6 +9,7 @@ import (
 
 	"github.com/winston-ci/prole/api/builds"
 	"github.com/winston-ci/prole/logwriter"
+	"github.com/winston-ci/prole/resource"
 )
 
 var ErrAborted = errors.New("build aborted")
@@ -17,25 +18,6 @@ type Builder interface {
 	Start(builds.Build, <-chan struct{}) (started <-chan RunningBuild, errored <-chan error)
 	Attach(RunningBuild, <-chan struct{}) (finished <-chan SucceededBuild, failed <-chan error, errored <-chan error)
 	Complete(SucceededBuild, <-chan struct{}) (finished <-chan builds.Build, errored <-chan error)
-}
-
-type SourceFetcher interface {
-	Fetch(input builds.Input, logs io.Writer, abort <-chan struct{}) (
-		config builds.Config,
-		version builds.Version,
-		metadata []builds.MetadataField,
-		tarStream io.Reader,
-		err error,
-	)
-}
-
-type Outputter interface {
-	PerformOutput(
-		output builds.Output,
-		tarStream io.Reader,
-		logs io.Writer,
-		abort <-chan struct{},
-	) (builds.Version, []builds.MetadataField, error)
 }
 
 type RunningBuild struct {
@@ -60,20 +42,17 @@ type SucceededBuild struct {
 }
 
 type builder struct {
-	sourceFetcher SourceFetcher
-	outputter     Outputter
-	wardenClient  warden.Client
+	tracker      resource.Tracker
+	wardenClient warden.Client
 }
 
 func NewBuilder(
-	sourceFetcher SourceFetcher,
-	outputter Outputter,
+	tracker resource.Tracker,
 	wardenClient warden.Client,
 ) Builder {
 	return &builder{
-		sourceFetcher: sourceFetcher,
-		outputter:     outputter,
-		wardenClient:  wardenClient,
+		tracker:      tracker,
+		wardenClient: wardenClient,
 	}
 }
 
@@ -116,15 +95,23 @@ func (builder *builder) start(build builds.Build, abort <-chan struct{}, started
 	resources := map[string]io.Reader{}
 
 	for i, input := range build.Inputs {
-		buildConfig, version, metadata, tarStream, err := builder.sourceFetcher.Fetch(input, logs, abort)
+		resource, err := builder.tracker.Init(input.Type, logs, abort)
 		if err != nil {
 			errored <- err
 			logs.Close()
 			return
 		}
 
-		build.Inputs[i].Version = version
-		build.Inputs[i].Metadata = metadata
+		defer builder.tracker.Release(resource)
+
+		tarStream, computedInput, buildConfig, err := resource.In(input)
+		if err != nil {
+			errored <- err
+			logs.Close()
+			return
+		}
+
+		build.Inputs[i] = computedInput
 
 		if input.ConfigPath != "" {
 			build.Config = buildConfig
@@ -351,15 +338,18 @@ func (builder *builder) performOutputs(
 					return
 				}
 
-				version, metadata, err := builder.outputter.PerformOutput(output, streamOut, logs, abort)
+				resource, err := builder.tracker.Init(output.Type, logs, abort)
+				if err != nil {
+					errs <- err
+					return
+				}
+
+				defer builder.tracker.Release(resource)
+
+				computedOutput, err := resource.Out(streamOut, output)
 
 				errs <- err
-
-				if err == nil {
-					output.Version = version
-					output.Metadata = metadata
-					results <- output
-				}
+				results <- computedOutput
 			}(output)
 		}
 

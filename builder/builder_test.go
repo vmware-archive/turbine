@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"io/ioutil"
 	"net/http"
 
 	"code.google.com/p/go.net/websocket"
@@ -17,13 +18,12 @@ import (
 
 	"github.com/winston-ci/prole/api/builds"
 	. "github.com/winston-ci/prole/builder"
-	"github.com/winston-ci/prole/outputter/fakeoutputter"
-	"github.com/winston-ci/prole/sourcefetcher/fakesourcefetcher"
+	"github.com/winston-ci/prole/resource"
+	resourcefakes "github.com/winston-ci/prole/resource/fakes"
 )
 
 var _ = Describe("Builder", func() {
-	var sourceFetcher *fakesourcefetcher.Fetcher
-	var outputter *fakeoutputter.Outputter
+	var tracker *resourcefakes.FakeTracker
 	var wardenClient *fake_warden_client.FakeClient
 	var builder Builder
 
@@ -67,10 +67,9 @@ var _ = Describe("Builder", func() {
 	}
 
 	BeforeEach(func() {
-		sourceFetcher = fakesourcefetcher.New()
-		outputter = fakeoutputter.New()
+		tracker = new(resourcefakes.FakeTracker)
 		wardenClient = fake_warden_client.New()
-		builder = NewBuilder(sourceFetcher, outputter, wardenClient)
+		builder = NewBuilder(tracker, wardenClient)
 
 		build = builds.Build{
 			Config: builds.Config{
@@ -102,6 +101,26 @@ var _ = Describe("Builder", func() {
 		var started <-chan RunningBuild
 		var errored <-chan error
 
+		var resource1 *resourcefakes.FakeResource
+		var resource2 *resourcefakes.FakeResource
+
+		BeforeEach(func() {
+			resource1 = new(resourcefakes.FakeResource)
+			resource2 = new(resourcefakes.FakeResource)
+
+			resources := make(chan resource.Resource, 2)
+			resources <- resource1
+			resources <- resource2
+
+			tracker.InitStub = func(typ string, logs io.Writer, abort <-chan struct{}) (resource.Resource, error) {
+				return <-resources, nil
+			}
+
+			wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
+				return "some-handle", nil
+			}
+		})
+
 		var abort chan struct{}
 
 		JustBeforeEach(func() {
@@ -109,60 +128,47 @@ var _ = Describe("Builder", func() {
 			started, errored = builder.Start(build, abort)
 		})
 
-		BeforeEach(func() {
-			wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
-				return "some-handle", nil
-			}
-
-			sourceFetcher.WhenFetching = func(builds.Input, io.Writer, <-chan struct{}) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
-				return builds.Config{}, nil, nil, bytes.NewBufferString("some-data"), nil
-			}
-		})
-
-		It("creates a container with the specified image", func() {
-			Eventually(started).Should(Receive())
-
-			created := wardenClient.Connection.Created()
-			Ω(created).Should(HaveLen(1))
-			Ω(created[0].RootFSPath).Should(Equal("docker:///some-image-name"))
-		})
-
 		Context("when fetching the build's inputs succeeds", func() {
 			BeforeEach(func() {
-				sourceFetcher.WhenFetching = func(input builds.Input, logs io.Writer, abort <-chan struct{}) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
-					if input.Name == "name1" {
-						version := builds.Version{"key": "version-1"}
-						metadata := []builds.MetadataField{{Name: "key", Value: "meta-1"}}
-						sourceStream := bytes.NewBufferString("some-data-1")
-						return builds.Config{}, version, metadata, sourceStream, nil
-					}
-
-					if input.Name == "name2" {
-						config := builds.Config{Image: "some-reconfigured-image"}
-						version := builds.Version{"key": "version-2"}
-						metadata := []builds.MetadataField{{Name: "key", Value: "meta-2"}}
-						sourceStream := bytes.NewBufferString("some-data-2")
-						return config, version, metadata, sourceStream, nil
-					}
-
-					panic("unknown stream")
+				resource1.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
+					sourceStream := bytes.NewBufferString("some-data-1")
+					input.Version = builds.Version{"key": "version-1"}
+					input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-1"}}
+					return sourceStream, input, builds.Config{}, nil
 				}
+
+				resource2.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
+					sourceStream := bytes.NewBufferString("some-data-2")
+					config := builds.Config{Image: "some-reconfigured-image"}
+					input.Version = builds.Version{"key": "version-2"}
+					input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-2"}}
+					return sourceStream, input, config, nil
+				}
+			})
+
+			It("creates a container with the specified image", func() {
+				Eventually(started).Should(Receive())
+
+				created := wardenClient.Connection.Created()
+				Ω(created).Should(HaveLen(1))
+				Ω(created[0].RootFSPath).Should(Equal("docker:///some-image-name"))
 			})
 
 			It("streams them in to the container", func() {
 				Eventually(started).Should(Receive())
 
-				Ω(sourceFetcher.Fetched()).Should(Equal([]builds.Input{
-					{
-						Name:            "name1",
-						Type:            "raw",
-						DestinationPath: "some/source/path",
-					},
-					{
-						Name:            "name2",
-						Type:            "raw",
-						DestinationPath: "another/source/path",
-					},
+				Ω(resource1.InCallCount()).Should(Equal(1))
+				Ω(resource1.InArgsForCall(0)).Should(Equal(builds.Input{
+					Name:            "name1",
+					Type:            "raw",
+					DestinationPath: "some/source/path",
+				}))
+
+				Ω(resource2.InCallCount()).Should(Equal(1))
+				Ω(resource2.InArgsForCall(0)).Should(Equal(builds.Input{
+					Name:            "name2",
+					Type:            "raw",
+					DestinationPath: "another/source/path",
 				}))
 
 				streamedIn := wardenClient.Connection.StreamedIn("some-handle")
@@ -182,7 +188,162 @@ var _ = Describe("Builder", func() {
 				}
 			})
 
-			Context("and running the process succeeds", func() {
+			It("runs the build's script in the container", func() {
+				Eventually(started).Should(Receive())
+
+				Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
+					Script: `cd /tmp/build/src
+./bin/test`,
+					EnvironmentVariables: []warden.EnvironmentVariable{
+						{"FOO", "bar"},
+						{"BAZ", "buzz"},
+					},
+				}))
+			})
+
+			Context("when running the build's script fails", func() {
+				disaster := errors.New("oh no!")
+
+				BeforeEach(func() {
+					wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
+						return 0, nil, disaster
+					}
+				})
+
+				It("sends the error result", func() {
+					Eventually(errored).Should(Receive(Equal(disaster)))
+				})
+			})
+
+			Context("when privileged is true", func() {
+				BeforeEach(func() {
+					build.Privileged = true
+				})
+
+				It("runs the build privileged", func() {
+					Eventually(started).Should(Receive())
+
+					Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
+						Script: `cd /tmp/build/src
+./bin/test`,
+						Privileged: true,
+						EnvironmentVariables: []warden.EnvironmentVariable{
+							{"FOO", "bar"},
+							{"BAZ", "buzz"},
+						},
+					}))
+				})
+			})
+
+			It("releases each resource", func() {
+				Eventually(started).Should(Receive())
+
+				Ω(tracker.ReleaseCallCount()).Should(Equal(2))
+
+				allReleased := []resource.Resource{
+					tracker.ReleaseArgsForCall(0),
+					tracker.ReleaseArgsForCall(1),
+				}
+
+				Ω(allReleased).Should(ContainElement(resource1))
+				Ω(allReleased).Should(ContainElement(resource2))
+			})
+
+			Context("when a logs url is configured", func() {
+				var logBuffer *gbytes.Buffer
+				var websocketSink *ghttp.Server
+
+				BeforeEach(func() {
+					logBuffer = gbytes.NewBuffer()
+
+					build.LogsURL, websocketSink = websocketListener(logBuffer)
+				})
+
+				Context("and the sink is listening", func() {
+					AfterEach(func() {
+						websocketSink.Close()
+					})
+
+					It("emits the build's output via websockets", func() {
+						Eventually(logBuffer).Should(gbytes.Say("creating container from some-image-name...\n"))
+						Eventually(logBuffer).Should(gbytes.Say("starting...\n"))
+
+						var runningBuild RunningBuild
+						Eventually(started).Should(Receive(&runningBuild))
+
+						runningBuild.LogStream.Close()
+					})
+
+					Context("and the resources emit logs", func() {
+						It("emits them to the sink", func() {
+							Eventually(tracker.InitCallCount).ShouldNot(Equal(0))
+
+							_, logs, _ := tracker.InitArgsForCall(0)
+							Ω(logs).ShouldNot(BeNil())
+
+							logs.Write([]byte("hello from the resource"))
+
+							Eventually(logBuffer).Should(gbytes.Say("hello from the resource"))
+
+							var runningBuild RunningBuild
+							Eventually(started).Should(Receive(&runningBuild))
+
+							runningBuild.LogStream.Close()
+						})
+					})
+				})
+
+				Context("but the sink disconnects", func() {
+					BeforeEach(func() {
+						okHandler := websocketSink.GetHandler(0)
+
+						websocketSink.SetHandler(0, func(w http.ResponseWriter, r *http.Request) {
+							websocketSink.HTTPTestServer.CloseClientConnections()
+						})
+
+						websocketSink.AppendHandlers(okHandler)
+					})
+
+					It("retries until it is", func() {
+						Eventually(logBuffer, 2).Should(gbytes.Say("starting...\n"))
+					})
+				})
+			})
+
+			Context("when the build is aborted", func() {
+				BeforeEach(func() {
+					resource1.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
+						// return abort error to simulate fetching being aborted;
+						// assert that the channel closed below
+						return nil, builds.Input{}, builds.Config{}, ErrAborted
+					}
+				})
+
+				It("aborts all resource activity", func() {
+					Eventually(errored).Should(Receive(Equal(ErrAborted)))
+
+					close(abort)
+
+					_, _, resourceAbort := tracker.InitArgsForCall(0)
+					Ω(resourceAbort).Should(BeClosed())
+				})
+			})
+
+			Context("when creating the container fails", func() {
+				disaster := errors.New("oh no!")
+
+				BeforeEach(func() {
+					wardenClient.Connection.WhenCreating = func(spec warden.ContainerSpec) (string, error) {
+						return "", disaster
+					}
+				})
+
+				It("sends the error result", func() {
+					Eventually(errored).Should(Receive(Equal(disaster)))
+				})
+			})
+
+			Describe("after the build succeeds", func() {
 				BeforeEach(func() {
 					wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
 						return 42, exitedStream(0), nil
@@ -228,166 +389,11 @@ var _ = Describe("Builder", func() {
 			})
 		})
 
-		Context("when the build is aborted", func() {
-			var gotAborts chan (<-chan struct{})
-
-			BeforeEach(func() {
-				gotAborts = make(chan (<-chan struct{}), 1)
-
-				sourceFetcher.WhenFetching = func(input builds.Input, logs io.Writer, abort <-chan struct{}) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
-					gotAborts <- abort
-
-					// return abort error to simulate fetching being aborted;
-					// assert that the channel closed below
-					return builds.Config{}, builds.Version{}, nil, nil, ErrAborted
-				}
-			})
-
-			It("aborts source fetching", func() {
-				Eventually(errored).Should(Receive(Equal(ErrAborted)))
-
-				var abortFetch <-chan struct{}
-				Ω(gotAborts).Should(Receive(&abortFetch))
-
-				Ω(abortFetch).ShouldNot(BeClosed())
-
-				close(abort)
-
-				Ω(abortFetch).Should(BeClosed())
-			})
-		})
-
-		It("runs the build's script in the container", func() {
-			Eventually(started).Should(Receive())
-
-			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
-				Script: `cd /tmp/build/src
-./bin/test`,
-				EnvironmentVariables: []warden.EnvironmentVariable{
-					{"FOO", "bar"},
-					{"BAZ", "buzz"},
-				},
-			}))
-		})
-
-		Context("when privileged is true", func() {
-			BeforeEach(func() {
-				build.Privileged = true
-			})
-
-			It("runs the build privileged", func() {
-				Eventually(started).Should(Receive())
-
-				Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
-					Script: `cd /tmp/build/src
-./bin/test`,
-					Privileged: true,
-					EnvironmentVariables: []warden.EnvironmentVariable{
-						{"FOO", "bar"},
-						{"BAZ", "buzz"},
-					},
-				}))
-			})
-		})
-
-		Context("when a logs url is configured", func() {
-			var logBuffer *gbytes.Buffer
-			var websocketSink *ghttp.Server
-
-			BeforeEach(func() {
-				logBuffer = gbytes.NewBuffer()
-
-				build.LogsURL, websocketSink = websocketListener(logBuffer)
-			})
-
-			Context("and the sink is listening", func() {
-				AfterEach(func() {
-					websocketSink.Close()
-				})
-
-				It("emits the build's output via websockets", func() {
-					Eventually(logBuffer).Should(gbytes.Say("creating container from some-image-name...\n"))
-					Eventually(logBuffer).Should(gbytes.Say("starting...\n"))
-
-					var runningBuild RunningBuild
-					Eventually(started).Should(Receive(&runningBuild))
-
-					runningBuild.LogStream.Close()
-				})
-
-				Context("and fetching inputs emits logs", func() {
-					BeforeEach(func() {
-						sourceFetcher.WhenFetching = func(input builds.Input, logs io.Writer, abort <-chan struct{}) (builds.Config, builds.Version, []builds.MetadataField, io.Reader, error) {
-							defer GinkgoRecover()
-
-							Ω(logs).ShouldNot(BeNil())
-							logs.Write([]byte("hello from source fetcher"))
-
-							return builds.Config{}, nil, nil, bytes.NewBufferString("some-data"), nil
-						}
-					})
-
-					It("emits them to the sink", func() {
-						Eventually(logBuffer).Should(gbytes.Say("hello from source fetcher"))
-
-						var runningBuild RunningBuild
-						Eventually(started).Should(Receive(&runningBuild))
-
-						runningBuild.LogStream.Close()
-					})
-				})
-			})
-
-			Context("but the sink disconnects", func() {
-				BeforeEach(func() {
-					okHandler := websocketSink.GetHandler(0)
-
-					websocketSink.SetHandler(0, func(w http.ResponseWriter, r *http.Request) {
-						websocketSink.HTTPTestServer.CloseClientConnections()
-					})
-
-					websocketSink.AppendHandlers(okHandler)
-				})
-
-				It("retries until it is", func() {
-					Eventually(logBuffer, 2).Should(gbytes.Say("starting...\n"))
-				})
-			})
-		})
-
-		Context("when running the build's script fails", func() {
-			disaster := errors.New("oh no!")
-
-			BeforeEach(func() {
-				wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-					return 0, nil, disaster
-				}
-			})
-
-			It("sends the error result", func() {
-				Eventually(errored).Should(Receive(Equal(disaster)))
-			})
-		})
-
-		Context("when creating the container fails", func() {
-			disaster := errors.New("oh no!")
-
-			BeforeEach(func() {
-				wardenClient.Connection.WhenCreating = func(spec warden.ContainerSpec) (string, error) {
-					return "", disaster
-				}
-			})
-
-			It("sends the error result", func() {
-				Eventually(errored).Should(Receive(Equal(disaster)))
-			})
-		})
-
 		Context("when fetching the source fails", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
-				sourceFetcher.FetchError = disaster
+				resource1.InReturns(nil, builds.Input{}, builds.Config{}, disaster)
 			})
 
 			It("sends the error result", func() {
@@ -702,6 +708,9 @@ var _ = Describe("Builder", func() {
 		})
 
 		Context("and outputs are configured on the build", func() {
+			var resource1 *resourcefakes.FakeResource
+			var resource2 *resourcefakes.FakeResource
+
 			BeforeEach(func() {
 				succeededBuild.Build.Outputs = []builds.Output{
 					{
@@ -715,6 +724,17 @@ var _ = Describe("Builder", func() {
 						Params: builds.Params{"key": "param-2"},
 					},
 				}
+
+				resource1 = new(resourcefakes.FakeResource)
+				resource2 = new(resourcefakes.FakeResource)
+
+				resources := make(chan resource.Resource, 2)
+				resources <- resource1
+				resources <- resource2
+
+				tracker.InitStub = func(typ string, logs io.Writer, abort <-chan struct{}) (resource.Resource, error) {
+					return <-resources, nil
+				}
 			})
 
 			Context("and streaming out succeeds", func() {
@@ -722,129 +742,198 @@ var _ = Describe("Builder", func() {
 					wardenClient.Connection.WhenStreamingOut = func(string, string) (io.Reader, error) {
 						return bytes.NewBufferString("streamed-out"), nil
 					}
+				})
 
-					sync := make(chan bool)
+				Context("when each output succeeds", func() {
+					BeforeEach(func() {
+						sync := make(chan bool)
 
-					outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader, logs io.Writer, abort <-chan struct{}) (builds.Version, []builds.MetadataField, error) {
-						if output.Params["key"] == "param-1" {
+						resource1.OutStub = func(src io.Reader, output builds.Output) (builds.Output, error) {
 							<-sync
-							version := builds.Version{"key": "out-version-1"}
-							metadata := []builds.MetadataField{{Name: "name", Value: "out-meta-1"}}
-							return version, metadata, nil
+							output.Version = builds.Version{"key": "out-version-1"}
+							output.Metadata = []builds.MetadataField{{Name: "name", Value: "out-meta-1"}}
+							return output, nil
 						}
+
+						resource2.OutStub = func(src io.Reader, output builds.Output) (builds.Output, error) {
+							close(sync)
+							output.Version = builds.Version{"key": "out-version-3"}
+							output.Metadata = []builds.MetadataField{{Name: "name", Value: "out-meta-3"}}
+							return output, nil
+						}
+					})
+
+					It("evaluates every output in parallel with the source and params", func() {
+						Eventually(finished).Should(Receive())
+
+						Ω(resource1.OutCallCount()).Should(Equal(1))
+
+						streamIn, output := resource1.OutArgsForCall(0)
+						Ω(output).Should(Equal(succeededBuild.Build.Outputs[0]))
+
+						streamedIn, err := ioutil.ReadAll(streamIn)
+						Ω(err).ShouldNot(HaveOccurred())
+
+						Ω(string(streamedIn)).Should(Equal("streamed-out"))
+
+						Ω(resource2.OutCallCount()).Should(Equal(1))
+
+						streamIn, output = resource2.OutArgsForCall(0)
+						Ω(output).Should(Equal(succeededBuild.Build.Outputs[1]))
+
+						streamedIn, err = ioutil.ReadAll(streamIn)
+						Ω(err).ShouldNot(HaveOccurred())
+
+						Ω(string(streamedIn)).Should(Equal("streamed-out"))
+					})
+
+					It("reports the outputs", func() {
+						var finishedBuild builds.Build
+						Eventually(finished).Should(Receive(&finishedBuild))
+
+						Ω(finishedBuild.Outputs).Should(HaveLen(3))
+
+						Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
+							Name:     "name1",
+							Type:     "git",
+							Params:   builds.Params{"key": "param-1"},
+							Version:  builds.Version{"key": "out-version-1"},
+							Metadata: []builds.MetadataField{{Name: "name", Value: "out-meta-1"}},
+						}))
 
 						// Implicit output created for an input 'name2'
-						if len(output.Params) == 0 {
-							version := builds.Version{"key": "in-version-2"}
-							metadata := []builds.MetadataField{{Name: "name", Value: "out-meta-2"}}
-							return version, metadata, nil
+						Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
+							Name:     "name2",
+							Type:     "raw",
+							Params:   nil,
+							Version:  builds.Version{"key": "in-version-2"},
+							Metadata: nil,
+						}))
+
+						Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
+							Name:     "someoutput",
+							Type:     "git",
+							Params:   builds.Params{"key": "param-2"},
+							Version:  builds.Version{"key": "out-version-3"},
+							Metadata: []builds.MetadataField{{Name: "name", Value: "out-meta-3"}},
+						}))
+					})
+
+					It("releases each resource", func() {
+						Eventually(finished).Should(Receive())
+
+						Ω(tracker.ReleaseCallCount()).Should(Equal(2))
+
+						allReleased := []resource.Resource{
+							tracker.ReleaseArgsForCall(0),
+							tracker.ReleaseArgsForCall(1),
 						}
 
-						if output.Params["key"] == "param-2" {
-							close(sync)
-							version := builds.Version{"key": "out-version-3"}
-							metadata := []builds.MetadataField{{Name: "name", Value: "out-meta-3"}}
-							return version, metadata, nil
-						}
-
-						panic("unknown output")
-					}
+						Ω(allReleased).Should(ContainElement(resource1))
+						Ω(allReleased).Should(ContainElement(resource2))
+					})
 				})
 
-				It("evaluates every output in parallel with the source and params", func() {
-					Eventually(finished).Should(Receive())
-
-					performedOutputs := outputter.PerformedOutputs()
-					Ω(performedOutputs).Should(HaveLen(2))
-
-					outputs := []builds.Output{}
-					for _, performed := range performedOutputs {
-						outputs = append(outputs, performed.Output)
-
-						Ω(string(performed.StreamedIn.Contents())).Should(Equal("streamed-out"))
-						Ω(performed.StreamedIn.Closed()).Should(BeTrue())
-					}
-
-					Ω(outputs).Should(ContainElement(succeededBuild.Build.Outputs[0]))
-					Ω(outputs).Should(ContainElement(succeededBuild.Build.Outputs[1]))
-				})
-
-				It("reports the outputs", func() {
-					var finishedBuild builds.Build
-					Eventually(finished).Should(Receive(&finishedBuild))
-
-					Ω(finishedBuild.Outputs).Should(HaveLen(3))
-
-					Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
-						Name:     "name1",
-						Type:     "git",
-						Params:   builds.Params{"key": "param-1"},
-						Version:  builds.Version{"key": "out-version-1"},
-						Metadata: []builds.MetadataField{{Name: "name", Value: "out-meta-1"}},
-					}))
-
-					// Implicit output created for an input 'name2'
-					Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
-						Name:     "name2",
-						Type:     "raw",
-						Params:   nil,
-						Version:  builds.Version{"key": "in-version-2"},
-						Metadata: nil,
-					}))
-
-					Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
-						Name:     "someoutput",
-						Type:     "git",
-						Params:   builds.Params{"key": "param-2"},
-						Version:  builds.Version{"key": "out-version-3"},
-						Metadata: []builds.MetadataField{{Name: "name", Value: "out-meta-3"}},
-					}))
-				})
-
-				Context("and an output fails", func() {
+				Context("when an output fails", func() {
 					disaster := errors.New("oh no!")
 
 					BeforeEach(func() {
-						outputter.PerformOutputError = disaster
+						resource1.OutReturns(builds.Output{}, disaster)
 					})
 
 					It("sends the error result", func() {
 						Eventually(errored).Should(Receive(Equal(disaster)))
 					})
-				})
-			})
 
-			Context("when the build is aborted", func() {
-				var gotAborts chan (<-chan struct{})
+					It("releases each resource", func() {
+						Eventually(errored).Should(Receive())
 
-				BeforeEach(func() {
-					gotAborts = make(chan (<-chan struct{}), len(succeededBuild.Build.Outputs))
+						Ω(tracker.ReleaseCallCount()).Should(Equal(2))
 
-					outputter.WhenPerformingOutput = func(
-						output builds.Output,
-						tarStream io.Reader,
-						logs io.Writer,
-						abort <-chan struct{},
-					) (builds.Version, []builds.MetadataField, error) {
-						gotAborts <- abort
+						allReleased := []resource.Resource{
+							tracker.ReleaseArgsForCall(0),
+							tracker.ReleaseArgsForCall(1),
+						}
 
-						// return abort error to simulate fetching being aborted;
-						// assert that the channel closed below
-						return builds.Version{}, nil, ErrAborted
-					}
+						Ω(allReleased).Should(ContainElement(resource1))
+						Ω(allReleased).Should(ContainElement(resource2))
+					})
 				})
 
-				It("aborts performing the outputs", func() {
-					Eventually(errored).Should(Receive(Equal(ErrAborted)))
+				Describe("logs emitted by output", func() {
+					var logBuffer *gbytes.Buffer
 
-					var abortFetch <-chan struct{}
-					Ω(gotAborts).Should(Receive(&abortFetch))
+					BeforeEach(func() {
+						logBuffer = gbytes.NewBuffer()
 
-					Ω(abortFetch).ShouldNot(BeClosed())
+						resource1.OutStub = func(src io.Reader, output builds.Output) (builds.Output, error) {
+							defer GinkgoRecover()
 
-					close(abort)
+							_, logs, _ := tracker.InitArgsForCall(0)
 
-					Ω(abortFetch).Should(BeClosed())
+							Ω(logs).ShouldNot(BeNil())
+							logs.Write([]byte("hello from outputter"))
+
+							return output, nil
+						}
+					})
+
+					Context("when the running build already has a log stream", func() {
+						BeforeEach(func() {
+							succeededBuild.LogStream = logBuffer
+						})
+
+						It("emits the build's output to it", func() {
+							Eventually(logBuffer).Should(gbytes.Say("hello from outputter"))
+						})
+					})
+
+					Context("when a logs url is configured", func() {
+						var websocketSink *ghttp.Server
+
+						BeforeEach(func() {
+							succeededBuild.Build.LogsURL, websocketSink = websocketListener(logBuffer)
+						})
+
+						It("emits the build's output via websockets", func() {
+							Eventually(logBuffer).Should(gbytes.Say("hello from outputter"))
+						})
+
+						Context("but the sink disconnects", func() {
+							BeforeEach(func() {
+								okHandler := websocketSink.GetHandler(0)
+
+								websocketSink.SetHandler(0, func(w http.ResponseWriter, r *http.Request) {
+									websocketSink.HTTPTestServer.CloseClientConnections()
+								})
+
+								websocketSink.AppendHandlers(okHandler)
+							})
+
+							It("retries until it is", func() {
+								Eventually(logBuffer, 2).Should(gbytes.Say("hello from outputter"))
+							})
+						})
+					})
+				})
+
+				Context("when the build is aborted", func() {
+					BeforeEach(func() {
+						resource1.OutStub = func(io.Reader, builds.Output) (builds.Output, error) {
+							// return abort error to simulate fetching being aborted;
+							// assert that the channel closed below
+							return builds.Output{}, ErrAborted
+						}
+					})
+
+					It("aborts all resource activity", func() {
+						Eventually(errored).Should(Receive(Equal(ErrAborted)))
+
+						close(abort)
+
+						_, _, resourceAbort := tracker.InitArgsForCall(0)
+						Ω(resourceAbort).Should(BeClosed())
+					})
 				})
 			})
 
@@ -859,61 +948,6 @@ var _ = Describe("Builder", func() {
 
 				It("sends the error result", func() {
 					Eventually(errored).Should(Receive(Equal(disaster)))
-				})
-			})
-
-			Describe("logs emitted by output", func() {
-				var logBuffer *gbytes.Buffer
-
-				BeforeEach(func() {
-					logBuffer = gbytes.NewBuffer()
-
-					outputter.WhenPerformingOutput = func(output builds.Output, src io.Reader, logs io.Writer, abort <-chan struct{}) (builds.Version, []builds.MetadataField, error) {
-						defer GinkgoRecover()
-
-						Ω(logs).ShouldNot(BeNil())
-						logs.Write([]byte("hello from outputter"))
-
-						return nil, nil, nil
-					}
-				})
-
-				Context("when the running build already has a log stream", func() {
-					BeforeEach(func() {
-						succeededBuild.LogStream = logBuffer
-					})
-
-					It("emits the build's output to it", func() {
-						Eventually(logBuffer).Should(gbytes.Say("hello from outputter"))
-					})
-				})
-
-				Context("when a logs url is configured", func() {
-					var websocketSink *ghttp.Server
-
-					BeforeEach(func() {
-						succeededBuild.Build.LogsURL, websocketSink = websocketListener(logBuffer)
-					})
-
-					It("emits the build's output via websockets", func() {
-						Eventually(logBuffer).Should(gbytes.Say("hello from outputter"))
-					})
-
-					Context("but the sink disconnects", func() {
-						BeforeEach(func() {
-							okHandler := websocketSink.GetHandler(0)
-
-							websocketSink.SetHandler(0, func(w http.ResponseWriter, r *http.Request) {
-								websocketSink.HTTPTestServer.CloseClientConnections()
-							})
-
-							websocketSink.AppendHandlers(okHandler)
-						})
-
-						It("retries until it is", func() {
-							Eventually(logBuffer, 2).Should(gbytes.Say("hello from outputter"))
-						})
-					})
 				})
 			})
 		})
