@@ -29,7 +29,7 @@ func (resource *resource) In(input builds.Input) (io.Reader, builds.Input, build
 	var resp inResponse
 
 	err := resource.runScript(
-		"/tmp/resource/in /tmp/resource-destination",
+		"/tmp/resource/in /tmp/build/src/"+input.DestinationPath,
 		inRequest{input.Version, input.Source},
 		&resp,
 	)
@@ -37,7 +37,7 @@ func (resource *resource) In(input builds.Input) (io.Reader, builds.Input, build
 		return nil, builds.Input{}, builds.Config{}, err
 	}
 
-	buildConfig, err := resource.extractConfig(input.ConfigPath)
+	buildConfig, err := resource.extractConfig(input)
 	if err != nil {
 		return nil, builds.Input{}, builds.Config{}, err
 	}
@@ -45,7 +45,7 @@ func (resource *resource) In(input builds.Input) (io.Reader, builds.Input, build
 	input.Version = resp.Version
 	input.Metadata = resp.Metadata
 
-	outStream, err := resource.container.StreamOut("/tmp/resource-destination/")
+	outStream, err := resource.container.StreamOut(path.Join("/tmp/build/src", input.DestinationPath) + "/")
 	if err != nil {
 		return nil, builds.Input{}, builds.Config{}, err
 	}
@@ -53,14 +53,16 @@ func (resource *resource) In(input builds.Input) (io.Reader, builds.Input, build
 	return outStream, input, buildConfig, nil
 }
 
-func (resource *resource) extractConfig(configPath string) (builds.Config, error) {
+func (resource *resource) extractConfig(input builds.Input) (builds.Config, error) {
 	var buildConfig builds.Config
 
-	if configPath == "" {
+	if input.ConfigPath == "" {
 		return buildConfig, nil
 	}
 
-	configStream, err := resource.container.StreamOut(path.Join("/tmp/resource-destination", configPath))
+	config := path.Join("/tmp/build/src", input.DestinationPath, input.ConfigPath)
+
+	configStream, err := resource.container.StreamOut(config)
 	if err != nil {
 		return buildConfig, err
 	}

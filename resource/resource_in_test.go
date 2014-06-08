@@ -33,9 +33,10 @@ var _ = Describe("Resource", func() {
 
 		BeforeEach(func() {
 			input = builds.Input{
-				Type:    "some-resource",
-				Source:  builds.Source{"some": "source"},
-				Version: builds.Version{"some": "version"},
+				Type:            "some-resource",
+				Source:          builds.Source{"some": "source"},
+				Version:         builds.Version{"some": "version"},
+				DestinationPath: "input-destination",
 			}
 
 			inStdout = "{}"
@@ -106,7 +107,7 @@ var _ = Describe("Resource", func() {
 
 			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
 				{
-					Script: "/tmp/resource/in /tmp/resource-destination < /tmp/resource-artifacts/stdin",
+					Script: "/tmp/resource/in /tmp/build/src/input-destination < /tmp/resource-artifacts/stdin",
 				},
 			}))
 		})
@@ -153,7 +154,7 @@ var _ = Describe("Resource", func() {
 
 					streamOut := new(bytes.Buffer)
 
-					if source == "/tmp/resource-destination/" {
+					if source == "/tmp/build/src/input-destination/" {
 						streamOut.WriteString("sup")
 					}
 
@@ -161,7 +162,7 @@ var _ = Describe("Resource", func() {
 				}
 			})
 
-			It("returns the output stream of /tmp/resource-destination/", func() {
+			It("returns the output stream of /tmp/build/src/input-destination/", func() {
 				contents, err := ioutil.ReadAll(fetchedStream)
 				Ω(err).ShouldNot(HaveOccurred())
 				Ω(string(contents)).Should(Equal("sup"))
@@ -180,7 +181,7 @@ var _ = Describe("Resource", func() {
 
 						buf := new(bytes.Buffer)
 
-						if src == "/tmp/resource-destination/some/config/path.yml" {
+						if src == "/tmp/build/src/input-destination/some/config/path.yml" {
 							tarWriter := tar.NewWriter(buf)
 
 							contents := []byte("---\nimage: some-reconfigured-image\n")
@@ -209,7 +210,7 @@ var _ = Describe("Resource", func() {
 
 							buf := new(bytes.Buffer)
 
-							if src == "/tmp/resource-destination/some/config/path.yml" {
+							if src == "/tmp/build/src/input-destination/some/config/path.yml" {
 								tarWriter := tar.NewWriter(buf)
 
 								contents := []byte("[")
