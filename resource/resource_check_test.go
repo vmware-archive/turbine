@@ -105,7 +105,8 @@ var _ = Describe("Resource Check", func() {
 
 			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
 				{
-					Script: "/tmp/resource/check < /tmp/resource-artifacts/stdin",
+					Script:     "/tmp/resource/check < /tmp/resource-artifacts/stdin",
+					Privileged: true,
 				},
 			}))
 		})
