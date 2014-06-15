@@ -75,9 +75,9 @@ var _ = Describe("Builder", func() {
 			Config: builds.Config{
 				Image: "some-image-name",
 
-				Env: [][2]string{
-					{"FOO", "bar"},
-					{"BAZ", "buzz"},
+				Env: []map[string]string{
+					{"FOO": "bar"},
+					{"BAZ": "buzz"},
 				},
 				Script: "./bin/test",
 			},

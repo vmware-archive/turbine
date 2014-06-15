@@ -272,9 +272,11 @@ func (builder *builder) runBuild(
 ) (uint32, <-chan warden.ProcessStream, error) {
 	fmt.Fprintf(logs, "starting...\n")
 
-	env := make([]warden.EnvironmentVariable, len(buildConfig.Env))
-	for i, e := range buildConfig.Env {
-		env[i] = warden.EnvironmentVariable{Key: e[0], Value: e[1]}
+	env := []warden.EnvironmentVariable{}
+	for _, nv := range buildConfig.Env {
+		for n, v := range nv {
+			env = append(env, warden.EnvironmentVariable{Key: n, Value: v})
+		}
 	}
 
 	processSpec := warden.ProcessSpec{

@@ -81,5 +81,9 @@ func (resource *resource) extractConfig(input builds.Input) (builds.Config, erro
 		return buildConfig, err
 	}
 
-	return configFile.AsBuildConfig()
+	return builds.Config{
+		Image:  configFile.Image,
+		Script: configFile.Script,
+		Env:    configFile.Env,
+	}, nil
 }
