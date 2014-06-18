@@ -10,6 +10,7 @@ import (
 // Request payload from resource to /tmp/resource/out script
 type outRequest struct {
 	Params builds.Params `json:"params"`
+	Source builds.Source `json:"source"`
 }
 
 // Response payload from /tmp/resource/out script to resource
@@ -28,7 +29,10 @@ func (resource *resource) Out(sourceStream io.Reader, output builds.Output) (bui
 
 	err = resource.runScript(
 		"/tmp/resource/out "+path.Join("/tmp/build/src", output.SourcePath),
-		outRequest{output.Params},
+		outRequest{
+			Params: output.Params,
+			Source: output.Source,
+		},
 		&resp,
 	)
 	if err != nil {

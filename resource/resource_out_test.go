@@ -32,6 +32,7 @@ var _ = Describe("Resource Out", func() {
 		output = builds.Output{
 			Type:   "some-resource",
 			Params: builds.Params{"some": "params"},
+			Source: builds.Source{"some": "source"},
 
 			SourcePath: "some-resource",
 		}
@@ -64,7 +65,7 @@ var _ = Describe("Resource Out", func() {
 		outOutput, outErr = resource.Out(bytes.NewBufferString("the-source"), output)
 	})
 
-	Context("when streaming the params in succeeds", func() {
+	Context("when streaming the script input in succeeds", func() {
 		var streamedIn *gbytes.Buffer
 
 		BeforeEach(func() {
@@ -81,7 +82,7 @@ var _ = Describe("Resource Out", func() {
 			}
 		})
 
-		It("creates a file with the output params", func() {
+		It("creates a file with the output params and source", func() {
 			Ω(outErr).ShouldNot(HaveOccurred())
 
 			tarReader := tar.NewReader(bytes.NewBuffer(streamedIn.Contents()))
@@ -94,7 +95,7 @@ var _ = Describe("Resource Out", func() {
 			inputConfig, err := ioutil.ReadAll(tarReader)
 			Ω(err).ShouldNot(HaveOccurred())
 
-			Ω(string(inputConfig)).Should(Equal(`{"params":{"some":"params"}}`))
+			Ω(string(inputConfig)).Should(Equal(`{"params":{"some":"params"},"source":{"some":"source"}}`))
 
 			_, err = tarReader.Next()
 			Ω(err).Should(Equal(io.EOF))

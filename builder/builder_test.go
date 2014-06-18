@@ -84,12 +84,12 @@ var _ = Describe("Builder", func() {
 
 			Inputs: []builds.Input{
 				{
-					Name:            "name1",
+					Name:            "first-resource",
 					Type:            "raw",
 					DestinationPath: "some/source/path",
 				},
 				{
-					Name:            "name2",
+					Name:            "second-resource",
 					Type:            "raw",
 					DestinationPath: "another/source/path",
 				},
@@ -159,14 +159,14 @@ var _ = Describe("Builder", func() {
 
 				Ω(resource1.InCallCount()).Should(Equal(1))
 				Ω(resource1.InArgsForCall(0)).Should(Equal(builds.Input{
-					Name:            "name1",
+					Name:            "first-resource",
 					Type:            "raw",
 					DestinationPath: "some/source/path",
 				}))
 
 				Ω(resource2.InCallCount()).Should(Equal(1))
 				Ω(resource2.InArgsForCall(0)).Should(Equal(builds.Input{
-					Name:            "name2",
+					Name:            "second-resource",
 					Type:            "raw",
 					DestinationPath: "another/source/path",
 				}))
@@ -432,12 +432,12 @@ var _ = Describe("Builder", func() {
 		BeforeEach(func() {
 			build.Inputs = []builds.Input{
 				{
-					Name:            "name1",
+					Name:            "first-resource",
 					Type:            "raw",
 					DestinationPath: "some/source/path",
 				},
 				{
-					Name:            "name2",
+					Name:            "second-resource",
 					Type:            "raw",
 					DestinationPath: "another/source/path",
 				},
@@ -660,13 +660,13 @@ var _ = Describe("Builder", func() {
 		BeforeEach(func() {
 			build.Inputs = []builds.Input{
 				{
-					Name:            "name1",
+					Name:            "first-resource",
 					Type:            "raw",
 					DestinationPath: "some/source/path",
 					Version:         builds.Version{"key": "in-version-1"},
 				},
 				{
-					Name:            "name2",
+					Name:            "second-resource",
 					Type:            "raw",
 					DestinationPath: "another/source/path",
 					Version:         builds.Version{"key": "in-version-2"},
@@ -695,13 +695,13 @@ var _ = Describe("Builder", func() {
 			Ω(finishedBuild.Outputs).Should(HaveLen(2))
 
 			Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
-				Name:    "name1",
+				Name:    "first-resource",
 				Type:    "raw",
 				Version: builds.Version{"key": "in-version-1"},
 			}))
 
 			Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
-				Name:    "name2",
+				Name:    "second-resource",
 				Type:    "raw",
 				Version: builds.Version{"key": "in-version-2"},
 			}))
@@ -714,14 +714,16 @@ var _ = Describe("Builder", func() {
 			BeforeEach(func() {
 				succeededBuild.Build.Outputs = []builds.Output{
 					{
-						Name:   "name1",
+						Name:   "first-resource",
 						Type:   "git",
 						Params: builds.Params{"key": "param-1"},
+						Source: builds.Source{"uri": "http://first-uri"},
 					},
 					{
-						Name:   "someoutput",
+						Name:   "extra-output",
 						Type:   "git",
 						Params: builds.Params{"key": "param-2"},
+						Source: builds.Source{"uri": "http://extra-uri"},
 					},
 				}
 
@@ -794,25 +796,28 @@ var _ = Describe("Builder", func() {
 						Ω(finishedBuild.Outputs).Should(HaveLen(3))
 
 						Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
-							Name:     "name1",
+							Name:     "first-resource",
 							Type:     "git",
+							Source:   builds.Source{"uri": "http://first-uri"},
 							Params:   builds.Params{"key": "param-1"},
 							Version:  builds.Version{"key": "out-version-1"},
 							Metadata: []builds.MetadataField{{Name: "name", Value: "out-meta-1"}},
 						}))
 
-						// Implicit output created for an input 'name2'
+						// Implicit output created for an input 'second-resource'
 						Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
-							Name:     "name2",
+							Name:     "second-resource",
 							Type:     "raw",
+							Source:   nil,
 							Params:   nil,
 							Version:  builds.Version{"key": "in-version-2"},
 							Metadata: nil,
 						}))
 
 						Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
-							Name:     "someoutput",
+							Name:     "extra-output",
 							Type:     "git",
+							Source:   builds.Source{"uri": "http://extra-uri"},
 							Params:   builds.Params{"key": "param-2"},
 							Version:  builds.Version{"key": "out-version-3"},
 							Metadata: []builds.MetadataField{{Name: "name", Value: "out-meta-3"}},
