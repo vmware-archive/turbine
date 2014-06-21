@@ -103,12 +103,12 @@ var _ = Describe("Resource Out", func() {
 			Ω(streamedIn.Closed()).Should(BeTrue())
 		})
 
-		It("runs /tmp/resource/out <path> with the contents of the input config file on stdin", func() {
+		It("runs /tmp/resource/out /tmp/build/src with the contents of the input config file on stdin", func() {
 			Ω(outErr).ShouldNot(HaveOccurred())
 
 			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
 				{
-					Script:     "/tmp/resource/out /tmp/build/src/some-resource < /tmp/resource-artifacts/stdin",
+					Script:     "/tmp/resource/out /tmp/build/src < /tmp/resource-artifacts/stdin",
 					Privileged: true,
 				},
 			}))

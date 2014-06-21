@@ -2,7 +2,6 @@ package resource
 
 import (
 	"io"
-	"path"
 
 	"github.com/winston-ci/prole/api/builds"
 )
@@ -28,7 +27,7 @@ func (resource *resource) Out(sourceStream io.Reader, output builds.Output) (bui
 	var resp outResponse
 
 	err = resource.runScript(
-		"/tmp/resource/out "+path.Join("/tmp/build/src", output.SourcePath),
+		"/tmp/resource/out /tmp/build/src",
 		outRequest{
 			Params: output.Params,
 			Source: output.Source,
