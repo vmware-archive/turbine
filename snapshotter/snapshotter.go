@@ -3,7 +3,6 @@ package snapshotter
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"os"
 
@@ -42,15 +41,15 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 		var snapshots []BuildSnapshot
 		err := json.NewDecoder(snapshotFile).Decode(&snapshots)
 		if err != nil {
-			return fmt.Errorf("invalid snapshot: %s", err)
-		}
-
-		for _, snapshot := range snapshots {
-			go snapshotter.scheduler.Attach(builder.RunningBuild{
-				Build:           snapshot.Build,
-				ContainerHandle: snapshot.ContainerHandle,
-				ProcessID:       snapshot.ProcessID,
-			})
+			log.Println("invalid snapshot:", err)
+		} else {
+			for _, snapshot := range snapshots {
+				go snapshotter.scheduler.Attach(builder.RunningBuild{
+					Build:           snapshot.Build,
+					ContainerHandle: snapshot.ContainerHandle,
+					ProcessID:       snapshot.ProcessID,
+				})
+			}
 		}
 	}
 
