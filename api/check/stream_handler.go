@@ -29,7 +29,7 @@ func (handler *Handler) Stream(conn *websocket.Conn) {
 		return
 	}
 
-	log.Println("streaming checks for", input)
+	log.Printf("streaming checks for %s (type: %s)\n", input.Name, input.Type)
 
 	resource, err := handler.tracker.Init(input.Type, nil, nil)
 	if err != nil {
@@ -42,7 +42,7 @@ func (handler *Handler) Stream(conn *websocket.Conn) {
 	encoder := json.NewEncoder(conn)
 
 	for {
-		log.Println("checking", input)
+		log.Printf("checking %s (type: %s)\n", input.Name, input.Type)
 
 		versions, err := resource.Check(input)
 		if err != nil {

@@ -47,7 +47,7 @@ func (handler *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println("checking", input)
+	log.Printf("checking %s (type: %s)\n", input.Name, input.Type)
 
 	resource, err := handler.tracker.Init(input.Type, nil, nil)
 	if err != nil {
