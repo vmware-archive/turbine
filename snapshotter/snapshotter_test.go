@@ -137,8 +137,8 @@ var _ = Describe("Snapshotter", func() {
 				Ω(err).ShouldNot(HaveOccurred())
 			})
 
-			It("returns ErrInvalidSnapshot", func() {
-				Eventually(process.Wait()).Should(Receive(Equal(ErrInvalidSnapshot)))
+			It("returns an error", func() {
+				Eventually(process.Wait()).Should(Receive(HaveOccurred()))
 			})
 		})
 	})

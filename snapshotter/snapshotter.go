@@ -3,6 +3,7 @@ package snapshotter
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 
@@ -41,7 +42,7 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 		var snapshots []BuildSnapshot
 		err := json.NewDecoder(snapshotFile).Decode(&snapshots)
 		if err != nil {
-			return ErrInvalidSnapshot
+			return fmt.Errorf("invalid snapshot: %s", err)
 		}
 
 		for _, snapshot := range snapshots {
