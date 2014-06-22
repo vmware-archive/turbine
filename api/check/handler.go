@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/winston-ci/prole/api/builds"
-	"github.com/winston-ci/prole/resource"
+	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine/resource"
 )
 
 type Handler struct {

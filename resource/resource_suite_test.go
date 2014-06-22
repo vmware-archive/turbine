@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 
-	. "github.com/winston-ci/prole/resource"
+	. "github.com/concourse/turbine/resource"
 )
 
 var (

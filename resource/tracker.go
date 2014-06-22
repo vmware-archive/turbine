@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
-	"github.com/winston-ci/prole/config"
+	"github.com/concourse/turbine/config"
 )
 
 type Tracker interface {

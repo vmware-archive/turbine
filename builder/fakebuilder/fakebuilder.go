@@ -3,8 +3,8 @@ package fakebuilder
 import (
 	"sync"
 
-	"github.com/winston-ci/prole/api/builds"
-	"github.com/winston-ci/prole/builder"
+	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine/builder"
 )
 
 type Builder struct {

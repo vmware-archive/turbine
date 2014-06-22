@@ -1,6 +1,6 @@
 package resource
 
-import "github.com/winston-ci/prole/api/builds"
+import "github.com/concourse/turbine/api/builds"
 
 type versionAndSource struct {
 	Version builds.Version `json:"version"`

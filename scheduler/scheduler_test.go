@@ -8,10 +8,10 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
 
-	"github.com/winston-ci/prole/api/builds"
-	"github.com/winston-ci/prole/builder"
-	"github.com/winston-ci/prole/builder/fakebuilder"
-	. "github.com/winston-ci/prole/scheduler"
+	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine/builder"
+	"github.com/concourse/turbine/builder/fakebuilder"
+	. "github.com/concourse/turbine/scheduler"
 )
 
 var _ = Describe("Scheduler", func() {

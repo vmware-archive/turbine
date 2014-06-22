@@ -3,7 +3,7 @@ package resource
 import (
 	"io"
 
-	"github.com/winston-ci/prole/api/builds"
+	"github.com/concourse/turbine/api/builds"
 )
 
 // Request payload from resource to /tmp/resource/out script

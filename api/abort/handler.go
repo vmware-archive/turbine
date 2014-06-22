@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/winston-ci/prole/scheduler"
+	"github.com/concourse/turbine/scheduler"
 )
 
 type handler struct {

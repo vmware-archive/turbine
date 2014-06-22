@@ -14,13 +14,13 @@ import (
 	"github.com/tedsuo/ifrit/sigmon"
 	"github.com/tedsuo/router"
 
-	"github.com/winston-ci/prole/api"
-	"github.com/winston-ci/prole/builder"
-	"github.com/winston-ci/prole/config"
-	"github.com/winston-ci/prole/resource"
-	"github.com/winston-ci/prole/routes"
-	"github.com/winston-ci/prole/scheduler"
-	"github.com/winston-ci/prole/snapshotter"
+	"github.com/concourse/turbine/api"
+	"github.com/concourse/turbine/builder"
+	"github.com/concourse/turbine/config"
+	"github.com/concourse/turbine/resource"
+	"github.com/concourse/turbine/routes"
+	"github.com/concourse/turbine/scheduler"
+	"github.com/concourse/turbine/snapshotter"
 )
 
 var listenAddr = flag.String(
@@ -55,7 +55,7 @@ var resourceTypes = flag.String(
 
 var snapshotPath = flag.String(
 	"snapshotPath",
-	"/tmp/prole.json",
+	"/tmp/builds-snapshot.json",
 	"path to file to store/load snapshots from",
 )
 

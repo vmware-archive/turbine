@@ -9,8 +9,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/winston-ci/prole/config"
-	. "github.com/winston-ci/prole/resource"
+	"github.com/concourse/turbine/config"
+	. "github.com/concourse/turbine/resource"
 )
 
 var _ = Describe("Tracker", func() {

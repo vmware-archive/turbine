@@ -1,6 +1,6 @@
-= Prole
+= Turbine
 
-image:https://travis-ci.org/winston-ci/prole.svg?branch=master["Build Status", link="https://travis-ci.org/winston-ci/prole"]
-image:https://coveralls.io/repos/winston-ci/prole/badge.png["Coverage Status", link="https://coveralls.io/r/winston-ci/prole"]
+image:https://travis-ci.org/concourse/turbine.svg?branch=master["Build Status", link="https://travis-ci.org/concourse/turbine"]
+image:https://coveralls.io/repos/concourse/turbine/badge.png["Coverage Status", link="https://coveralls.io/r/concourse/turbine"]
 
 * http://docs.room101agent.apiary.io/[API]

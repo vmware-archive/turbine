@@ -4,7 +4,7 @@ import (
 	"io"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
-	"github.com/winston-ci/prole/api/builds"
+	"github.com/concourse/turbine/api/builds"
 )
 
 type Resource interface {

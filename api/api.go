@@ -7,24 +7,24 @@ import (
 
 	"github.com/tedsuo/router"
 
-	"github.com/winston-ci/prole/api/abort"
-	"github.com/winston-ci/prole/api/check"
-	"github.com/winston-ci/prole/api/execute"
-	"github.com/winston-ci/prole/resource"
-	"github.com/winston-ci/prole/routes"
-	"github.com/winston-ci/prole/scheduler"
+	"github.com/concourse/turbine/api/abort"
+	"github.com/concourse/turbine/api/check"
+	"github.com/concourse/turbine/api/execute"
+	"github.com/concourse/turbine/resource"
+	"github.com/concourse/turbine/routes"
+	"github.com/concourse/turbine/scheduler"
 )
 
 func New(
 	scheduler scheduler.Scheduler,
 	tracker resource.Tracker,
-	proleEndpoint *router.RequestGenerator,
+	turbineEndpoint *router.RequestGenerator,
 	drain <-chan struct{},
 ) (http.Handler, error) {
 	checkHandler := check.NewHandler(tracker, drain)
 
 	handlers := map[string]http.Handler{
-		routes.ExecuteBuild:     execute.NewHandler(scheduler, proleEndpoint),
+		routes.ExecuteBuild:     execute.NewHandler(scheduler, turbineEndpoint),
 		routes.AbortBuild:       abort.NewHandler(scheduler),
 		routes.CheckInput:       checkHandler,
 		routes.CheckInputStream: websocket.Server{Handler: checkHandler.Stream},

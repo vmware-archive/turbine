@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/concourse/turbine/api/builds"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/winston-ci/prole/api/builds"
 )
 
 var _ = Describe("POST /builds", func() {
@@ -56,7 +56,7 @@ var _ = Describe("POST /builds", func() {
 		Ω(err).ShouldNot(HaveOccurred())
 
 		Ω(returnedBuild.Guid).ShouldNot(BeEmpty())
-		Ω(returnedBuild.AbortURL).Should(Equal("http://some-prole/builds/" + returnedBuild.Guid + "/abort"))
+		Ω(returnedBuild.AbortURL).Should(Equal("http://some-turbine/builds/" + returnedBuild.Guid + "/abort"))
 		Ω(returnedBuild.Inputs).Should(Equal(build.Inputs))
 
 		Ω(scheduler.Scheduled()).Should(ContainElement(returnedBuild))

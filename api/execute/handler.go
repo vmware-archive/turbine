@@ -9,23 +9,23 @@ import (
 	"github.com/nu7hatch/gouuid"
 	"github.com/tedsuo/router"
 
-	"github.com/winston-ci/prole/api/builds"
-	"github.com/winston-ci/prole/routes"
-	"github.com/winston-ci/prole/scheduler"
+	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine/routes"
+	"github.com/concourse/turbine/scheduler"
 )
 
 type handler struct {
-	scheduler     scheduler.Scheduler
-	proleEndpoint *router.RequestGenerator
+	scheduler       scheduler.Scheduler
+	turbineEndpoint *router.RequestGenerator
 }
 
 func NewHandler(
 	scheduler scheduler.Scheduler,
-	proleEndpoint *router.RequestGenerator,
+	turbineEndpoint *router.RequestGenerator,
 ) http.Handler {
 	return &handler{
-		scheduler:     scheduler,
-		proleEndpoint: proleEndpoint,
+		scheduler:       scheduler,
+		turbineEndpoint: turbineEndpoint,
 	}
 }
 
@@ -56,7 +56,7 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	build.Guid = guid.String()
 
-	abortReq, err := handler.proleEndpoint.RequestForHandler(
+	abortReq, err := handler.turbineEndpoint.RequestForHandler(
 		routes.AbortBuild,
 		router.Params{"guid": build.Guid},
 		nil,

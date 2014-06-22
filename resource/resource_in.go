@@ -5,8 +5,8 @@ import (
 	"io"
 	"path"
 
+	"github.com/concourse/turbine/api/builds"
 	"github.com/fraenkel/candiedyaml"
-	"github.com/winston-ci/prole/api/builds"
 )
 
 // Request payload from sourcefetcher to /tmp/resource/in script

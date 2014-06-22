@@ -7,10 +7,10 @@ import (
 
 	"code.google.com/p/go.net/websocket"
 
+	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine/resource/fakes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/winston-ci/prole/api/builds"
-	"github.com/winston-ci/prole/resource/fakes"
 )
 
 var _ = Describe("GET /checks/stream", func() {

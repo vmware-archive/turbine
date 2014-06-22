@@ -5,7 +5,7 @@ import (
 	"io"
 	"sync"
 
-	. "github.com/winston-ci/prole/resource"
+	. "github.com/concourse/turbine/resource"
 )
 
 type FakeTracker struct {

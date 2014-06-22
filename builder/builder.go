@@ -7,9 +7,9 @@ import (
 
 	"github.com/cloudfoundry-incubator/garden/warden"
 
-	"github.com/winston-ci/prole/api/builds"
-	"github.com/winston-ci/prole/logwriter"
-	"github.com/winston-ci/prole/resource"
+	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine/logwriter"
+	"github.com/concourse/turbine/resource"
 )
 
 var ErrAborted = errors.New("build aborted")

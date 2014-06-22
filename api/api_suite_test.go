@@ -7,13 +7,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/concourse/turbine/api"
+	"github.com/concourse/turbine/resource/fakes"
+	"github.com/concourse/turbine/routes"
+	"github.com/concourse/turbine/scheduler/fakescheduler"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/tedsuo/router"
-	"github.com/winston-ci/prole/api"
-	"github.com/winston-ci/prole/resource/fakes"
-	"github.com/winston-ci/prole/routes"
-	"github.com/winston-ci/prole/scheduler/fakescheduler"
 )
 
 var scheduler *fakescheduler.FakeScheduler
@@ -28,9 +28,9 @@ var _ = BeforeEach(func() {
 	tracker = new(fakes.FakeTracker)
 	drain = make(chan struct{})
 
-	proleEndpoint := router.NewRequestGenerator("http://some-prole", routes.Routes)
+	turbineEndpoint := router.NewRequestGenerator("http://some-turbine", routes.Routes)
 
-	handler, err := api.New(scheduler, tracker, proleEndpoint, drain)
+	handler, err := api.New(scheduler, tracker, turbineEndpoint, drain)
 	Ω(err).ShouldNot(HaveOccurred())
 
 	server = httptest.NewServer(handler)

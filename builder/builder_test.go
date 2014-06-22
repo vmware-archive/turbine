@@ -16,10 +16,10 @@ import (
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/ghttp"
 
-	"github.com/winston-ci/prole/api/builds"
-	. "github.com/winston-ci/prole/builder"
-	"github.com/winston-ci/prole/resource"
-	resourcefakes "github.com/winston-ci/prole/resource/fakes"
+	"github.com/concourse/turbine/api/builds"
+	. "github.com/concourse/turbine/builder"
+	"github.com/concourse/turbine/resource"
+	resourcefakes "github.com/concourse/turbine/resource/fakes"
 )
 
 var _ = Describe("Builder", func() {

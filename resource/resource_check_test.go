@@ -8,7 +8,7 @@ import (
 	"io/ioutil"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
-	"github.com/winston-ci/prole/api/builds"
+	"github.com/concourse/turbine/api/builds"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

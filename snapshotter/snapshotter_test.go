@@ -2,16 +2,16 @@ package snapshotter_test
 
 import (
 	"encoding/json"
-	"io/ioutil"
-	"os"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/tedsuo/ifrit"
+	"io/ioutil"
+	"os"
 
-	"github.com/winston-ci/prole/api/builds"
-	"github.com/winston-ci/prole/builder"
-	"github.com/winston-ci/prole/scheduler/fakescheduler"
-	. "github.com/winston-ci/prole/snapshotter"
+	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine/builder"
+	"github.com/concourse/turbine/scheduler/fakescheduler"
+	. "github.com/concourse/turbine/snapshotter"
 )
 
 var _ = Describe("Snapshotter", func() {
