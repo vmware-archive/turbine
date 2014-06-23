@@ -1,8 +1,6 @@
 package api_test
 
 import (
-	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -42,8 +40,4 @@ var _ = BeforeEach(func() {
 func TestApi(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "API Suite")
-}
-
-func NullLogger() *log.Logger {
-	return log.New(ioutil.Discard, "", 0)
 }

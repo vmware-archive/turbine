@@ -1,7 +1,6 @@
 package abort
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/concourse/turbine/scheduler"
@@ -19,8 +18,6 @@ func NewHandler(scheduler scheduler.Scheduler) http.Handler {
 
 func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	guid := r.FormValue(":guid")
-
-	log.Println("aborting", guid)
 
 	handler.scheduler.Abort(guid)
 
