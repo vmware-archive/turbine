@@ -1,4 +1,4 @@
-package transport_test
+package types_test
 
 import (
 	. "github.com/onsi/ginkgo"
@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestTransport(t *testing.T) {
+func TestTypes(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Transport Suite")
+	RunSpecs(t, "Types Suite")
 }
