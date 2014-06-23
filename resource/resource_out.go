@@ -19,7 +19,7 @@ type outResponse struct {
 }
 
 func (resource *resource) Out(sourceStream io.Reader, output builds.Output) (builds.Output, error) {
-	err := resource.streamInSource(sourceStream)
+	err := resource.container.StreamIn("/tmp/build/src", sourceStream)
 	if err != nil {
 		return builds.Output{}, err
 	}
@@ -42,18 +42,4 @@ func (resource *resource) Out(sourceStream io.Reader, output builds.Output) (bui
 	output.Metadata = resp.Metadata
 
 	return output, nil
-}
-
-func (resource *resource) streamInSource(sourceStream io.Reader) error {
-	streamIn, err := resource.container.StreamIn("/tmp/build/src")
-	if err != nil {
-		return err
-	}
-
-	_, err = io.Copy(streamIn, sourceStream)
-	if err != nil {
-		return err
-	}
-
-	return streamIn.Close()
 }

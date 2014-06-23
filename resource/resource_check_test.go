@@ -72,10 +72,14 @@ var _ = Describe("Resource Check", func() {
 		BeforeEach(func() {
 			streamedIn = gbytes.NewBuffer()
 
-			wardenClient.Connection.WhenStreamingIn = func(handle string, destination string) (io.WriteCloser, error) {
+			wardenClient.Connection.WhenStreamingIn = func(handle string, destination string, in io.Reader) error {
 				Ω(handle).Should(Equal("some-handle"))
 				Ω(destination).Should(Equal("/tmp/resource-artifacts"))
-				return streamedIn, nil
+
+				_, err := io.Copy(streamedIn, in)
+				Ω(err).ShouldNot(HaveOccurred())
+
+				return nil
 			}
 		})
 
@@ -96,8 +100,6 @@ var _ = Describe("Resource Check", func() {
 
 			_, err = tarReader.Next()
 			Ω(err).Should(Equal(io.EOF))
-
-			Ω(streamedIn.Closed()).Should(BeTrue())
 		})
 
 		It("runs /tmp/resource/check with the contents of the input config file on stdin", func() {
@@ -132,8 +134,8 @@ var _ = Describe("Resource Check", func() {
 		disaster := errors.New("oh no!")
 
 		BeforeEach(func() {
-			wardenClient.Connection.WhenStreamingIn = func(_, _ string) (io.WriteCloser, error) {
-				return nil, disaster
+			wardenClient.Connection.WhenStreamingIn = func(_, _ string, _ io.Reader) error {
+				return disaster
 			}
 		})
 

@@ -73,10 +73,14 @@ var _ = Describe("Resource", func() {
 			BeforeEach(func() {
 				streamedIn = gbytes.NewBuffer()
 
-				wardenClient.Connection.WhenStreamingIn = func(handle string, destination string) (io.WriteCloser, error) {
+				wardenClient.Connection.WhenStreamingIn = func(handle string, destination string, in io.Reader) error {
 					Ω(handle).Should(Equal("some-handle"))
 					Ω(destination).Should(Equal("/tmp/resource-artifacts"))
-					return streamedIn, nil
+
+					_, err := io.Copy(streamedIn, in)
+					Ω(err).ShouldNot(HaveOccurred())
+
+					return nil
 				}
 			})
 
@@ -97,8 +101,6 @@ var _ = Describe("Resource", func() {
 
 				_, err = tarReader.Next()
 				Ω(err).Should(Equal(io.EOF))
-
-				Ω(streamedIn.Closed()).Should(BeTrue())
 			})
 		})
 
@@ -150,7 +152,7 @@ var _ = Describe("Resource", func() {
 
 		Context("when streaming out succeeds", func() {
 			BeforeEach(func() {
-				wardenClient.Connection.WhenStreamingOut = func(handle string, source string) (io.Reader, error) {
+				wardenClient.Connection.WhenStreamingOut = func(handle string, source string) (io.ReadCloser, error) {
 					Ω(handle).Should(Equal("some-handle"))
 
 					streamOut := new(bytes.Buffer)
@@ -159,7 +161,7 @@ var _ = Describe("Resource", func() {
 						streamOut.WriteString("sup")
 					}
 
-					return streamOut, nil
+					return ioutil.NopCloser(streamOut), nil
 				}
 			})
 
@@ -177,7 +179,7 @@ var _ = Describe("Resource", func() {
 
 			Context("and the config path exists", func() {
 				BeforeEach(func() {
-					wardenClient.Connection.WhenStreamingOut = func(handle string, src string) (io.Reader, error) {
+					wardenClient.Connection.WhenStreamingOut = func(handle string, src string) (io.ReadCloser, error) {
 						Ω(handle).Should(Equal("some-handle"))
 
 						buf := new(bytes.Buffer)
@@ -196,7 +198,7 @@ var _ = Describe("Resource", func() {
 							tarWriter.Write(contents)
 						}
 
-						return buf, nil
+						return ioutil.NopCloser(buf), nil
 					}
 				})
 
@@ -206,7 +208,7 @@ var _ = Describe("Resource", func() {
 
 				Context("but the output is invalid", func() {
 					BeforeEach(func() {
-						wardenClient.Connection.WhenStreamingOut = func(handle string, src string) (io.Reader, error) {
+						wardenClient.Connection.WhenStreamingOut = func(handle string, src string) (io.ReadCloser, error) {
 							Ω(handle).Should(Equal("some-handle"))
 
 							buf := new(bytes.Buffer)
@@ -225,7 +227,7 @@ var _ = Describe("Resource", func() {
 								tarWriter.Write(contents)
 							}
 
-							return buf, nil
+							return ioutil.NopCloser(buf), nil
 						}
 					})
 
@@ -239,7 +241,7 @@ var _ = Describe("Resource", func() {
 				disaster := errors.New("oh no!")
 
 				BeforeEach(func() {
-					wardenClient.Connection.WhenStreamingOut = func(handle string, src string) (io.Reader, error) {
+					wardenClient.Connection.WhenStreamingOut = func(handle string, src string) (io.ReadCloser, error) {
 						return nil, disaster
 					}
 				})
@@ -251,8 +253,8 @@ var _ = Describe("Resource", func() {
 
 			Context("when the config path does not exist", func() {
 				BeforeEach(func() {
-					wardenClient.Connection.WhenStreamingOut = func(string, string) (io.Reader, error) {
-						return new(bytes.Buffer), nil
+					wardenClient.Connection.WhenStreamingOut = func(string, string) (io.ReadCloser, error) {
+						return ioutil.NopCloser(new(bytes.Buffer)), nil
 					}
 				})
 
@@ -266,8 +268,8 @@ var _ = Describe("Resource", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
-				wardenClient.Connection.WhenStreamingIn = func(_, _ string) (io.WriteCloser, error) {
-					return nil, disaster
+				wardenClient.Connection.WhenStreamingIn = func(_, _ string, _ io.Reader) error {
+					return disaster
 				}
 			})
 
@@ -307,7 +309,7 @@ var _ = Describe("Resource", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
-				wardenClient.Connection.WhenStreamingOut = func(_, _ string) (io.Reader, error) {
+				wardenClient.Connection.WhenStreamingOut = func(_, _ string) (io.ReadCloser, error) {
 					return nil, disaster
 				}
 			})

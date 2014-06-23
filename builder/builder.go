@@ -245,17 +245,7 @@ func (builder *builder) streamInResources(
 	resources map[string]io.Reader,
 ) error {
 	for destination, streamOut := range resources {
-		streamIn, err := container.StreamIn("/tmp/build/src/" + destination)
-		if err != nil {
-			return err
-		}
-
-		_, err = io.Copy(streamIn, streamOut)
-		if err != nil {
-			return err
-		}
-
-		err = streamIn.Close()
+		err := container.StreamIn("/tmp/build/src/"+destination, streamOut)
 		if err != nil {
 			return err
 		}

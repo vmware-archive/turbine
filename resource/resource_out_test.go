@@ -71,14 +71,15 @@ var _ = Describe("Resource Out", func() {
 		BeforeEach(func() {
 			streamedIn = gbytes.NewBuffer()
 
-			wardenClient.Connection.WhenStreamingIn = func(handle string, destination string) (io.WriteCloser, error) {
+			wardenClient.Connection.WhenStreamingIn = func(handle string, destination string, source io.Reader) error {
 				Ω(handle).Should(Equal("some-handle"))
 
 				if destination == "/tmp/resource-artifacts" {
-					return streamedIn, nil
-				} else {
-					return gbytes.NewBuffer(), nil
+					_, err := io.Copy(streamedIn, source)
+					Ω(err).ShouldNot(HaveOccurred())
 				}
+
+				return nil
 			}
 		})
 
@@ -99,8 +100,6 @@ var _ = Describe("Resource Out", func() {
 
 			_, err = tarReader.Next()
 			Ω(err).Should(Equal(io.EOF))
-
-			Ω(streamedIn.Closed()).Should(BeTrue())
 		})
 
 		It("runs /tmp/resource/out /tmp/build/src with the contents of the input config file on stdin", func() {
@@ -121,14 +120,15 @@ var _ = Describe("Resource Out", func() {
 		BeforeEach(func() {
 			streamedIn = gbytes.NewBuffer()
 
-			wardenClient.Connection.WhenStreamingIn = func(handle string, destination string) (io.WriteCloser, error) {
+			wardenClient.Connection.WhenStreamingIn = func(handle string, destination string, source io.Reader) error {
 				Ω(handle).Should(Equal("some-handle"))
 
 				if destination == "/tmp/build/src" {
-					return streamedIn, nil
-				} else {
-					return gbytes.NewBuffer(), nil
+					_, err := io.Copy(streamedIn, source)
+					Ω(err).ShouldNot(HaveOccurred())
 				}
+
+				return nil
 			}
 		})
 
@@ -178,11 +178,11 @@ var _ = Describe("Resource Out", func() {
 		disaster := errors.New("oh no!")
 
 		BeforeEach(func() {
-			wardenClient.Connection.WhenStreamingIn = func(_, destination string) (io.WriteCloser, error) {
+			wardenClient.Connection.WhenStreamingIn = func(_, destination string, source io.Reader) error {
 				if destination == "/tmp/resource-artifacts" {
-					return nil, disaster
+					return disaster
 				} else {
-					return gbytes.NewBuffer(), nil
+					return nil
 				}
 			}
 		})
@@ -196,11 +196,11 @@ var _ = Describe("Resource Out", func() {
 		disaster := errors.New("oh no!")
 
 		BeforeEach(func() {
-			wardenClient.Connection.WhenStreamingIn = func(_, destination string) (io.WriteCloser, error) {
+			wardenClient.Connection.WhenStreamingIn = func(_, destination string, source io.Reader) error {
 				if destination == "/tmp/build/src" {
-					return nil, disaster
+					return disaster
 				} else {
-					return gbytes.NewBuffer(), nil
+					return nil
 				}
 			}
 		})

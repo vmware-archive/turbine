@@ -175,13 +175,14 @@ var _ = Describe("Builder", func() {
 				Ω(streamedIn).Should(HaveLen(2))
 
 				for _, streamed := range streamedIn {
+					in, err := ioutil.ReadAll(streamed.Reader)
+					Ω(err).ShouldNot(HaveOccurred())
+
 					switch streamed.Destination {
 					case "/tmp/build/src/some/source/path":
-						Ω(string(streamed.WriteBuffer.Contents())).Should(Equal("some-data-1"))
-						Ω(streamed.WriteBuffer.Closed()).Should(BeTrue())
+						Ω(string(in)).Should(Equal("some-data-1"))
 					case "/tmp/build/src/another/source/path":
-						Ω(string(streamed.WriteBuffer.Contents())).Should(Equal("some-data-2"))
-						Ω(streamed.WriteBuffer.Closed()).Should(BeTrue())
+						Ω(string(in)).Should(Equal("some-data-2"))
 					default:
 						Fail("unknown stream destination: " + streamed.Destination)
 					}
@@ -405,8 +406,8 @@ var _ = Describe("Builder", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
-				wardenClient.Connection.WhenStreamingIn = func(handle string, dst string) (io.WriteCloser, error) {
-					return nil, disaster
+				wardenClient.Connection.WhenStreamingIn = func(handle string, dst string, in io.Reader) error {
+					return disaster
 				}
 			})
 
@@ -741,8 +742,8 @@ var _ = Describe("Builder", func() {
 
 			Context("and streaming out succeeds", func() {
 				BeforeEach(func() {
-					wardenClient.Connection.WhenStreamingOut = func(string, string) (io.Reader, error) {
-						return bytes.NewBufferString("streamed-out"), nil
+					wardenClient.Connection.WhenStreamingOut = func(string, string) (io.ReadCloser, error) {
+						return ioutil.NopCloser(bytes.NewBufferString("streamed-out")), nil
 					}
 				})
 
@@ -946,7 +947,7 @@ var _ = Describe("Builder", func() {
 				disaster := errors.New("oh no!")
 
 				BeforeEach(func() {
-					wardenClient.Connection.WhenStreamingOut = func(string, string) (io.Reader, error) {
+					wardenClient.Connection.WhenStreamingOut = func(string, string) (io.ReadCloser, error) {
 						return nil, disaster
 					}
 				})

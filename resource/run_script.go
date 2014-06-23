@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
 )
@@ -54,38 +55,34 @@ func (resource *resource) injectInput(input interface{}) error {
 		return err
 	}
 
-	streamIn, err := resource.container.StreamIn("/tmp/resource-artifacts")
-	if err != nil {
-		return err
-	}
+	tarRead, tarWrite := io.Pipe()
 
-	tarWriter := tar.NewWriter(streamIn)
+	go func() {
+		defer tarWrite.Close()
 
-	err = tarWriter.WriteHeader(&tar.Header{
-		Name: "./stdin",
-		Mode: 0644,
-		Size: int64(len(payload)),
-	})
-	if err != nil {
-		return err
-	}
+		tarWriter := tar.NewWriter(tarWrite)
 
-	_, err = tarWriter.Write(payload)
-	if err != nil {
-		return err
-	}
+		tarWriter.WriteHeader(&tar.Header{
+			Name: "./stdin",
+			Mode: 0644,
+			Size: int64(len(payload)),
+		})
+		if err != nil {
+			return
+		}
 
-	err = tarWriter.Close()
-	if err != nil {
-		return err
-	}
+		_, err = tarWriter.Write(payload)
+		if err != nil {
+			return
+		}
 
-	err = streamIn.Close()
-	if err != nil {
-		return err
-	}
+		err = tarWriter.Close()
+		if err != nil {
+			return
+		}
+	}()
 
-	return nil
+	return resource.container.StreamIn("/tmp/resource-artifacts", tarRead)
 }
 
 func (resource *resource) waitForRunToEnd(stream <-chan warden.ProcessStream) ([]byte, error) {
