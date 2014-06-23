@@ -62,10 +62,10 @@ var snapshotPath = flag.String(
 func main() {
 	flag.Parse()
 
-	wardenClient := WardenClient.New(&WardenConnection.Info{
-		Network: *wardenNetwork,
-		Addr:    *wardenAddr,
-	})
+	wardenClient := WardenClient.New(WardenConnection.New(
+		*wardenNetwork,
+		*wardenAddr,
+	))
 
 	resourceTypesMap := map[string]string{}
 	err := json.Unmarshal([]byte(*resourceTypes), &resourceTypesMap)
