@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"log"
 	"os"
 
 	WardenClient "github.com/cloudfoundry-incubator/garden/client"
@@ -68,10 +67,13 @@ func main() {
 		*wardenAddr,
 	))
 
+	logger := lager.NewLogger("turbine")
+	logger.RegisterSink(lager.NewWriterSink(os.Stdout, lager.DEBUG))
+
 	resourceTypesMap := map[string]string{}
 	err := json.Unmarshal([]byte(*resourceTypes), &resourceTypesMap)
 	if err != nil {
-		log.Fatalln("failed to parse resource types:", err)
+		logger.Fatal("failed-to-parse-resource-types", err)
 	}
 
 	var resourceTypesConfig config.ResourceTypes
@@ -81,9 +83,6 @@ func main() {
 			Image: image,
 		})
 	}
-
-	logger := lager.NewLogger("turbine")
-	logger.RegisterSink(lager.NewWriterSink(os.Stdout, lager.DEBUG))
 
 	resourceTracker := resource.NewTracker(resourceTypesConfig, wardenClient)
 
