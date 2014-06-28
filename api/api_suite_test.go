@@ -11,6 +11,7 @@ import (
 	"github.com/concourse/turbine/scheduler/fakescheduler"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/pivotal-golang/lager/lagertest"
 	"github.com/tedsuo/router"
 )
 
@@ -28,7 +29,7 @@ var _ = BeforeEach(func() {
 
 	turbineEndpoint := router.NewRequestGenerator("http://some-turbine", routes.Routes)
 
-	handler, err := api.New(scheduler, tracker, turbineEndpoint, drain)
+	handler, err := api.New(lagertest.NewTestLogger("test"), scheduler, tracker, turbineEndpoint, drain)
 	Ω(err).ShouldNot(HaveOccurred())
 
 	server = httptest.NewServer(handler)

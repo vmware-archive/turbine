@@ -5,6 +5,7 @@ import (
 
 	"code.google.com/p/go.net/websocket"
 
+	"github.com/pivotal-golang/lager"
 	"github.com/tedsuo/router"
 
 	"github.com/concourse/turbine/api/abort"
@@ -16,12 +17,13 @@ import (
 )
 
 func New(
+	logger lager.Logger,
 	scheduler scheduler.Scheduler,
 	tracker resource.Tracker,
 	turbineEndpoint *router.RequestGenerator,
 	drain <-chan struct{},
 ) (http.Handler, error) {
-	checkHandler := check.NewHandler(tracker, drain)
+	checkHandler := check.NewHandler(logger, tracker, drain)
 
 	handlers := map[string]http.Handler{
 		routes.ExecuteBuild:     execute.NewHandler(scheduler, turbineEndpoint),

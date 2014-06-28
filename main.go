@@ -95,7 +95,7 @@ func main() {
 
 	drain := make(chan struct{})
 
-	handler, err := api.New(scheduler, resourceTracker, generator, drain)
+	handler, err := api.New(logger.Session("api"), scheduler, resourceTracker, generator, drain)
 	if err != nil {
 		logger.Fatal("failed-to-initialize-handler", err)
 	}

@@ -2,21 +2,25 @@ package check
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"time"
+
+	"github.com/pivotal-golang/lager"
 
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/resource"
 )
 
 type Handler struct {
+	logger lager.Logger
+
 	tracker resource.Tracker
 	drain   <-chan struct{}
 }
 
-func NewHandler(tracker resource.Tracker, drain <-chan struct{}) *Handler {
+func NewHandler(logger lager.Logger, tracker resource.Tracker, drain <-chan struct{}) *Handler {
 	return &Handler{
+		logger:  logger,
 		tracker: tracker,
 		drain:   drain,
 	}
@@ -41,17 +45,22 @@ func (handler *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var input builds.Input
 	err := json.NewDecoder(r.Body).Decode(&input)
 	if err != nil {
-		log.Println("malformed request:", err)
+		handler.logger.Error("malformed-request", err)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
 	}
 
-	log.Printf("checking %s (type: %s)\n", input.Name, input.Type)
+	log := handler.logger.Session("check", lager.Data{
+		"interval": interval.String(),
+		"input":    input,
+	})
+
+	log.Info("checking")
 
 	resource, err := handler.tracker.Init(input.Type, nil, nil)
 	if err != nil {
-		log.Println("checking failed:", err)
+		log.Error("failed-to-init", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(err.Error()))
 		return
@@ -72,14 +81,14 @@ func (handler *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusInternalServerError)
 			}
 
-			log.Println("checking failed:", err)
+			log.Error("failed-to-check", err)
 			w.Write([]byte(err.Error()))
 			return
 		}
 
 		err = encoder.Encode(versions)
 		if err != nil {
-			log.Println("writing check result failed:", err)
+			log.Error("failed-to-encode", err)
 			break
 		}
 

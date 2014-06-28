@@ -3,9 +3,9 @@ package check
 import (
 	"encoding/json"
 	"io"
-	"log"
 
 	"code.google.com/p/go.net/websocket"
+	"github.com/pivotal-golang/lager"
 
 	"github.com/concourse/turbine/api/builds"
 )
@@ -25,15 +25,17 @@ func (handler *Handler) Stream(conn *websocket.Conn) {
 	var input builds.Input
 	err := json.NewDecoder(conn).Decode(&input)
 	if err != nil {
-		log.Println("malformed request:", err)
+		handler.logger.Error("malformed-request", err)
 		return
 	}
 
-	log.Printf("streaming checks for %s (type: %s)\n", input.Name, input.Type)
+	log := handler.logger.Session("streaming-check", lager.Data{
+		"input": input,
+	})
 
 	resource, err := handler.tracker.Init(input.Type, nil, nil)
 	if err != nil {
-		log.Println("checking failed:", err)
+		log.Error("failed-to-init", err)
 		return
 	}
 
@@ -42,17 +44,17 @@ func (handler *Handler) Stream(conn *websocket.Conn) {
 	encoder := json.NewEncoder(conn)
 
 	for {
-		log.Printf("checking %s (type: %s)\n", input.Name, input.Type)
+		log.Info("checking")
 
 		versions, err := resource.Check(input)
 		if err != nil {
-			log.Println("checking failed:", err)
+			log.Error("failed-to-check", err)
 			return
 		}
 
 		err = encoder.Encode(versions)
 		if err != nil {
-			log.Println("writing check result failed:", err)
+			log.Error("failed-to-encode", err)
 			break
 		}
 
@@ -65,7 +67,7 @@ func (handler *Handler) Stream(conn *websocket.Conn) {
 			select {
 			case <-handler.drain:
 			default:
-				log.Println("malformed request:", err)
+				log.Error("malformed-request", err)
 			}
 
 			return
