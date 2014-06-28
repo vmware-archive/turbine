@@ -8,6 +8,7 @@ import (
 
 	WardenClient "github.com/cloudfoundry-incubator/garden/client"
 	WardenConnection "github.com/cloudfoundry-incubator/garden/client/connection"
+	"github.com/pivotal-golang/lager"
 	"github.com/tedsuo/ifrit"
 	"github.com/tedsuo/ifrit/grouper"
 	"github.com/tedsuo/ifrit/http_server"
@@ -81,11 +82,14 @@ func main() {
 		})
 	}
 
+	logger := lager.NewLogger("turbine")
+	logger.RegisterSink(lager.NewWriterSink(os.Stdout, lager.DEBUG))
+
 	resourceTracker := resource.NewTracker(resourceTypesConfig, wardenClient)
 
 	builder := builder.NewBuilder(resourceTracker, wardenClient)
 
-	scheduler := scheduler.NewScheduler(builder)
+	scheduler := scheduler.NewScheduler(builder, logger.Session("scheduler"))
 
 	generator := router.NewRequestGenerator("http://"+*peerAddr, routes.Routes)
 
@@ -93,7 +97,7 @@ func main() {
 
 	handler, err := api.New(scheduler, resourceTracker, generator, drain)
 	if err != nil {
-		log.Fatalln("failed to initialize handler:", err)
+		logger.Fatal("failed-to-initialize-handler", err)
 	}
 
 	group := grouper.EnvokeGroup(grouper.RunGroup{
@@ -109,13 +113,15 @@ func main() {
 
 	running := ifrit.Envoke(sigmon.New(group))
 
-	log.Println("serving api on", *listenAddr)
+	logger.Info("listening", lager.Data{
+		"api": *listenAddr,
+	})
 
 	err = <-running.Wait()
-	if err != nil {
-		log.Println("exited with error:", err)
+	if err == nil {
+		logger.Info("exited")
+	} else {
+		logger.Error("failed", err)
 		os.Exit(1)
 	}
-
-	log.Println("exited")
 }

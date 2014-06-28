@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"sync"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder"
+	"github.com/pivotal-golang/lager"
 )
 
 type Scheduler interface {
@@ -23,6 +23,8 @@ type Scheduler interface {
 }
 
 type scheduler struct {
+	logger lager.Logger
+
 	builder builder.Builder
 
 	httpClient *http.Client
@@ -35,8 +37,10 @@ type scheduler struct {
 	mutex *sync.RWMutex
 }
 
-func NewScheduler(b builder.Builder) Scheduler {
+func NewScheduler(l lager.Logger, b builder.Builder) Scheduler {
 	return &scheduler{
+		logger: l,
+
 		builder: b,
 
 		httpClient: &http.Client{
@@ -63,7 +67,9 @@ func (scheduler *scheduler) Drain() []builder.RunningBuild {
 func (scheduler *scheduler) Start(build builds.Build) {
 	scheduler.inFlight.Add(1)
 
-	log.Printf("building: %#v\n", build)
+	log := scheduler.logger.Session("start", lager.Data{
+		"build": build,
+	})
 
 	abort := scheduler.abortChannel(build.Guid)
 
@@ -72,17 +78,17 @@ func (scheduler *scheduler) Start(build builds.Build) {
 	go func() {
 		select {
 		case running := <-started:
-			log.Println("started")
+			log.Info("started")
 
 			running.Build.Status = builds.StatusStarted
-			scheduler.reportBuild(running.Build)
+			scheduler.reportBuild(running.Build, log)
 
 			scheduler.Attach(running)
 		case err := <-errored:
-			log.Println("errored while starting:", err)
+			log.Error("errored", err)
 
 			build.Status = builds.StatusErrored
-			scheduler.reportBuild(build)
+			scheduler.reportBuild(build, log)
 		}
 
 		scheduler.unregisterAbortChannel(build.Guid)
@@ -103,23 +109,27 @@ func (scheduler *scheduler) Attach(running builder.RunningBuild) {
 
 	succeeded, failed, errored := scheduler.builder.Attach(running, abort)
 
+	log := scheduler.logger.Session("attach", lager.Data{
+		"build": running.Build,
+	})
+
 	select {
 	case err := <-failed:
-		log.Println("failed:", err)
+		log.Error("failed", err)
 
 		running.Build.Status = builds.StatusFailed
-		scheduler.reportBuild(running.Build)
+		scheduler.reportBuild(running.Build, log)
 
 	case succeededBuild := <-succeeded:
-		log.Println("succeeded")
+		log.Info("succeeded")
 
 		scheduler.complete(succeededBuild)
 
 	case err := <-errored:
-		log.Println("errored:", err)
+		log.Error("errored", err)
 
 		running.Build.Status = builds.StatusErrored
-		scheduler.reportBuild(running.Build)
+		scheduler.reportBuild(running.Build, log)
 
 	case <-scheduler.draining:
 		return
@@ -136,18 +146,22 @@ func (scheduler *scheduler) complete(succeeded builder.SucceededBuild) {
 	abort := scheduler.abortChannel(succeeded.Build.Guid)
 	finished, errored := scheduler.builder.Complete(succeeded, abort)
 
+	log := scheduler.logger.Session("complete", lager.Data{
+		"build": succeeded.Build,
+	})
+
 	select {
 	case finishedBuild := <-finished:
-		log.Println("completed")
+		log.Info("completed")
 
 		finishedBuild.Status = builds.StatusSucceeded
-		scheduler.reportBuild(finishedBuild)
+		scheduler.reportBuild(finishedBuild, log)
 
 	case err := <-errored:
-		log.Println("failed to complete:", err)
+		log.Error("failed", err)
 
 		succeeded.Build.Status = builds.StatusErrored
-		scheduler.reportBuild(succeeded.Build)
+		scheduler.reportBuild(succeeded.Build, log)
 	}
 }
 
@@ -211,10 +225,14 @@ func (scheduler *scheduler) abortBuild(guid string) {
 func (scheduler *scheduler) runBuild(originalBuild builds.Build, started <-chan builder.RunningBuild, errored <-chan error) {
 }
 
-func (scheduler *scheduler) reportBuild(build builds.Build) {
+func (scheduler *scheduler) reportBuild(build builds.Build, logger lager.Logger) {
 	if build.Callback == "" {
 		return
 	}
+
+	log := logger.Session("report", lager.Data{
+		"build": build,
+	})
 
 	// this should always successfully parse (it's done via validation)
 	destination, _ := url.ParseRequestURI(build.Callback)
@@ -236,7 +254,7 @@ func (scheduler *scheduler) reportBuild(build builds.Build) {
 		})
 
 		if err != nil {
-			log.Println("failed to submit result:", err)
+			log.Error("failed", err)
 			time.Sleep(time.Second)
 			continue
 		}

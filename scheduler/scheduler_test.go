@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/ghttp"
+	"github.com/pivotal-golang/lager/lagertest"
 
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder"
@@ -22,7 +23,7 @@ var _ = Describe("Scheduler", func() {
 
 	BeforeEach(func() {
 		fakeBuilder = fakebuilder.New()
-		scheduler = NewScheduler(fakeBuilder)
+		scheduler = NewScheduler(lagertest.NewTestLogger("test"), fakeBuilder)
 
 		build = builds.Build{
 			Guid: "abc",
