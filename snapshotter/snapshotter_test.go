@@ -2,11 +2,13 @@ package snapshotter_test
 
 import (
 	"encoding/json"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-	"github.com/tedsuo/ifrit"
 	"io/ioutil"
 	"os"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+	"github.com/pivotal-golang/lager/lagertest"
+	"github.com/tedsuo/ifrit"
 
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder"
@@ -72,7 +74,7 @@ var _ = Describe("Snapshotter", func() {
 		snapshotPath = snapshotFile.Name()
 
 		scheduler = fakescheduler.New()
-		snapshotter = NewSnapshotter(snapshotPath, scheduler)
+		snapshotter = NewSnapshotter(lagertest.NewTestLogger("test"), snapshotPath, scheduler)
 	})
 
 	AfterEach(func() {

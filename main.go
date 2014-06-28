@@ -102,7 +102,7 @@ func main() {
 
 	group := grouper.EnvokeGroup(grouper.RunGroup{
 		"api":         http_server.New(*listenAddr, handler),
-		"snapshotter": snapshotter.NewSnapshotter(*snapshotPath, scheduler),
+		"snapshotter": snapshotter.NewSnapshotter(logger.Session("snapshotter"), *snapshotPath, scheduler),
 		"drainer": ifrit.RunFunc(func(signals <-chan os.Signal, ready chan<- struct{}) error {
 			close(ready)
 			<-signals
