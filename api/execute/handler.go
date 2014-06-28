@@ -2,11 +2,11 @@ package execute
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"net/url"
 
 	"github.com/nu7hatch/gouuid"
+	"github.com/pivotal-golang/lager"
 	"github.com/tedsuo/router"
 
 	"github.com/concourse/turbine/api/builds"
@@ -15,15 +15,20 @@ import (
 )
 
 type handler struct {
+	logger lager.Logger
+
 	scheduler       scheduler.Scheduler
 	turbineEndpoint *router.RequestGenerator
 }
 
 func NewHandler(
+	logger lager.Logger,
 	scheduler scheduler.Scheduler,
 	turbineEndpoint *router.RequestGenerator,
 ) http.Handler {
 	return &handler{
+		logger: logger,
+
 		scheduler:       scheduler,
 		turbineEndpoint: turbineEndpoint,
 	}
@@ -33,15 +38,19 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var build builds.Build
 	err := json.NewDecoder(r.Body).Decode(&build)
 	if err != nil {
-		log.Println("malformed request:", err)
+		handler.logger.Error("malformed-request", err)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
 	}
 
+	log := handler.logger.Session("execute", lager.Data{
+		"build": build,
+	})
+
 	err = handler.validateBuild(build)
 	if err != nil {
-		log.Println("invalid request:", err)
+		log.Error("invalid-request", err)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
@@ -69,7 +78,9 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	build.AbortURL = abortReq.URL.String()
 
-	log.Println("scheduling", build.Guid)
+	log.Info("scheduling", lager.Data{
+		"guid": build.Guid,
+	})
 
 	handler.scheduler.Start(build)
 

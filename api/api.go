@@ -26,7 +26,7 @@ func New(
 	checkHandler := check.NewHandler(logger, tracker, drain)
 
 	handlers := map[string]http.Handler{
-		routes.ExecuteBuild:     execute.NewHandler(scheduler, turbineEndpoint),
+		routes.ExecuteBuild:     execute.NewHandler(logger, scheduler, turbineEndpoint),
 		routes.AbortBuild:       abort.NewHandler(scheduler),
 		routes.CheckInput:       checkHandler,
 		routes.CheckInputStream: websocket.Server{Handler: checkHandler.Stream},
