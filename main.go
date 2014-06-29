@@ -88,7 +88,7 @@ func main() {
 
 	builder := builder.NewBuilder(resourceTracker, wardenClient)
 
-	scheduler := scheduler.NewScheduler(builder, logger.Session("scheduler"))
+	scheduler := scheduler.NewScheduler(logger.Session("scheduler"), builder)
 
 	generator := router.NewRequestGenerator("http://"+*peerAddr, routes.Routes)
 
