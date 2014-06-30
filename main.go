@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"os"
+	"time"
 
 	WardenClient "github.com/cloudfoundry-incubator/garden/client"
 	WardenConnection "github.com/cloudfoundry-incubator/garden/client/connection"
@@ -97,6 +98,20 @@ func main() {
 	handler, err := api.New(logger.Session("api"), scheduler, resourceTracker, generator, drain)
 	if err != nil {
 		logger.Fatal("failed-to-initialize-handler", err)
+	}
+
+	var pingErr error
+	for i := 0; i < 10; i++ {
+		pingErr = wardenClient.Ping()
+		if pingErr == nil {
+			break
+		}
+
+		time.Sleep(time.Second)
+	}
+
+	if pingErr != nil {
+		logger.Fatal("failed-to-ping-warden", err)
 	}
 
 	group := grouper.EnvokeGroup(grouper.RunGroup{
