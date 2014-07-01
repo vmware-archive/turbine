@@ -25,23 +25,23 @@
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/client",
-			"Rev": "01e2759ebeacba0f21c5829041eb42a98958bf2c"
+			"Rev": "1758c54f1e20106f100b42434b005ca7881f1418"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/protocol",
-			"Rev": "01e2759ebeacba0f21c5829041eb42a98958bf2c"
+			"Rev": "1758c54f1e20106f100b42434b005ca7881f1418"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/routes",
-			"Rev": "01e2759ebeacba0f21c5829041eb42a98958bf2c"
+			"Rev": "1758c54f1e20106f100b42434b005ca7881f1418"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/transport",
-			"Rev": "01e2759ebeacba0f21c5829041eb42a98958bf2c"
+			"Rev": "1758c54f1e20106f100b42434b005ca7881f1418"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/warden",
-			"Rev": "01e2759ebeacba0f21c5829041eb42a98958bf2c"
+			"Rev": "1758c54f1e20106f100b42434b005ca7881f1418"
 		},
 		{
 			"ImportPath": "github.com/fraenkel/candiedyaml",
@@ -67,6 +67,10 @@
 		{
 			"ImportPath": "github.com/tedsuo/ifrit",
 			"Rev": "439138de94ac33aebc7dad33cada3796318845ea"
+		},
+		{
+			"ImportPath": "github.com/tedsuo/rata",
+			"Rev": "ffbc6810b2dff37aade33e5bf1ee8deadafe867d"
 		},
 		{
 			"ImportPath": "github.com/tedsuo/router",
