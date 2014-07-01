@@ -200,6 +200,7 @@ var _ = Describe("Builder", func() {
 				Ω(spawned[0].Path).Should(Equal("./bin/test"))
 				Ω(spawned[0].Args).Should(Equal([]string{"arg1", "arg2"}))
 				Ω(spawned[0].Dir).Should(Equal("/tmp/build/src"))
+				Ω(spawned[0].Privileged).Should(BeFalse())
 				Ω(spawned[0].EnvironmentVariables).Should(HaveLen(2))
 				Ω(spawned[0].EnvironmentVariables).Should(ContainElement(
 					warden.EnvironmentVariable{"FOO", "bar"},
@@ -231,16 +232,8 @@ var _ = Describe("Builder", func() {
 				It("runs the build privileged", func() {
 					Eventually(started).Should(Receive())
 
-					Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
-						Path:       "./bin/test",
-						Args:       []string{"arg1", "arg2"},
-						Dir:        "/tmp/build/src",
-						Privileged: true,
-						EnvironmentVariables: []warden.EnvironmentVariable{
-							{"FOO", "bar"},
-							{"BAZ", "buzz"},
-						},
-					}))
+					spawned := wardenClient.Connection.SpawnedProcesses("some-handle")
+					Ω(spawned[0].Privileged).Should(BeTrue())
 				})
 			})
 
