@@ -27,7 +27,9 @@ var _ = Describe("Snapshotter", func() {
 		{
 			Build: builds.Build{
 				Config: builds.Config{
-					Script: "some-script",
+					Run: builds.RunConfig{
+						Path: "some-script",
+					},
 				},
 			},
 			ContainerHandle: "some-handle",
@@ -36,7 +38,9 @@ var _ = Describe("Snapshotter", func() {
 		{
 			Build: builds.Build{
 				Config: builds.Config{
-					Script: "some-other-script",
+					Run: builds.RunConfig{
+						Path: "some-other-script",
+					},
 				},
 			},
 			ContainerHandle: "some-other-handle",
@@ -48,7 +52,9 @@ var _ = Describe("Snapshotter", func() {
 		{
 			Build: builds.Build{
 				Config: builds.Config{
-					Script: "some-script",
+					Run: builds.RunConfig{
+						Path: "some-script",
+					},
 				},
 			},
 			ContainerHandle: "some-handle",
@@ -57,7 +63,9 @@ var _ = Describe("Snapshotter", func() {
 		{
 			Build: builds.Build{
 				Config: builds.Config{
-					Script: "some-other-script",
+					Run: builds.RunConfig{
+						Path: "some-other-script",
+					},
 				},
 			},
 			ContainerHandle: "some-other-handle",

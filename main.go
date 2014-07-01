@@ -50,7 +50,12 @@ var wardenAddr = flag.String(
 
 var resourceTypes = flag.String(
 	"resourceTypes",
-	`{"git":"concourse/git-resource","raw":"concourse/raw-resource","docker-image":"concourse/docker-image-resource","time":"concourse/time-resource"}`,
+	`{
+		"git": "docker:///concourse/git-resource",
+		"raw": "docker:///concourse/raw-resource",
+		"docker-image": "docker:///concourse/docker-image-resource",
+		"time": "docker:///concourse/time-resource"
+	}`,
 	"map of resource type to its docker image",
 )
 

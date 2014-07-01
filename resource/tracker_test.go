@@ -60,7 +60,7 @@ var _ = Describe("Tracker", func() {
 
 		It("creates a container with the resource type's image", func() {
 			Ω(wardenClient.Connection.Created()).Should(ContainElement(warden.ContainerSpec{
-				RootFSPath: "docker:///image1",
+				RootFSPath: "image1",
 			}))
 		})
 

@@ -73,13 +73,17 @@ var _ = Describe("Builder", func() {
 
 		build = builds.Build{
 			Config: builds.Config{
-				Image: "some-image-name",
+				Image: "some-rootfs",
 
-				Env: []map[string]string{
-					{"FOO": "bar"},
-					{"BAZ": "buzz"},
+				Params: map[string]string{
+					"FOO": "bar",
+					"BAZ": "buzz",
 				},
-				Script: "./bin/test",
+
+				Run: builds.RunConfig{
+					Path: "./bin/test",
+					Args: []string{"arg1", "arg2"},
+				},
 			},
 
 			Inputs: []builds.Input{
@@ -151,7 +155,7 @@ var _ = Describe("Builder", func() {
 
 				created := wardenClient.Connection.Created()
 				Ω(created).Should(HaveLen(1))
-				Ω(created[0].RootFSPath).Should(Equal("docker:///some-image-name"))
+				Ω(created[0].RootFSPath).Should(Equal("some-rootfs"))
 			})
 
 			It("streams them in to the container", func() {
@@ -192,14 +196,17 @@ var _ = Describe("Builder", func() {
 			It("runs the build's script in the container", func() {
 				Eventually(started).Should(Receive())
 
-				Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
-					Script: `cd /tmp/build/src
-./bin/test`,
-					EnvironmentVariables: []warden.EnvironmentVariable{
-						{"FOO", "bar"},
-						{"BAZ", "buzz"},
-					},
-				}))
+				spawned := wardenClient.Connection.SpawnedProcesses("some-handle")
+				Ω(spawned[0].Path).Should(Equal("./bin/test"))
+				Ω(spawned[0].Args).Should(Equal([]string{"arg1", "arg2"}))
+				Ω(spawned[0].Dir).Should(Equal("/tmp/build/src"))
+				Ω(spawned[0].EnvironmentVariables).Should(HaveLen(2))
+				Ω(spawned[0].EnvironmentVariables).Should(ContainElement(
+					warden.EnvironmentVariable{"FOO", "bar"},
+				))
+				Ω(spawned[0].EnvironmentVariables).Should(ContainElement(
+					warden.EnvironmentVariable{"BAZ", "buzz"},
+				))
 			})
 
 			Context("when running the build's script fails", func() {
@@ -225,8 +232,9 @@ var _ = Describe("Builder", func() {
 					Eventually(started).Should(Receive())
 
 					Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(ContainElement(warden.ProcessSpec{
-						Script: `cd /tmp/build/src
-./bin/test`,
+						Path:       "./bin/test",
+						Args:       []string{"arg1", "arg2"},
+						Dir:        "/tmp/build/src",
 						Privileged: true,
 						EnvironmentVariables: []warden.EnvironmentVariable{
 							{"FOO", "bar"},
@@ -266,7 +274,7 @@ var _ = Describe("Builder", func() {
 					})
 
 					It("emits the build's output via websockets", func() {
-						Eventually(logBuffer).Should(gbytes.Say("creating container from some-image-name...\n"))
+						Eventually(logBuffer).Should(gbytes.Say("creating container from some-rootfs...\n"))
 						Eventually(logBuffer).Should(gbytes.Say("starting...\n"))
 
 						var runningBuild RunningBuild

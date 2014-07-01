@@ -54,36 +54,30 @@ func (resource *resource) In(input builds.Input) (io.Reader, builds.Input, build
 }
 
 func (resource *resource) extractConfig(input builds.Input) (builds.Config, error) {
-	var buildConfig builds.Config
-
 	if input.ConfigPath == "" {
-		return buildConfig, nil
+		return builds.Config{}, nil
 	}
 
-	config := path.Join("/tmp/build/src", input.DestinationPath, input.ConfigPath)
+	configPath := path.Join("/tmp/build/src", input.DestinationPath, input.ConfigPath)
 
-	configStream, err := resource.container.StreamOut(config)
+	configStream, err := resource.container.StreamOut(configPath)
 	if err != nil {
-		return buildConfig, err
+		return builds.Config{}, err
 	}
 
 	reader := tar.NewReader(configStream)
 
 	_, err = reader.Next()
 	if err != nil {
-		return buildConfig, err
+		return builds.Config{}, err
 	}
 
-	var configFile ConfigFile
+	var buildConfig builds.Config
 
-	err = candiedyaml.NewDecoder(reader).Decode(&configFile)
+	err = candiedyaml.NewDecoder(reader).Decode(&buildConfig)
 	if err != nil {
-		return buildConfig, err
+		return builds.Config{}, err
 	}
 
-	return builds.Config{
-		Image:  configFile.Image,
-		Script: configFile.Script,
-		Env:    configFile.Env,
-	}, nil
+	return buildConfig, nil
 }

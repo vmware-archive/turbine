@@ -107,7 +107,11 @@ var _ = Describe("Resource Out", func() {
 
 			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
 				{
-					Script:     "/tmp/resource/out /tmp/build/src < /tmp/resource-artifacts/stdin",
+					Path: "bash",
+					Args: []string{
+						"-c",
+						"/tmp/resource/out /tmp/build/src < /tmp/resource-artifacts/stdin",
+					},
 					Privileged: true,
 				},
 			}))

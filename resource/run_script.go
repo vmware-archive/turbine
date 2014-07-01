@@ -34,7 +34,11 @@ func (resource *resource) runScript(script string, input interface{}, output int
 	}
 
 	_, stream, err := resource.container.Run(warden.ProcessSpec{
-		Script:     script + " < /tmp/resource-artifacts/stdin",
+		Path: "bash",
+		Args: []string{
+			"-c",
+			script + " < /tmp/resource-artifacts/stdin",
+		},
 		Privileged: true,
 	})
 	if err != nil {

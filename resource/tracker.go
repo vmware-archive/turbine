@@ -41,7 +41,7 @@ func (tracker *tracker) Init(typ string, logs io.Writer, abort <-chan struct{}) 
 	}
 
 	container, err := tracker.wardenClient.Create(warden.ContainerSpec{
-		RootFSPath: "docker:///" + resourceType.Image,
+		RootFSPath: resourceType.Image,
 	})
 	if err != nil {
 		return nil, err

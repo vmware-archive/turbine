@@ -234,7 +234,7 @@ func (builder *builder) createBuildContainer(
 	fmt.Fprintf(logs, "creating container from %s...\n", buildConfig.Image)
 
 	containerSpec := warden.ContainerSpec{
-		RootFSPath: "docker:///" + buildConfig.Image,
+		RootFSPath: buildConfig.Image,
 	}
 
 	return builder.wardenClient.Create(containerSpec)
@@ -263,16 +263,17 @@ func (builder *builder) runBuild(
 	fmt.Fprintf(logs, "starting...\n")
 
 	env := []warden.EnvironmentVariable{}
-	for _, nv := range buildConfig.Env {
-		for n, v := range nv {
-			env = append(env, warden.EnvironmentVariable{Key: n, Value: v})
-		}
+	for n, v := range buildConfig.Params {
+		env = append(env, warden.EnvironmentVariable{Key: n, Value: v})
 	}
 
 	processSpec := warden.ProcessSpec{
 		Privileged: privileged,
 
-		Script: "cd /tmp/build/src\n" + buildConfig.Script,
+		Path: buildConfig.Run.Path,
+		Args: buildConfig.Run.Args,
+
+		Dir: "/tmp/build/src",
 
 		EnvironmentVariables: env,
 	}
