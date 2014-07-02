@@ -24,11 +24,9 @@ var _ = Describe("POST /builds", func() {
 
 	BeforeEach(func() {
 		build = builds.Build{
-			Config: builds.Config{
-				Inputs: []builds.Input{
-					{
-						Type: "git",
-					},
+			Inputs: []builds.Input{
+				{
+					Type: "git",
 				},
 			},
 		}
@@ -59,7 +57,7 @@ var _ = Describe("POST /builds", func() {
 
 		Ω(returnedBuild.Guid).ShouldNot(BeEmpty())
 		Ω(returnedBuild.AbortURL).Should(Equal("http://some-turbine/builds/" + returnedBuild.Guid + "/abort"))
-		Ω(returnedBuild.Config).Should(Equal(build.Config))
+		Ω(returnedBuild.Inputs).Should(Equal(build.Inputs))
 
 		Ω(scheduler.Scheduled()).Should(ContainElement(returnedBuild))
 	})

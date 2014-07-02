@@ -72,12 +72,12 @@ func (resource *resource) extractConfig(input builds.Input) (builds.Config, erro
 		return builds.Config{}, err
 	}
 
-	var config builds.Config
+	var buildConfig builds.Config
 
-	err = candiedyaml.NewDecoder(reader).Decode(&config)
+	err = candiedyaml.NewDecoder(reader).Decode(&buildConfig)
 	if err != nil {
 		return builds.Config{}, err
 	}
 
-	return config, nil
+	return buildConfig, nil
 }

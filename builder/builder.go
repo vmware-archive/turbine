@@ -94,7 +94,7 @@ func (builder *builder) start(build builds.Build, abort <-chan struct{}, started
 
 	resources := map[string]io.Reader{}
 
-	for i, input := range build.Config.Inputs {
+	for i, input := range build.Inputs {
 		resource, err := builder.tracker.Init(input.Type, logs, abort)
 		if err != nil {
 			errored <- err
@@ -111,7 +111,7 @@ func (builder *builder) start(build builds.Build, abort <-chan struct{}, started
 			return
 		}
 
-		build.Config.Inputs[i] = computedInput
+		build.Inputs[i] = computedInput
 
 		build.Config = build.Config.Merge(buildConfig)
 
@@ -212,7 +212,7 @@ func (builder *builder) complete(succeeded SucceededBuild, abort <-chan struct{}
 		return
 	}
 
-	succeeded.Build.Config.Outputs = outputs
+	succeeded.Build.Outputs = outputs
 
 	finished <- succeeded.Build
 }
@@ -314,7 +314,7 @@ func (builder *builder) performOutputs(
 	allOutputs := map[string]builds.Output{}
 
 	// Implicit outputs
-	for _, input := range build.Config.Inputs {
+	for _, input := range build.Inputs {
 		allOutputs[input.Name] = builds.Output{
 			Name:    input.Name,
 			Type:    input.Type,
@@ -322,11 +322,11 @@ func (builder *builder) performOutputs(
 		}
 	}
 
-	if len(build.Config.Outputs) > 0 {
-		errs := make(chan error, len(build.Config.Outputs))
-		results := make(chan builds.Output, len(build.Config.Outputs))
+	if len(build.Outputs) > 0 {
+		errs := make(chan error, len(build.Outputs))
+		results := make(chan builds.Output, len(build.Outputs))
 
-		for _, output := range build.Config.Outputs {
+		for _, output := range build.Outputs {
 			go func(output builds.Output) {
 				streamOut, err := container.StreamOut("/tmp/build/src/")
 				if err != nil {
@@ -350,7 +350,7 @@ func (builder *builder) performOutputs(
 		}
 
 		var outputErr error
-		for i := 0; i < len(build.Config.Outputs); i++ {
+		for i := 0; i < len(build.Outputs); i++ {
 			err := <-errs
 			if err != nil {
 				outputErr = err
@@ -361,7 +361,7 @@ func (builder *builder) performOutputs(
 			return nil, outputErr
 		}
 
-		for i := 0; i < len(build.Config.Outputs); i++ {
+		for i := 0; i < len(build.Outputs); i++ {
 			output := <-results
 			allOutputs[output.Name] = output
 		}

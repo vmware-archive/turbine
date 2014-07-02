@@ -84,18 +84,18 @@ var _ = Describe("Builder", func() {
 					Path: "./bin/test",
 					Args: []string{"arg1", "arg2"},
 				},
+			},
 
-				Inputs: []builds.Input{
-					{
-						Name:            "first-resource",
-						Type:            "raw",
-						DestinationPath: "some/source/path",
-					},
-					{
-						Name:            "second-resource",
-						Type:            "raw",
-						DestinationPath: "another/source/path",
-					},
+			Inputs: []builds.Input{
+				{
+					Name:            "first-resource",
+					Type:            "raw",
+					DestinationPath: "some/source/path",
+				},
+				{
+					Name:            "second-resource",
+					Type:            "raw",
+					DestinationPath: "another/source/path",
 				},
 			},
 		}
@@ -355,7 +355,7 @@ var _ = Describe("Builder", func() {
 					var runningBuild RunningBuild
 					Eventually(started).Should(Receive(&runningBuild))
 
-					inputs := runningBuild.Build.Config.Inputs
+					inputs := runningBuild.Build.Inputs
 
 					Ω(inputs[0].Version).Should(Equal(builds.Version{"key": "version-1"}))
 					Ω(inputs[0].Metadata).Should(Equal([]builds.MetadataField{{Name: "key", Value: "meta-1"}}))
@@ -497,7 +497,7 @@ var _ = Describe("Builder", func() {
 		})
 
 		BeforeEach(func() {
-			build.Config.Inputs = []builds.Input{
+			build.Inputs = []builds.Input{
 				{
 					Name:            "first-resource",
 					Type:            "raw",
@@ -725,7 +725,7 @@ var _ = Describe("Builder", func() {
 		})
 
 		BeforeEach(func() {
-			build.Config.Inputs = []builds.Input{
+			build.Inputs = []builds.Input{
 				{
 					Name:            "first-resource",
 					Type:            "raw",
@@ -759,15 +759,15 @@ var _ = Describe("Builder", func() {
 			var finishedBuild builds.Build
 			Eventually(finished).Should(Receive(&finishedBuild))
 
-			Ω(finishedBuild.Config.Outputs).Should(HaveLen(2))
+			Ω(finishedBuild.Outputs).Should(HaveLen(2))
 
-			Ω(finishedBuild.Config.Outputs).Should(ContainElement(builds.Output{
+			Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
 				Name:    "first-resource",
 				Type:    "raw",
 				Version: builds.Version{"key": "in-version-1"},
 			}))
 
-			Ω(finishedBuild.Config.Outputs).Should(ContainElement(builds.Output{
+			Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
 				Name:    "second-resource",
 				Type:    "raw",
 				Version: builds.Version{"key": "in-version-2"},
@@ -779,7 +779,7 @@ var _ = Describe("Builder", func() {
 			var resource2 *resourcefakes.FakeResource
 
 			BeforeEach(func() {
-				succeededBuild.Build.Config.Outputs = []builds.Output{
+				succeededBuild.Build.Outputs = []builds.Output{
 					{
 						Name:   "first-resource",
 						Type:   "git",
@@ -838,7 +838,7 @@ var _ = Describe("Builder", func() {
 						Ω(resource1.OutCallCount()).Should(Equal(1))
 
 						streamIn, output := resource1.OutArgsForCall(0)
-						Ω(output).Should(Equal(succeededBuild.Build.Config.Outputs[0]))
+						Ω(output).Should(Equal(succeededBuild.Build.Outputs[0]))
 
 						streamedIn, err := ioutil.ReadAll(streamIn)
 						Ω(err).ShouldNot(HaveOccurred())
@@ -848,7 +848,7 @@ var _ = Describe("Builder", func() {
 						Ω(resource2.OutCallCount()).Should(Equal(1))
 
 						streamIn, output = resource2.OutArgsForCall(0)
-						Ω(output).Should(Equal(succeededBuild.Build.Config.Outputs[1]))
+						Ω(output).Should(Equal(succeededBuild.Build.Outputs[1]))
 
 						streamedIn, err = ioutil.ReadAll(streamIn)
 						Ω(err).ShouldNot(HaveOccurred())
@@ -860,9 +860,9 @@ var _ = Describe("Builder", func() {
 						var finishedBuild builds.Build
 						Eventually(finished).Should(Receive(&finishedBuild))
 
-						Ω(finishedBuild.Config.Outputs).Should(HaveLen(3))
+						Ω(finishedBuild.Outputs).Should(HaveLen(3))
 
-						Ω(finishedBuild.Config.Outputs).Should(ContainElement(builds.Output{
+						Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
 							Name:     "first-resource",
 							Type:     "git",
 							Source:   builds.Source{"uri": "http://first-uri"},
@@ -872,7 +872,7 @@ var _ = Describe("Builder", func() {
 						}))
 
 						// Implicit output created for an input 'second-resource'
-						Ω(finishedBuild.Config.Outputs).Should(ContainElement(builds.Output{
+						Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
 							Name:     "second-resource",
 							Type:     "raw",
 							Source:   nil,
@@ -881,7 +881,7 @@ var _ = Describe("Builder", func() {
 							Metadata: nil,
 						}))
 
-						Ω(finishedBuild.Config.Outputs).Should(ContainElement(builds.Output{
+						Ω(finishedBuild.Outputs).Should(ContainElement(builds.Output{
 							Name:     "extra-output",
 							Type:     "git",
 							Source:   builds.Source{"uri": "http://extra-uri"},

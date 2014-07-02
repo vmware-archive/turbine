@@ -28,16 +28,16 @@ var _ = Describe("Scheduler", func() {
 		build = builds.Build{
 			Guid: "abc",
 
+			Inputs: []builds.Input{
+				{
+					Type: "git",
+				},
+			},
+
 			Config: builds.Config{
 				Params: map[string]string{
 					"FOO":  "bar",
 					"FIZZ": "buzz",
-				},
-
-				Inputs: []builds.Input{
-					{
-						Type: "git",
-					},
 				},
 			},
 		}
