@@ -143,10 +143,9 @@ var _ = Describe("Builder", func() {
 
 				resource2.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
 					sourceStream := bytes.NewBufferString("some-data-2")
-					config := builds.Config{Image: "some-reconfigured-image"}
 					input.Version = builds.Version{"key": "version-2"}
 					input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-2"}}
-					return sourceStream, input, config, nil
+					return sourceStream, input, builds.Config{}, nil
 				}
 			})
 
@@ -379,7 +378,18 @@ var _ = Describe("Builder", func() {
 
 			Context("and an input reconfigured the build", func() {
 				BeforeEach(func() {
-					build.Config.Inputs[1].ConfigPath = "some/config/path.yml"
+					resource2.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
+						sourceStream := bytes.NewBufferString("some-data-2")
+
+						input.Version = builds.Version{"key": "version-2"}
+						input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-2"}}
+
+						config := builds.Config{
+							Image: "some-reconfigured-image",
+						}
+
+						return sourceStream, input, config, nil
+					}
 				})
 
 				It("sends the reconfigured build as the started build", func() {
@@ -387,6 +397,54 @@ var _ = Describe("Builder", func() {
 					Eventually(started).Should(Receive(&startedBuild))
 
 					Ω(startedBuild.Build.Config.Image).Should(Equal("some-reconfigured-image"))
+				})
+
+				Context("with new input destinations", func() {
+					BeforeEach(func() {
+						resource2.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
+							sourceStream := bytes.NewBufferString("some-data-2")
+
+							input.Version = builds.Version{"key": "version-2"}
+							input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-2"}}
+
+							config := builds.Config{
+								Inputs: []builds.Input{
+									{
+										Name:            "first-resource",
+										DestinationPath: "reconfigured-first/source/path",
+									},
+									{
+										Name:            "second-resource",
+										DestinationPath: "reconfigured-second/source/path",
+									},
+								},
+							}
+
+							return sourceStream, input, config, nil
+						}
+					})
+
+					It("streams them in using the new destinations", func() {
+						var startedBuild RunningBuild
+						Eventually(started).Should(Receive(&startedBuild))
+
+						streamedIn := wardenClient.Connection.StreamedIn("some-handle")
+						Ω(streamedIn).Should(HaveLen(2))
+
+						for _, streamed := range streamedIn {
+							in, err := ioutil.ReadAll(streamed.Reader)
+							Ω(err).ShouldNot(HaveOccurred())
+
+							switch string(in) {
+							case "some-data-1":
+								Ω(streamed.Destination).Should(Equal("/tmp/build/src/reconfigured-first/source/path"))
+							case "some-data-2":
+								Ω(streamed.Destination).Should(Equal("/tmp/build/src/reconfigured-second/source/path"))
+							default:
+								Fail("unknown stream destination: " + streamed.Destination)
+							}
+						}
+					})
 				})
 			})
 		})
@@ -407,6 +465,13 @@ var _ = Describe("Builder", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
+				resource1.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
+					sourceStream := bytes.NewBufferString("some-data-1")
+					input.Version = builds.Version{"key": "version-1"}
+					input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-1"}}
+					return sourceStream, input, builds.Config{}, nil
+				}
+
 				wardenClient.Connection.WhenStreamingIn = func(handle string, dst string, in io.Reader) error {
 					return disaster
 				}

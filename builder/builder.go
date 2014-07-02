@@ -113,11 +113,9 @@ func (builder *builder) start(build builds.Build, abort <-chan struct{}, started
 
 		build.Config.Inputs[i] = computedInput
 
-		if input.ConfigPath != "" {
-			build.Config = buildConfig
-		}
+		build.Config = build.Config.Merge(buildConfig)
 
-		resources[input.DestinationPath] = tarStream
+		resources[input.Name] = tarStream
 	}
 
 	container, err := builder.createBuildContainer(build.Config, logs)
@@ -127,7 +125,7 @@ func (builder *builder) start(build builds.Build, abort <-chan struct{}, started
 		return
 	}
 
-	err = builder.streamInResources(container, resources)
+	err = builder.streamInResources(container, resources, build.Config.Inputs)
 	if err != nil {
 		errored <- err
 		logs.Close()
@@ -243,11 +241,16 @@ func (builder *builder) createBuildContainer(
 func (builder *builder) streamInResources(
 	container warden.Container,
 	resources map[string]io.Reader,
+	inputs []builds.Input,
 ) error {
-	for destination, streamOut := range resources {
-		err := container.StreamIn("/tmp/build/src/"+destination, streamOut)
-		if err != nil {
-			return err
+	for name, streamOut := range resources {
+		for _, input := range inputs {
+			if input.Name == name {
+				err := container.StreamIn("/tmp/build/src/"+input.DestinationPath, streamOut)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 
