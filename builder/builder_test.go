@@ -88,14 +88,12 @@ var _ = Describe("Builder", func() {
 
 			Inputs: []builds.Input{
 				{
-					Name:            "first-resource",
-					Type:            "raw",
-					DestinationPath: "some/source/path",
+					Name: "first-resource",
+					Type: "raw",
 				},
 				{
-					Name:            "second-resource",
-					Type:            "raw",
-					DestinationPath: "another/source/path",
+					Name: "second-resource",
+					Type: "raw",
 				},
 			},
 		}
@@ -162,16 +160,14 @@ var _ = Describe("Builder", func() {
 
 				Ω(resource1.InCallCount()).Should(Equal(1))
 				Ω(resource1.InArgsForCall(0)).Should(Equal(builds.Input{
-					Name:            "first-resource",
-					Type:            "raw",
-					DestinationPath: "some/source/path",
+					Name: "first-resource",
+					Type: "raw",
 				}))
 
 				Ω(resource2.InCallCount()).Should(Equal(1))
 				Ω(resource2.InArgsForCall(0)).Should(Equal(builds.Input{
-					Name:            "second-resource",
-					Type:            "raw",
-					DestinationPath: "another/source/path",
+					Name: "second-resource",
+					Type: "raw",
 				}))
 
 				streamedIn := wardenClient.Connection.StreamedIn("some-handle")
@@ -181,11 +177,11 @@ var _ = Describe("Builder", func() {
 					in, err := ioutil.ReadAll(streamed.Reader)
 					Ω(err).ShouldNot(HaveOccurred())
 
-					switch streamed.Destination {
-					case "/tmp/build/src/some/source/path":
-						Ω(string(in)).Should(Equal("some-data-1"))
-					case "/tmp/build/src/another/source/path":
-						Ω(string(in)).Should(Equal("some-data-2"))
+					switch string(in) {
+					case "some-data-1":
+						Ω(streamed.Destination).Should(Equal("/tmp/build/src/first-resource"))
+					case "some-data-2":
+						Ω(streamed.Destination).Should(Equal("/tmp/build/src/second-resource"))
 					default:
 						Fail("unknown stream destination: " + streamed.Destination)
 					}
@@ -408,15 +404,9 @@ var _ = Describe("Builder", func() {
 							input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-2"}}
 
 							config := builds.Config{
-								Inputs: []builds.Input{
-									{
-										Name:            "first-resource",
-										DestinationPath: "reconfigured-first/source/path",
-									},
-									{
-										Name:            "second-resource",
-										DestinationPath: "reconfigured-second/source/path",
-									},
+								Paths: map[string]string{
+									"first-resource":  "reconfigured-first/source/path",
+									"second-resource": "reconfigured-second/source/path",
 								},
 							}
 
@@ -499,14 +489,12 @@ var _ = Describe("Builder", func() {
 		BeforeEach(func() {
 			build.Inputs = []builds.Input{
 				{
-					Name:            "first-resource",
-					Type:            "raw",
-					DestinationPath: "some/source/path",
+					Name: "first-resource",
+					Type: "raw",
 				},
 				{
-					Name:            "second-resource",
-					Type:            "raw",
-					DestinationPath: "another/source/path",
+					Name: "second-resource",
+					Type: "raw",
 				},
 			}
 
@@ -727,16 +715,14 @@ var _ = Describe("Builder", func() {
 		BeforeEach(func() {
 			build.Inputs = []builds.Input{
 				{
-					Name:            "first-resource",
-					Type:            "raw",
-					DestinationPath: "some/source/path",
-					Version:         builds.Version{"key": "in-version-1"},
+					Name:    "first-resource",
+					Type:    "raw",
+					Version: builds.Version{"key": "in-version-1"},
 				},
 				{
-					Name:            "second-resource",
-					Type:            "raw",
-					DestinationPath: "another/source/path",
-					Version:         builds.Version{"key": "in-version-2"},
+					Name:    "second-resource",
+					Type:    "raw",
+					Version: builds.Version{"key": "in-version-2"},
 				},
 			}
 

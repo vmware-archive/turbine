@@ -33,10 +33,10 @@ var _ = Describe("Resource", func() {
 
 		BeforeEach(func() {
 			input = builds.Input{
-				Type:            "some-resource",
-				Source:          builds.Source{"some": "source"},
-				Version:         builds.Version{"some": "version"},
-				DestinationPath: "input-destination",
+				Name:    "some-name",
+				Type:    "some-resource",
+				Source:  builds.Source{"some": "source"},
+				Version: builds.Version{"some": "version"},
 			}
 
 			inStdout = "{}"
@@ -112,7 +112,7 @@ var _ = Describe("Resource", func() {
 					Path: "bash",
 					Args: []string{
 						"-c",
-						"/tmp/resource/in /tmp/build/src/input-destination < /tmp/resource-artifacts/stdin",
+						"/tmp/resource/in /tmp/build/src/some-name < /tmp/resource-artifacts/stdin",
 					},
 					Privileged: true,
 				},
@@ -161,7 +161,7 @@ var _ = Describe("Resource", func() {
 
 					streamOut := new(bytes.Buffer)
 
-					if source == "/tmp/build/src/input-destination/" {
+					if source == "/tmp/build/src/some-name/" {
 						streamOut.WriteString("sup")
 					}
 
@@ -169,7 +169,7 @@ var _ = Describe("Resource", func() {
 				}
 			})
 
-			It("returns the output stream of /tmp/build/src/input-destination/", func() {
+			It("returns the output stream of /tmp/build/src/some-name/", func() {
 				contents, err := ioutil.ReadAll(fetchedStream)
 				Ω(err).ShouldNot(HaveOccurred())
 				Ω(string(contents)).Should(Equal("sup"))
@@ -188,7 +188,7 @@ var _ = Describe("Resource", func() {
 
 						buf := new(bytes.Buffer)
 
-						if src == "/tmp/build/src/input-destination/some/config/path.yml" {
+						if src == "/tmp/build/src/some-name/some/config/path.yml" {
 							tarWriter := tar.NewWriter(buf)
 
 							contents := []byte("---\nimage: some-reconfigured-image\n")
@@ -217,7 +217,7 @@ var _ = Describe("Resource", func() {
 
 							buf := new(bytes.Buffer)
 
-							if src == "/tmp/build/src/input-destination/some/config/path.yml" {
+							if src == "/tmp/build/src/some-name/some/config/path.yml" {
 								tarWriter := tar.NewWriter(buf)
 
 								contents := []byte("[")

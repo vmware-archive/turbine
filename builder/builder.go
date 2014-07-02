@@ -125,7 +125,7 @@ func (builder *builder) start(build builds.Build, abort <-chan struct{}, started
 		return
 	}
 
-	err = builder.streamInResources(container, resources, build.Config.Inputs)
+	err = builder.streamInResources(container, resources, build.Config.Paths)
 	if err != nil {
 		errored <- err
 		logs.Close()
@@ -241,16 +241,17 @@ func (builder *builder) createBuildContainer(
 func (builder *builder) streamInResources(
 	container warden.Container,
 	resources map[string]io.Reader,
-	inputs []builds.Input,
+	paths map[string]string,
 ) error {
 	for name, streamOut := range resources {
-		for _, input := range inputs {
-			if input.Name == name {
-				err := container.StreamIn("/tmp/build/src/"+input.DestinationPath, streamOut)
-				if err != nil {
-					return err
-				}
-			}
+		destination, found := paths[name]
+		if !found {
+			destination = name
+		}
+
+		err := container.StreamIn("/tmp/build/src/"+destination, streamOut)
+		if err != nil {
+			return err
 		}
 	}
 

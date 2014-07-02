@@ -12,25 +12,25 @@ const (
 type Build struct {
 	Guid string `json:"guid"`
 
-	AbortURL string `json:"abort_url"`
-
 	Privileged bool `json:"privileged"`
 
 	Config Config `json:"config"`
 
-	LogsURL  string `json:"logs_url"`
-	Callback string `json:"callback"`
-
 	Inputs  []Input  `json:"inputs"`
 	Outputs []Output `json:"outputs"`
+
+	AbortURL string `json:"abort_url"`
+	LogsURL  string `json:"logs_url"`
+	Callback string `json:"callback"`
 
 	Status Status `json:"status"`
 }
 
 type Config struct {
-	Image  string            `json:"image" yaml:"image"`
-	Params map[string]string `json:"params" yaml:"params"`
-	Run    RunConfig         `json:"run" yaml:"run"`
+	Image  string            `json:"image"   yaml:"image"`
+	Params map[string]string `json:"params"  yaml:"params"`
+	Run    RunConfig         `json:"run"     yaml:"run"`
+	Paths  map[string]string `json:"paths"   yaml:"paths"`
 }
 
 type RunConfig struct {
@@ -52,8 +52,7 @@ type Input struct {
 	// e.g. commit_author, commit_date
 	Metadata []MetadataField `json:"metadata,omitempty"`
 
-	ConfigPath      string `json:"config_path"`
-	DestinationPath string `json:"destination_path"`
+	ConfigPath string `json:"config_path"`
 }
 
 type Version map[string]interface{}
