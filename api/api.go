@@ -6,7 +6,7 @@ import (
 	"code.google.com/p/go.net/websocket"
 
 	"github.com/pivotal-golang/lager"
-	"github.com/tedsuo/router"
+	"github.com/tedsuo/rata"
 
 	"github.com/concourse/turbine/api/abort"
 	"github.com/concourse/turbine/api/check"
@@ -20,7 +20,7 @@ func New(
 	logger lager.Logger,
 	scheduler scheduler.Scheduler,
 	tracker resource.Tracker,
-	turbineEndpoint *router.RequestGenerator,
+	turbineEndpoint *rata.RequestGenerator,
 	drain <-chan struct{},
 ) (http.Handler, error) {
 	checkHandler := check.NewHandler(logger, tracker, drain)
@@ -32,5 +32,5 @@ func New(
 		routes.CheckInputStream: websocket.Server{Handler: checkHandler.Stream},
 	}
 
-	return router.NewRouter(routes.Routes, handlers)
+	return rata.NewRouter(routes.Routes, handlers)
 }

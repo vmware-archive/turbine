@@ -1,6 +1,6 @@
 package routes
 
-import "github.com/tedsuo/router"
+import "github.com/tedsuo/rata"
 
 const (
 	ExecuteBuild     = "ExecuteBuild"
@@ -9,9 +9,9 @@ const (
 	CheckInputStream = "CheckInputStream"
 )
 
-var Routes = router.Routes{
-	{Path: "/builds", Method: "POST", Handler: ExecuteBuild},
-	{Path: "/builds/:guid/abort", Method: "POST", Handler: AbortBuild},
-	{Path: "/checks", Method: "POST", Handler: CheckInput},
-	{Path: "/checks/stream", Method: "GET", Handler: CheckInputStream},
+var Routes = rata.Routes{
+	{Path: "/builds", Method: "POST", Name: ExecuteBuild},
+	{Path: "/builds/:guid/abort", Method: "POST", Name: AbortBuild},
+	{Path: "/checks", Method: "POST", Name: CheckInput},
+	{Path: "/checks/stream", Method: "GET", Name: CheckInputStream},
 }

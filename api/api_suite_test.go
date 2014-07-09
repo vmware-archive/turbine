@@ -12,7 +12,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/pivotal-golang/lager/lagertest"
-	"github.com/tedsuo/router"
+	"github.com/tedsuo/rata"
 )
 
 var scheduler *fakescheduler.FakeScheduler
@@ -27,7 +27,7 @@ var _ = BeforeEach(func() {
 	tracker = new(fakes.FakeTracker)
 	drain = make(chan struct{})
 
-	turbineEndpoint := router.NewRequestGenerator("http://some-turbine", routes.Routes)
+	turbineEndpoint := rata.NewRequestGenerator("http://some-turbine", routes.Routes)
 
 	handler, err := api.New(lagertest.NewTestLogger("test"), scheduler, tracker, turbineEndpoint, drain)
 	Ω(err).ShouldNot(HaveOccurred())

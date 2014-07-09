@@ -7,7 +7,7 @@ import (
 
 	"github.com/nu7hatch/gouuid"
 	"github.com/pivotal-golang/lager"
-	"github.com/tedsuo/router"
+	"github.com/tedsuo/rata"
 
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/routes"
@@ -18,13 +18,13 @@ type handler struct {
 	logger lager.Logger
 
 	scheduler       scheduler.Scheduler
-	turbineEndpoint *router.RequestGenerator
+	turbineEndpoint *rata.RequestGenerator
 }
 
 func NewHandler(
 	logger lager.Logger,
 	scheduler scheduler.Scheduler,
-	turbineEndpoint *router.RequestGenerator,
+	turbineEndpoint *rata.RequestGenerator,
 ) http.Handler {
 	return &handler{
 		logger: logger,
@@ -65,9 +65,9 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	build.Guid = guid.String()
 
-	abortReq, err := handler.turbineEndpoint.RequestForHandler(
+	abortReq, err := handler.turbineEndpoint.CreateRequest(
 		routes.AbortBuild,
-		router.Params{"guid": build.Guid},
+		rata.Params{"guid": build.Guid},
 		nil,
 	)
 	if err != nil {

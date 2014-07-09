@@ -13,7 +13,7 @@ import (
 	"github.com/tedsuo/ifrit/grouper"
 	"github.com/tedsuo/ifrit/http_server"
 	"github.com/tedsuo/ifrit/sigmon"
-	"github.com/tedsuo/router"
+	"github.com/tedsuo/rata"
 
 	"github.com/concourse/turbine/api"
 	"github.com/concourse/turbine/builder"
@@ -96,7 +96,7 @@ func main() {
 
 	scheduler := scheduler.NewScheduler(logger.Session("scheduler"), builder)
 
-	generator := router.NewRequestGenerator("http://"+*peerAddr, routes.Routes)
+	generator := rata.NewRequestGenerator("http://"+*peerAddr, routes.Routes)
 
 	drain := make(chan struct{})
 
