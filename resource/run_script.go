@@ -31,12 +31,6 @@ func (err ErrResourceScriptFailed) Error() string {
 	)
 }
 
-type noopWriteCloser struct {
-	io.Writer
-}
-
-func (wc noopWriteCloser) Close() error { return nil }
-
 func (resource *resource) runScript(path string, args []string, input interface{}, output interface{}) error {
 	request, err := json.Marshal(input)
 	if err != nil {
@@ -52,8 +46,8 @@ func (resource *resource) runScript(path string, args []string, input interface{
 		Privileged: true,
 	}, warden.ProcessIO{
 		Stdin:  bytes.NewBuffer(request),
-		Stderr: noopWriteCloser{io.MultiWriter(resource.logs, stderr)},
-		Stdout: noopWriteCloser{stdout},
+		Stderr: io.MultiWriter(resource.logs, stderr),
+		Stdout: stdout,
 	})
 	if err != nil {
 		return err

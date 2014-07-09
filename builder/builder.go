@@ -170,8 +170,8 @@ func (builder *builder) attach(running RunningBuild, abort <-chan struct{}, succ
 
 	if running.Process == nil {
 		process, err := running.Container.Attach(running.ProcessID, warden.ProcessIO{
-			Stdout: noopWriteCloser{running.LogStream},
-			Stderr: noopWriteCloser{running.LogStream},
+			Stdout: running.LogStream,
+			Stderr: running.LogStream,
 		})
 		if err != nil {
 			running.LogStream.Close()
@@ -261,12 +261,6 @@ func (builder *builder) streamInResources(
 	return nil
 }
 
-type noopWriteCloser struct {
-	io.Writer
-}
-
-func (wc noopWriteCloser) Close() error { return nil }
-
 func (builder *builder) runBuild(
 	container warden.Container,
 	privileged bool,
@@ -288,8 +282,8 @@ func (builder *builder) runBuild(
 
 		Privileged: privileged,
 	}, warden.ProcessIO{
-		Stdout: noopWriteCloser{logs},
-		Stderr: noopWriteCloser{logs},
+		Stdout: logs,
+		Stderr: logs,
 	})
 }
 
