@@ -3,7 +3,7 @@
 image:https://travis-ci.org/concourse/turbine.svg?branch=master["Build Status", link="https://travis-ci.org/concourse/turbine"]
 image:https://coveralls.io/repos/concourse/turbine/badge.png["Coverage Status", link="https://coveralls.io/r/concourse/turbine"]
 
-Provides a stateless REST API to execute builds on a https://github.com/cloudfoundry-incubator/garden[Warden] server.
+Provides a stateless HTTP API to execute builds on a https://github.com/cloudfoundry-incubator/garden[Warden] server.
 
-* http://docs.room101agent.apiary.io/[API] (currently stale) 
+* http://docs.room101agent.apiary.io/[API] (currently stale)
 
