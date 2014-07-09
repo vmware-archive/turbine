@@ -1,7 +1,7 @@
 package resource
 
 import (
-	"archive/tar"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,117 +13,83 @@ import (
 var ErrAborted = errors.New("script aborted")
 
 type ErrResourceScriptFailed struct {
-	Stdout     []byte
-	Stderr     []byte
-	ExitStatus uint32
+	Path       string
+	Args       []string
+	Stdout     string
+	Stderr     string
+	ExitStatus int
 }
 
 func (err ErrResourceScriptFailed) Error() string {
 	return fmt.Sprintf(
-		"resource script failed: exit status %d\n\nstdout:\n\n%s\n\nstderr:%s",
+		"resource script '%s %v' failed: exit status %d\n\nstdout:\n\n%s\n\nstderr:\n\n%s",
+		err.Path,
+		err.Args,
 		err.ExitStatus,
 		err.Stdout,
 		err.Stderr,
 	)
 }
 
-func (resource *resource) runScript(script string, input interface{}, output interface{}) error {
-	err := resource.injectInput(input)
+type noopWriteCloser struct {
+	io.Writer
+}
+
+func (wc noopWriteCloser) Close() error { return nil }
+
+func (resource *resource) runScript(path string, args []string, input interface{}, output interface{}) error {
+	request, err := json.Marshal(input)
 	if err != nil {
 		return err
 	}
 
-	_, stream, err := resource.container.Run(warden.ProcessSpec{
-		Path: "bash",
-		Args: []string{
-			"-c",
-			script + " < /tmp/resource-artifacts/stdin",
-		},
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+
+	process, err := resource.container.Run(warden.ProcessSpec{
+		Path:       path,
+		Args:       args,
 		Privileged: true,
+	}, warden.ProcessIO{
+		Stdin:  bytes.NewBuffer(request),
+		Stderr: noopWriteCloser{io.MultiWriter(resource.logs, stderr)},
+		Stdout: noopWriteCloser{stdout},
 	})
 	if err != nil {
 		return err
 	}
 
-	rawOutput, err := resource.waitForRunToEnd(stream)
-	if err != nil {
-		return err
-	}
-
-	return json.Unmarshal(rawOutput, output)
-}
-
-func (resource *resource) injectInput(input interface{}) error {
-	payload, err := json.Marshal(input)
-	if err != nil {
-		return err
-	}
-
-	tarRead, tarWrite := io.Pipe()
+	statusCh := make(chan int, 1)
+	errCh := make(chan error, 1)
 
 	go func() {
-		defer tarWrite.Close()
-
-		tarWriter := tar.NewWriter(tarWrite)
-
-		tarWriter.WriteHeader(&tar.Header{
-			Name: "./stdin",
-			Mode: 0644,
-			Size: int64(len(payload)),
-		})
+		status, err := process.Wait()
 		if err != nil {
-			return
-		}
-
-		_, err = tarWriter.Write(payload)
-		if err != nil {
-			return
-		}
-
-		err = tarWriter.Close()
-		if err != nil {
-			return
+			errCh <- err
+		} else {
+			statusCh <- status
 		}
 	}()
 
-	return resource.container.StreamIn("/tmp/resource-artifacts", tarRead)
-}
-
-func (resource *resource) waitForRunToEnd(stream <-chan warden.ProcessStream) ([]byte, error) {
-	stdout := []byte{}
-	stderr := []byte{}
-
-script:
-	for {
-		select {
-		case chunk := <-stream:
-			if chunk.ExitStatus != nil {
-				if *chunk.ExitStatus != 0 {
-					return nil, ErrResourceScriptFailed{
-						Stdout:     stdout,
-						Stderr:     stderr,
-						ExitStatus: *chunk.ExitStatus,
-					}
-				}
-
-				break script
+	select {
+	case status := <-statusCh:
+		if status != 0 {
+			return ErrResourceScriptFailed{
+				Path:       path,
+				Args:       args,
+				Stdout:     stdout.String(),
+				Stderr:     stderr.String(),
+				ExitStatus: status,
 			}
-
-			switch chunk.Source {
-			case warden.ProcessStreamSourceStdout:
-				stdout = append(stdout, chunk.Data...)
-			case warden.ProcessStreamSourceStderr:
-				if resource.logs != nil {
-					resource.logs.Write(chunk.Data)
-				}
-
-				stderr = append(stderr, chunk.Data...)
-			}
-		case <-resource.abort:
-			resource.container.Stop(false)
-			return nil, ErrAborted
 		}
-	}
 
-	return stdout, nil
+		return json.Unmarshal(stdout.Bytes(), output)
+
+	case err := <-errCh:
+		return err
+
+	case <-resource.abort:
+		resource.container.Stop(false)
+		return ErrAborted
+	}
 }

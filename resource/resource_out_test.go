@@ -1,13 +1,13 @@
 package resource_test
 
 import (
-	"archive/tar"
 	"bytes"
 	"errors"
 	"io"
 	"io/ioutil"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
+	wfakes "github.com/cloudfoundry-incubator/garden/warden/fakes"
 	"github.com/concourse/turbine/api/builds"
 
 	. "github.com/onsi/ginkgo"
@@ -21,7 +21,7 @@ var _ = Describe("Resource Out", func() {
 
 		outScriptStdout     string
 		outScriptStderr     string
-		outScriptExitStatus uint32
+		outScriptExitStatus int
 		outScriptError      error
 
 		outOutput builds.Output
@@ -44,78 +44,39 @@ var _ = Describe("Resource Out", func() {
 	})
 
 	JustBeforeEach(func() {
-		outStream := primedStream(
-			warden.ProcessStream{
-				Source: warden.ProcessStreamSourceStdout,
-				Data:   []byte(outScriptStdout),
-			},
-			warden.ProcessStream{
-				Source: warden.ProcessStreamSourceStderr,
-				Data:   []byte(outScriptStderr),
-			},
-			warden.ProcessStream{
-				ExitStatus: &outScriptExitStatus,
-			},
-		)
+		wardenClient.Connection.RunStub = func(handle string, spec warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error) {
+			if outScriptError != nil {
+				return nil, outScriptError
+			}
 
-		wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-			return 1, outStream, outScriptError
+			_, err := io.Stdout.Write([]byte(outScriptStdout))
+			Ω(err).ShouldNot(HaveOccurred())
+
+			_, err = io.Stderr.Write([]byte(outScriptStderr))
+			Ω(err).ShouldNot(HaveOccurred())
+
+			process := new(wfakes.FakeProcess)
+			process.WaitReturns(outScriptExitStatus, nil)
+
+			return process, nil
 		}
 
 		outOutput, outErr = resource.Out(bytes.NewBufferString("the-source"), output)
 	})
 
-	Context("when streaming the script input in succeeds", func() {
-		var streamedIn *gbytes.Buffer
+	It("runs /tmp/resource/out <source path> with the request on stdin", func() {
+		Ω(outErr).ShouldNot(HaveOccurred())
 
-		BeforeEach(func() {
-			streamedIn = gbytes.NewBuffer()
+		handle, spec, io := wardenClient.Connection.RunArgsForCall(0)
+		Ω(handle).Should(Equal("some-handle"))
+		Ω(spec.Path).Should(Equal("/tmp/resource/out"))
+		Ω(spec.Args).Should(Equal([]string{"/tmp/build/src"}))
+		Ω(spec.Privileged).Should(BeTrue())
 
-			wardenClient.Connection.WhenStreamingIn = func(handle string, destination string, source io.Reader) error {
-				Ω(handle).Should(Equal("some-handle"))
+		request, err := ioutil.ReadAll(io.Stdin)
+		Ω(err).ShouldNot(HaveOccurred())
 
-				if destination == "/tmp/resource-artifacts" {
-					_, err := io.Copy(streamedIn, source)
-					Ω(err).ShouldNot(HaveOccurred())
-				}
-
-				return nil
-			}
-		})
-
-		It("creates a file with the output params and source", func() {
-			Ω(outErr).ShouldNot(HaveOccurred())
-
-			tarReader := tar.NewReader(bytes.NewBuffer(streamedIn.Contents()))
-
-			hdr, err := tarReader.Next()
-			Ω(err).ShouldNot(HaveOccurred())
-			Ω(hdr.Name).Should(Equal("./stdin"))
-			Ω(hdr.Mode).Should(Equal(int64(0644)))
-
-			inputConfig, err := ioutil.ReadAll(tarReader)
-			Ω(err).ShouldNot(HaveOccurred())
-
-			Ω(string(inputConfig)).Should(Equal(`{"params":{"some":"params"},"source":{"some":"source"}}`))
-
-			_, err = tarReader.Next()
-			Ω(err).Should(Equal(io.EOF))
-		})
-
-		It("runs /tmp/resource/out /tmp/build/src with the contents of the input config file on stdin", func() {
-			Ω(outErr).ShouldNot(HaveOccurred())
-
-			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
-				{
-					Path: "bash",
-					Args: []string{
-						"-c",
-						"/tmp/resource/out /tmp/build/src < /tmp/resource-artifacts/stdin",
-					},
-					Privileged: true,
-				},
-			}))
-		})
+		Ω(string(request)).Should(Equal(`{"params":{"some":"params"},"source":{"some":"source"}}`))
 	})
 
 	Context("when streaming the source in succeeds", func() {
@@ -124,7 +85,7 @@ var _ = Describe("Resource Out", func() {
 		BeforeEach(func() {
 			streamedIn = gbytes.NewBuffer()
 
-			wardenClient.Connection.WhenStreamingIn = func(handle string, destination string, source io.Reader) error {
+			wardenClient.Connection.StreamInStub = func(handle string, destination string, source io.Reader) error {
 				Ω(handle).Should(Equal("some-handle"))
 
 				if destination == "/tmp/build/src" {
@@ -146,12 +107,12 @@ var _ = Describe("Resource Out", func() {
 	Context("when /tmp/resource/out prints the version and metadata", func() {
 		BeforeEach(func() {
 			outScriptStdout = `{
-					"version": {"some": "new-version"},
-					"metadata": [
-						{"name": "a", "value":"a-value"},
-						{"name": "b","value": "b-value"}
-					]
-				}`
+				"version": {"some": "new-version"},
+				"metadata": [
+					{"name": "a", "value":"a-value"},
+					{"name": "b","value": "b-value"}
+				]
+			}`
 		})
 
 		It("returns the build source printed out by /tmp/resource/out", func() {
@@ -178,35 +139,11 @@ var _ = Describe("Resource Out", func() {
 		})
 	})
 
-	Context("when streaming in the params config fails", func() {
-		disaster := errors.New("oh no!")
-
-		BeforeEach(func() {
-			wardenClient.Connection.WhenStreamingIn = func(_, destination string, source io.Reader) error {
-				if destination == "/tmp/resource-artifacts" {
-					return disaster
-				} else {
-					return nil
-				}
-			}
-		})
-
-		It("returns the error", func() {
-			Ω(outErr).Should(Equal(disaster))
-		})
-	})
-
 	Context("when streaming in the source fails", func() {
 		disaster := errors.New("oh no!")
 
 		BeforeEach(func() {
-			wardenClient.Connection.WhenStreamingIn = func(_, destination string, source io.Reader) error {
-				if destination == "/tmp/build/src" {
-					return disaster
-				} else {
-					return nil
-				}
-			}
+			wardenClient.Connection.StreamInReturns(disaster)
 		})
 
 		It("returns the error", func() {
@@ -221,7 +158,7 @@ var _ = Describe("Resource Out", func() {
 			outScriptError = disaster
 		})
 
-		It("returns an err containing stdout/stderr of the process", func() {
+		It("returns the error", func() {
 			Ω(outErr).Should(Equal(disaster))
 		})
 	})
@@ -243,10 +180,15 @@ var _ = Describe("Resource Out", func() {
 
 	Context("when aborting", func() {
 		BeforeEach(func() {
-			wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-				// cause reading from the stream to block so that it can be
-				// aborted
-				return 1, nil, nil
+			wardenClient.Connection.RunStub = func(handle string, spec warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error) {
+				process := new(wfakes.FakeProcess)
+				process.WaitStub = func() (int, error) {
+					// cause waiting to block so that it can be aborted
+					select {}
+					return 0, nil
+				}
+
+				return process, nil
 			}
 		})
 
@@ -255,9 +197,11 @@ var _ = Describe("Resource Out", func() {
 
 			close(abort)
 
-			Eventually(func() interface{} {
-				return wardenClient.Connection.Stopped("some-handle")
-			}).Should(HaveLen(1))
+			Eventually(wardenClient.Connection.StopCallCount).Should(Equal(1))
+
+			handle, kill := wardenClient.Connection.StopArgsForCall(0)
+			Ω(handle).Should(Equal("some-handle"))
+			Ω(kill).Should(BeFalse())
 		})
 	})
 })

@@ -26,8 +26,8 @@ type RunningBuild struct {
 	ContainerHandle string
 	Container       warden.Container
 
-	ProcessID     uint32
-	ProcessStream <-chan warden.ProcessStream
+	ProcessID uint32
+	Process   warden.Process
 
 	LogStream io.WriteCloser
 }
@@ -132,7 +132,7 @@ func (builder *builder) start(build builds.Build, abort <-chan struct{}, started
 		return
 	}
 
-	pid, stream, err := builder.runBuild(container, build.Privileged, build.Config, logs)
+	process, err := builder.runBuild(container, build.Privileged, build.Config, logs)
 	if err != nil {
 		errored <- err
 		logs.Close()
@@ -145,8 +145,8 @@ func (builder *builder) start(build builds.Build, abort <-chan struct{}, started
 		ContainerHandle: container.Handle(),
 		Container:       container,
 
-		ProcessID:     pid,
-		ProcessStream: stream,
+		ProcessID: process.ID(),
+		Process:   process,
 
 		LogStream: logs,
 	}
@@ -168,15 +168,18 @@ func (builder *builder) attach(running RunningBuild, abort <-chan struct{}, succ
 		running.Container = container
 	}
 
-	if running.ProcessStream == nil {
-		stream, err := running.Container.Attach(running.ProcessID)
+	if running.Process == nil {
+		process, err := running.Container.Attach(running.ProcessID, warden.ProcessIO{
+			Stdout: noopWriteCloser{running.LogStream},
+			Stderr: noopWriteCloser{running.LogStream},
+		})
 		if err != nil {
 			running.LogStream.Close()
 			errored <- err
 			return
 		}
 
-		running.ProcessStream = stream
+		running.Process = process
 	}
 
 	status, err := builder.waitForRunToEnd(running, abort)
@@ -258,52 +261,65 @@ func (builder *builder) streamInResources(
 	return nil
 }
 
+type noopWriteCloser struct {
+	io.Writer
+}
+
+func (wc noopWriteCloser) Close() error { return nil }
+
 func (builder *builder) runBuild(
 	container warden.Container,
 	privileged bool,
 	buildConfig builds.Config,
 	logs io.Writer,
-) (uint32, <-chan warden.ProcessStream, error) {
+) (warden.Process, error) {
 	fmt.Fprintf(logs, "starting...\n")
 
-	env := []warden.EnvironmentVariable{}
+	env := []string{}
 	for n, v := range buildConfig.Params {
-		env = append(env, warden.EnvironmentVariable{Key: n, Value: v})
+		env = append(env, n+"="+v)
 	}
 
-	processSpec := warden.ProcessSpec{
-		Privileged: privileged,
-
+	return container.Run(warden.ProcessSpec{
 		Path: buildConfig.Run.Path,
 		Args: buildConfig.Run.Args,
+		Env:  env,
+		Dir:  "/tmp/build/src",
 
-		Dir: "/tmp/build/src",
-
-		EnvironmentVariables: env,
-	}
-
-	return container.Run(processSpec)
+		Privileged: privileged,
+	}, warden.ProcessIO{
+		Stdout: noopWriteCloser{logs},
+		Stderr: noopWriteCloser{logs},
+	})
 }
 
 func (builder *builder) waitForRunToEnd(
 	running RunningBuild,
 	abort <-chan struct{},
-) (uint32, error) {
-	for {
-		select {
-		case chunk := <-running.ProcessStream:
-			if chunk.ExitStatus != nil {
-				return *chunk.ExitStatus, nil
-			}
+) (int, error) {
+	statusCh := make(chan int, 1)
+	errCh := make(chan error, 1)
 
-			running.LogStream.Write(chunk.Data)
-		case <-abort:
-			running.Container.Stop(false)
-			return 0, ErrAborted
+	go func() {
+		status, err := running.Process.Wait()
+		if err != nil {
+			errCh <- err
+		} else {
+			statusCh <- status
 		}
-	}
+	}()
 
-	return 0, fmt.Errorf("output stream interrupted")
+	select {
+	case status := <-statusCh:
+		return status, nil
+
+	case err := <-errCh:
+		return 0, err
+
+	case <-abort:
+		running.Container.Stop(false)
+		return 0, ErrAborted
+	}
 }
 
 func (builder *builder) performOutputs(

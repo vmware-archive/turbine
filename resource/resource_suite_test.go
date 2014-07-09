@@ -24,9 +24,7 @@ var (
 var _ = BeforeEach(func() {
 	wardenClient = fake_warden_client.New()
 
-	wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
-		return "some-handle", nil
-	}
+	wardenClient.Connection.CreateReturns("some-handle", nil)
 
 	container, err := wardenClient.Create(warden.ContainerSpec{})
 	Ω(err).ShouldNot(HaveOccurred())
@@ -36,18 +34,6 @@ var _ = BeforeEach(func() {
 
 	resource = NewResource(container, logs, abort)
 })
-
-func primedStream(payloads ...warden.ProcessStream) <-chan warden.ProcessStream {
-	stream := make(chan warden.ProcessStream, len(payloads))
-
-	for _, payload := range payloads {
-		stream <- payload
-	}
-
-	close(stream)
-
-	return stream
-}
 
 func TestResource(t *testing.T) {
 	RegisterFailHandler(Fail)

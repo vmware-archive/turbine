@@ -27,7 +27,8 @@ func (resource *resource) Out(sourceStream io.Reader, output builds.Output) (bui
 	var resp outResponse
 
 	err = resource.runScript(
-		"/tmp/resource/out /tmp/build/src",
+		"/tmp/resource/out",
+		[]string{"/tmp/build/src"},
 		outRequest{
 			Params: output.Params,
 			Source: output.Source,

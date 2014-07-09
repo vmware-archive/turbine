@@ -29,7 +29,8 @@ func (resource *resource) In(input builds.Input) (io.Reader, builds.Input, build
 	var resp inResponse
 
 	err := resource.runScript(
-		"/tmp/resource/in /tmp/build/src/"+input.Name,
+		"/tmp/resource/in",
+		[]string{"/tmp/build/src/" + input.Name},
 		inRequest{input.Version, input.Source},
 		&resp,
 	)

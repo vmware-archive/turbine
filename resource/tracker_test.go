@@ -29,9 +29,7 @@ var _ = Describe("Tracker", func() {
 
 		wardenClient = fake_warden_client.New()
 
-		wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
-			return "some-handle", nil
-		}
+		wardenClient.Connection.CreateReturns("some-handle", nil)
 
 		tracker = NewTracker(resourceTypes, wardenClient)
 	})
@@ -59,7 +57,7 @@ var _ = Describe("Tracker", func() {
 		})
 
 		It("creates a container with the resource type's image", func() {
-			Ω(wardenClient.Connection.Created()).Should(ContainElement(warden.ContainerSpec{
+			Ω(wardenClient.Connection.CreateArgsForCall(0)).Should(Equal(warden.ContainerSpec{
 				RootFSPath: "image1",
 			}))
 		})
@@ -68,9 +66,7 @@ var _ = Describe("Tracker", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
-				wardenClient.Connection.WhenCreating = func(warden.ContainerSpec) (string, error) {
-					return "", disaster
-				}
+				wardenClient.Connection.CreateReturns("", disaster)
 			})
 
 			It("returns the error and no resource", func() {
@@ -113,16 +109,15 @@ var _ = Describe("Tracker", func() {
 		})
 
 		It("destroys the container associated with the resource", func() {
-			Ω(wardenClient.Connection.Destroyed()).Should(Equal([]string{"some-handle"}))
+			Ω(wardenClient.Connection.DestroyCallCount()).Should(Equal(1))
+			Ω(wardenClient.Connection.DestroyArgsForCall(0)).Should(Equal("some-handle"))
 		})
 
 		Context("when destroying the container fails", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
-				wardenClient.Connection.WhenDestroying = func(string) error {
-					return disaster
-				}
+				wardenClient.Connection.DestroyReturns(disaster)
 			})
 
 			It("returns the error", func() {
@@ -140,7 +135,7 @@ var _ = Describe("Tracker", func() {
 			})
 
 			It("destroys no containers", func() {
-				Ω(wardenClient.Connection.Destroyed()).Should(BeEmpty())
+				Ω(wardenClient.Connection.DestroyCallCount()).Should(BeZero())
 			})
 		})
 	})

@@ -12,6 +12,7 @@ func (resource *resource) Check(input builds.Input) ([]builds.Version, error) {
 
 	err := resource.runScript(
 		"/tmp/resource/check",
+		nil,
 		versionAndSource{input.Version, input.Source},
 		&versions,
 	)

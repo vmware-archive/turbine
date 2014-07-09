@@ -1,18 +1,15 @@
 package resource_test
 
 import (
-	"archive/tar"
-	"bytes"
 	"errors"
-	"io"
 	"io/ioutil"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
+	wfakes "github.com/cloudfoundry-incubator/garden/warden/fakes"
 	"github.com/concourse/turbine/api/builds"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gbytes"
 )
 
 var _ = Describe("Resource Check", func() {
@@ -21,7 +18,7 @@ var _ = Describe("Resource Check", func() {
 
 		checkStdout     string
 		checkStderr     string
-		checkExitStatus uint32
+		checkExitStatus int
 		runCheckError   error
 
 		checkResult []builds.Version
@@ -45,77 +42,39 @@ var _ = Describe("Resource Check", func() {
 	})
 
 	JustBeforeEach(func() {
-		checkStream := primedStream(
-			warden.ProcessStream{
-				Source: warden.ProcessStreamSourceStdout,
-				Data:   []byte(checkStdout),
-			},
-			warden.ProcessStream{
-				Source: warden.ProcessStreamSourceStderr,
-				Data:   []byte(checkStderr),
-			},
-			warden.ProcessStream{
-				ExitStatus: &checkExitStatus,
-			},
-		)
+		wardenClient.Connection.RunStub = func(handle string, spec warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error) {
+			if runCheckError != nil {
+				return nil, runCheckError
+			}
 
-		wardenClient.Connection.WhenRunning = func(handle string, spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
-			return 1, checkStream, runCheckError
+			_, err := io.Stdout.Write([]byte(checkStdout))
+			Ω(err).ShouldNot(HaveOccurred())
+
+			_, err = io.Stderr.Write([]byte(checkStderr))
+			Ω(err).ShouldNot(HaveOccurred())
+
+			process := new(wfakes.FakeProcess)
+			process.WaitReturns(checkExitStatus, nil)
+
+			return process, runCheckError
 		}
 
 		checkResult, checkErr = resource.Check(input)
 	})
 
-	Context("when streaming in the input configuration succeeds", func() {
-		var streamedIn *gbytes.Buffer
+	It("runs /tmp/resource/check the request on stdin", func() {
+		Ω(checkErr).ShouldNot(HaveOccurred())
 
-		BeforeEach(func() {
-			streamedIn = gbytes.NewBuffer()
+		handle, spec, io := wardenClient.Connection.RunArgsForCall(0)
+		Ω(handle).Should(Equal("some-handle"))
+		Ω(spec.Path).Should(Equal("/tmp/resource/check"))
+		Ω(spec.Args).Should(BeEmpty())
+		Ω(spec.Privileged).Should(BeTrue())
 
-			wardenClient.Connection.WhenStreamingIn = func(handle string, destination string, in io.Reader) error {
-				Ω(handle).Should(Equal("some-handle"))
-				Ω(destination).Should(Equal("/tmp/resource-artifacts"))
+		request, err := ioutil.ReadAll(io.Stdin)
+		Ω(err).ShouldNot(HaveOccurred())
 
-				_, err := io.Copy(streamedIn, in)
-				Ω(err).ShouldNot(HaveOccurred())
-
-				return nil
-			}
-		})
-
-		It("creates a file with the input configuration", func() {
-			Ω(checkErr).ShouldNot(HaveOccurred())
-
-			tarReader := tar.NewReader(bytes.NewBuffer(streamedIn.Contents()))
-
-			hdr, err := tarReader.Next()
-			Ω(err).ShouldNot(HaveOccurred())
-			Ω(hdr.Name).Should(Equal("./stdin"))
-			Ω(hdr.Mode).Should(Equal(int64(0644)))
-
-			inputConfig, err := ioutil.ReadAll(tarReader)
-			Ω(err).ShouldNot(HaveOccurred())
-
-			Ω(string(inputConfig)).Should(Equal(`{"version":{"some":"version"},"source":{"some":"source"}}`))
-
-			_, err = tarReader.Next()
-			Ω(err).Should(Equal(io.EOF))
-		})
-
-		It("runs /tmp/resource/check with the contents of the input config file on stdin", func() {
-			Ω(checkErr).ShouldNot(HaveOccurred())
-
-			Ω(wardenClient.Connection.SpawnedProcesses("some-handle")).Should(Equal([]warden.ProcessSpec{
-				{
-					Path: "bash",
-					Args: []string{
-						"-c",
-						"/tmp/resource/check < /tmp/resource-artifacts/stdin",
-					},
-					Privileged: true,
-				},
-			}))
-		})
+		Ω(string(request)).Should(Equal(`{"version":{"some":"version"},"source":{"some":"source"}}`))
 	})
 
 	Context("when /check outputs versions", func() {
@@ -131,20 +90,6 @@ var _ = Describe("Resource Check", func() {
 				builds.Version{"ver": "def"},
 				builds.Version{"ver": "ghi"},
 			}))
-		})
-	})
-
-	Context("when creating the input config file fails", func() {
-		disaster := errors.New("oh no!")
-
-		BeforeEach(func() {
-			wardenClient.Connection.WhenStreamingIn = func(_, _ string, _ io.Reader) error {
-				return disaster
-			}
-		})
-
-		It("returns the error", func() {
-			Ω(checkErr).Should(Equal(disaster))
 		})
 	})
 
