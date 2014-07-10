@@ -1,7 +1,6 @@
 package resource_test
 
 import (
-	"bytes"
 	"errors"
 
 	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
@@ -47,8 +46,7 @@ var _ = Describe("Tracker", func() {
 		})
 
 		JustBeforeEach(func() {
-			// TODO test logs & abort make it down to resource somehow
-			initResource, initErr = tracker.Init(initType, new(bytes.Buffer), nil)
+			initResource, initErr = tracker.Init(initType, nil, nil)
 		})
 
 		It("does not error and returns a resource", func() {

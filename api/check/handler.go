@@ -2,6 +2,7 @@ package check
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -58,7 +59,7 @@ func (handler *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	log.Info("checking")
 
-	resource, err := handler.tracker.Init(input.Type, nil, nil)
+	resource, err := handler.tracker.Init(input.Type, ioutil.Discard, nil)
 	if err != nil {
 		log.Error("failed-to-init", err)
 		w.WriteHeader(http.StatusInternalServerError)

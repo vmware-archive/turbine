@@ -3,6 +3,7 @@ package check
 import (
 	"encoding/json"
 	"io"
+	"io/ioutil"
 
 	"code.google.com/p/go.net/websocket"
 	"github.com/pivotal-golang/lager"
@@ -33,7 +34,7 @@ func (handler *Handler) Stream(conn *websocket.Conn) {
 		"input": input,
 	})
 
-	resource, err := handler.tracker.Init(input.Type, nil, nil)
+	resource, err := handler.tracker.Init(input.Type, ioutil.Discard, nil)
 	if err != nil {
 		log.Error("failed-to-init", err)
 		return
