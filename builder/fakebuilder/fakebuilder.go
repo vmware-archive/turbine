@@ -3,6 +3,7 @@ package fakebuilder
 import (
 	"sync"
 
+	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder"
 )
@@ -24,7 +25,16 @@ type Builder struct {
 	FinishedBuild  builds.Build
 	CompleteError  error
 
+	hijacked    []HijackSpec
+	HijackError error
+
 	sync.RWMutex
+}
+
+type HijackSpec struct {
+	Build builder.RunningBuild
+	Spec  warden.ProcessSpec
+	IO    warden.ProcessIO
 }
 
 func New() *Builder {
@@ -107,6 +117,18 @@ func (fake *Builder) Complete(succeededBuild builder.SucceededBuild, abort <-cha
 	return finished, errored
 }
 
+func (fake *Builder) Hijack(runningBuild builder.RunningBuild, spec warden.ProcessSpec, io warden.ProcessIO) error {
+	fake.Lock()
+	fake.hijacked = append(fake.hijacked, HijackSpec{
+		Build: runningBuild,
+		Spec:  spec,
+		IO:    io,
+	})
+	fake.Unlock()
+
+	return fake.HijackError
+}
+
 func (fake *Builder) Built() []builds.Build {
 	fake.RLock()
 
@@ -138,4 +160,15 @@ func (fake *Builder) Completed() []builder.SucceededBuild {
 	fake.RUnlock()
 
 	return completed
+}
+
+func (fake *Builder) Hijacked() []HijackSpec {
+	fake.RLock()
+
+	hijacked := make([]HijackSpec, len(fake.hijacked))
+	copy(hijacked, fake.hijacked)
+
+	fake.RUnlock()
+
+	return hijacked
 }

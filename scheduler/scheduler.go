@@ -3,12 +3,14 @@ package scheduler
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"sync"
 	"time"
 
+	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder"
 	"github.com/pivotal-golang/lager"
@@ -18,6 +20,7 @@ type Scheduler interface {
 	Start(builds.Build)
 	Attach(builder.RunningBuild)
 	Abort(guid string)
+	Hijack(guid string, process warden.ProcessSpec, io warden.ProcessIO) error
 
 	Drain() []builder.RunningBuild
 }
@@ -31,7 +34,7 @@ type scheduler struct {
 
 	inFlight *sync.WaitGroup
 	draining chan struct{}
-	running  map[*builder.RunningBuild]bool
+	running  map[string]builder.RunningBuild
 	aborting map[string]chan struct{}
 
 	mutex *sync.RWMutex
@@ -51,7 +54,7 @@ func NewScheduler(l lager.Logger, b builder.Builder) Scheduler {
 
 		inFlight: new(sync.WaitGroup),
 		draining: make(chan struct{}),
-		running:  make(map[*builder.RunningBuild]bool),
+		running:  make(map[string]builder.RunningBuild),
 		aborting: make(map[string]chan struct{}),
 
 		mutex: new(sync.RWMutex),
@@ -100,9 +103,7 @@ func (scheduler *scheduler) Attach(running builder.RunningBuild) {
 	scheduler.inFlight.Add(1) // in addition to .Start's
 	defer scheduler.inFlight.Done()
 
-	runningRef := &running
-
-	scheduler.addRunning(runningRef)
+	scheduler.addRunning(running)
 
 	abort := scheduler.abortChannel(running.Build.Guid)
 	defer scheduler.unregisterAbortChannel(running.Build.Guid)
@@ -135,11 +136,23 @@ func (scheduler *scheduler) Attach(running builder.RunningBuild) {
 		return
 	}
 
-	scheduler.removeRunning(runningRef)
+	scheduler.removeRunning(running)
 }
 
 func (scheduler *scheduler) Abort(guid string) {
 	scheduler.abortBuild(guid)
+}
+
+func (scheduler *scheduler) Hijack(guid string, spec warden.ProcessSpec, io warden.ProcessIO) error {
+	scheduler.mutex.Lock()
+	running, found := scheduler.running[guid]
+	scheduler.mutex.Unlock()
+
+	if !found {
+		return errors.New("unknown build")
+	}
+
+	return scheduler.builder.Hijack(running, spec, io)
 }
 
 func (scheduler *scheduler) complete(succeeded builder.SucceededBuild) {
@@ -169,8 +182,8 @@ func (scheduler *scheduler) runningBuilds() []builder.RunningBuild {
 	scheduler.mutex.RLock()
 
 	running := []builder.RunningBuild{}
-	for build, _ := range scheduler.running {
-		running = append(running, *build)
+	for _, build := range scheduler.running {
+		running = append(running, build)
 	}
 
 	scheduler.mutex.RUnlock()
@@ -178,15 +191,15 @@ func (scheduler *scheduler) runningBuilds() []builder.RunningBuild {
 	return running
 }
 
-func (scheduler *scheduler) addRunning(running *builder.RunningBuild) {
+func (scheduler *scheduler) addRunning(running builder.RunningBuild) {
 	scheduler.mutex.Lock()
-	scheduler.running[running] = true
+	scheduler.running[running.Build.Guid] = running
 	scheduler.mutex.Unlock()
 }
 
-func (scheduler *scheduler) removeRunning(running *builder.RunningBuild) {
+func (scheduler *scheduler) removeRunning(running builder.RunningBuild) {
 	scheduler.mutex.Lock()
-	delete(scheduler.running, running)
+	delete(scheduler.running, running.Build.Guid)
 	scheduler.mutex.Unlock()
 }
 

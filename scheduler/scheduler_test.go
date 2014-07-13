@@ -1,6 +1,7 @@
 package scheduler_test
 
 import (
+	"bytes"
 	"errors"
 	"net/http"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/onsi/gomega/ghttp"
 	"github.com/pivotal-golang/lager/lagertest"
 
+	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder"
 	"github.com/concourse/turbine/builder/fakebuilder"
@@ -253,6 +255,91 @@ var _ = Describe("Scheduler", func() {
 
 				itRetries(0, func() {
 					Eventually(gotRequest, 3).Should(BeClosed())
+				})
+			})
+		})
+	})
+
+	Describe("Hijack", func() {
+		Context("when the build is not running", func() {
+			It("returns an error", func() {
+				err := scheduler.Hijack("bogus-guid", warden.ProcessSpec{}, warden.ProcessIO{})
+				Ω(err).Should(HaveOccurred())
+			})
+		})
+
+		Context("when the build is running", func() {
+			var attaching chan struct{}
+			var runningBuild builder.RunningBuild
+
+			BeforeEach(func() {
+				attaching = make(chan struct{})
+
+				build.Status = builds.StatusStarted
+
+				runningBuild = builder.RunningBuild{
+					Build:           build,
+					ContainerHandle: "some-handle",
+					ProcessID:       42,
+				}
+
+				fakeBuilder.WhenStarting = func(builds.Build, <-chan struct{}) (<-chan builder.RunningBuild, <-chan error) {
+					running := make(chan builder.RunningBuild, 1)
+					running <- runningBuild
+					return running, nil
+				}
+
+				fakeBuilder.WhenAttaching = func(build builder.RunningBuild, abort <-chan struct{}) (<-chan builder.SucceededBuild, <-chan error, <-chan error) {
+					close(attaching)
+					return nil, nil, nil
+				}
+			})
+
+			It("hijacks via the builder", func() {
+				scheduler.Start(build)
+
+				Eventually(attaching).Should(BeClosed())
+
+				spec := warden.ProcessSpec{
+					Path: "process-path",
+					Args: []string{"process", "args"},
+					TTY:  true,
+				}
+
+				io := warden.ProcessIO{
+					Stdin:  new(bytes.Buffer),
+					Stdout: new(bytes.Buffer),
+				}
+
+				err := scheduler.Hijack(runningBuild.Build.Guid, spec, io)
+				Ω(err).ShouldNot(HaveOccurred())
+
+				hijacked := fakeBuilder.Hijacked()
+				Ω(hijacked).Should(HaveLen(1))
+
+				Ω(hijacked[0].Build).Should(Equal(runningBuild))
+				Ω(hijacked[0].Spec).Should(Equal(spec))
+				Ω(hijacked[0].IO).Should(Equal(io))
+			})
+
+			Context("when hijacking fails", func() {
+				disaster := errors.New("oh no!")
+
+				BeforeEach(func() {
+					fakeBuilder.HijackError = disaster
+				})
+
+				It("returns the error", func() {
+					scheduler.Start(build)
+
+					Eventually(attaching).Should(BeClosed())
+
+					spec := warden.ProcessSpec{}
+
+					io := warden.ProcessIO{}
+
+					err := scheduler.Hijack(runningBuild.Build.Guid, spec, io)
+					Ω(err).Should(Equal(disaster))
 				})
 			})
 		})

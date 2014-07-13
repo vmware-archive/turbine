@@ -6,25 +6,25 @@ import (
 	"testing"
 
 	"github.com/concourse/turbine/api"
-	"github.com/concourse/turbine/resource/fakes"
+	rfakes "github.com/concourse/turbine/resource/fakes"
 	"github.com/concourse/turbine/routes"
-	"github.com/concourse/turbine/scheduler/fakescheduler"
+	sfakes "github.com/concourse/turbine/scheduler/fakes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/pivotal-golang/lager/lagertest"
 	"github.com/tedsuo/rata"
 )
 
-var scheduler *fakescheduler.FakeScheduler
-var tracker *fakes.FakeTracker
+var scheduler *sfakes.FakeScheduler
+var tracker *rfakes.FakeTracker
 var drain chan struct{}
 
 var server *httptest.Server
 var client *http.Client
 
 var _ = BeforeEach(func() {
-	scheduler = fakescheduler.New()
-	tracker = new(fakes.FakeTracker)
+	scheduler = new(sfakes.FakeScheduler)
+	tracker = new(rfakes.FakeTracker)
 	drain = make(chan struct{})
 
 	turbineEndpoint := rata.NewRequestGenerator("http://some-turbine", routes.Routes)

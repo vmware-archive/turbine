@@ -26,6 +26,7 @@ var _ = Describe("POST /builds/:guid/abort", func() {
 	})
 
 	It("aborts the build via the scheduler", func() {
-		Ω(scheduler.Aborted()).Should(Equal([]string{"some-build-guid"}))
+		Ω(scheduler.AbortCallCount()).Should(Equal(1))
+		Ω(scheduler.AbortArgsForCall(0)).Should(Equal("some-build-guid"))
 	})
 })

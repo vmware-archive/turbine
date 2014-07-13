@@ -11,6 +11,7 @@ import (
 	"github.com/concourse/turbine/api/abort"
 	"github.com/concourse/turbine/api/check"
 	"github.com/concourse/turbine/api/execute"
+	"github.com/concourse/turbine/api/hijack"
 	"github.com/concourse/turbine/resource"
 	"github.com/concourse/turbine/routes"
 	"github.com/concourse/turbine/scheduler"
@@ -28,6 +29,7 @@ func New(
 	handlers := map[string]http.Handler{
 		routes.ExecuteBuild:     execute.NewHandler(logger, scheduler, turbineEndpoint),
 		routes.AbortBuild:       abort.NewHandler(scheduler),
+		routes.HijackBuild:      hijack.NewHandler(scheduler),
 		routes.CheckInput:       checkHandler,
 		routes.CheckInputStream: websocket.Server{Handler: checkHandler.Stream},
 	}

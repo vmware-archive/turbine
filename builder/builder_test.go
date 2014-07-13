@@ -524,11 +524,7 @@ var _ = Describe("Builder", func() {
 			})
 
 			Context("and the container can still be found", func() {
-				var lookedUp chan struct{}
-
 				BeforeEach(func() {
-					lookedUp = make(chan struct{})
-
 					wardenClient.Connection.ListReturns([]string{runningBuild.ContainerHandle}, nil)
 				})
 
@@ -703,6 +699,96 @@ var _ = Describe("Builder", func() {
 			})
 		})
 
+	})
+
+	Describe("Hijack", func() {
+		var runningBuild RunningBuild
+		var spec warden.ProcessSpec
+		var io warden.ProcessIO
+
+		var hijackErr error
+
+		JustBeforeEach(func() {
+			hijackErr = builder.Hijack(runningBuild, spec, io)
+		})
+
+		BeforeEach(func() {
+			runningBuild = RunningBuild{
+				Build:           build,
+				ContainerHandle: "some-handle",
+			}
+
+			spec = warden.ProcessSpec{
+				Path: "some-path",
+				Args: []string{"some", "args"},
+			}
+
+			io = warden.ProcessIO{
+				Stdin:  new(bytes.Buffer),
+				Stdout: new(bytes.Buffer),
+			}
+		})
+
+		Context("when the container can be found", func() {
+			BeforeEach(func() {
+				wardenClient.Connection.ListReturns([]string{"some-handle"}, nil)
+			})
+
+			Context("and running succeeds", func() {
+				var fakeProcess *wfakes.FakeProcess
+
+				BeforeEach(func() {
+					fakeProcess = new(wfakes.FakeProcess)
+
+					wardenClient.Connection.RunReturns(fakeProcess, nil)
+				})
+
+				It("looks it up via warden and uses it for running", func() {
+					Ω(hijackErr).ShouldNot(HaveOccurred())
+
+					Ω(wardenClient.Connection.ListCallCount()).Should(Equal(1))
+
+					ranHandle, ranSpec, ranIO := wardenClient.Connection.RunArgsForCall(0)
+					Ω(ranHandle).Should(Equal("some-handle"))
+					Ω(ranSpec).Should(Equal(spec))
+					Ω(ranIO).Should(Equal(io))
+				})
+
+				Context("and waiting on the process fails", func() {
+					disaster := errors.New("oh no!")
+
+					BeforeEach(func() {
+						fakeProcess.WaitReturns(0, disaster)
+					})
+
+					It("returns the error", func() {
+						Ω(hijackErr).Should(Equal(disaster))
+					})
+				})
+			})
+
+			Context("and running fails", func() {
+				disaster := errors.New("oh no!")
+
+				BeforeEach(func() {
+					wardenClient.Connection.RunReturns(nil, disaster)
+				})
+
+				It("returns the error", func() {
+					Ω(hijackErr).Should(Equal(disaster))
+				})
+			})
+		})
+
+		Context("when the lookup fails", func() {
+			BeforeEach(func() {
+				wardenClient.Connection.ListReturns([]string{}, nil)
+			})
+
+			It("returns an error", func() {
+				Ω(hijackErr).Should(HaveOccurred())
+			})
+		})
 	})
 
 	Describe("Complete", func() {

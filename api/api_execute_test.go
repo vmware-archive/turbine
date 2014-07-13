@@ -57,9 +57,11 @@ var _ = Describe("POST /builds", func() {
 
 		Ω(returnedBuild.Guid).ShouldNot(BeEmpty())
 		Ω(returnedBuild.AbortURL).Should(Equal("http://some-turbine/builds/" + returnedBuild.Guid + "/abort"))
+		Ω(returnedBuild.HijackURL).Should(Equal("http://some-turbine/builds/" + returnedBuild.Guid + "/hijack"))
 		Ω(returnedBuild.Inputs).Should(Equal(build.Inputs))
 
-		Ω(scheduler.Scheduled()).Should(ContainElement(returnedBuild))
+		Ω(scheduler.StartCallCount()).Should(Equal(1))
+		Ω(scheduler.StartArgsForCall(0)).Should(Equal(returnedBuild))
 	})
 
 	Context("when the callback url is malformed", func() {

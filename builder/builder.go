@@ -17,6 +17,7 @@ var ErrAborted = errors.New("build aborted")
 type Builder interface {
 	Start(builds.Build, <-chan struct{}) (started <-chan RunningBuild, errored <-chan error)
 	Attach(RunningBuild, <-chan struct{}) (finished <-chan SucceededBuild, failed <-chan error, errored <-chan error)
+	Hijack(RunningBuild, warden.ProcessSpec, warden.ProcessIO) error
 	Complete(SucceededBuild, <-chan struct{}) (finished <-chan builds.Build, errored <-chan error)
 }
 
@@ -87,6 +88,21 @@ func (builder *builder) Complete(succeeded SucceededBuild, abort <-chan struct{}
 	go builder.complete(succeeded, abort, finished, errored)
 
 	return finished, errored
+}
+
+func (builder *builder) Hijack(running RunningBuild, spec warden.ProcessSpec, io warden.ProcessIO) error {
+	container, err := builder.wardenClient.Lookup(running.ContainerHandle)
+	if err != nil {
+		return err
+	}
+
+	process, err := container.Run(spec, io)
+	if err != nil {
+		return err
+	}
+
+	_, err = process.Wait()
+	return err
 }
 
 func (builder *builder) start(build builds.Build, abort <-chan struct{}, started chan<- RunningBuild, errored chan<- error) {

@@ -19,9 +19,10 @@ type Build struct {
 	Inputs  []Input  `json:"inputs"`
 	Outputs []Output `json:"outputs"`
 
-	AbortURL string `json:"abort_url"`
-	LogsURL  string `json:"logs_url"`
-	Callback string `json:"callback"`
+	AbortURL  string `json:"abort_url"`
+	HijackURL string `json:"hijack_url"`
+	LogsURL   string `json:"logs_url"`
+	Callback  string `json:"callback"`
 
 	Status Status `json:"status"`
 }

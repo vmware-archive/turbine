@@ -78,6 +78,19 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	build.AbortURL = abortReq.URL.String()
 
+	hijackReq, err := handler.turbineEndpoint.CreateRequest(
+		routes.HijackBuild,
+		rata.Params{"guid": build.Guid},
+		nil,
+	)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	build.HijackURL = hijackReq.URL.String()
+
 	log.Info("scheduling", lager.Data{
 		"guid": build.Guid,
 	})

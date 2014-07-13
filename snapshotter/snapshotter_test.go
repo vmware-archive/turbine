@@ -12,13 +12,13 @@ import (
 
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder"
-	"github.com/concourse/turbine/scheduler/fakescheduler"
+	sfakes "github.com/concourse/turbine/scheduler/fakes"
 	. "github.com/concourse/turbine/snapshotter"
 )
 
 var _ = Describe("Snapshotter", func() {
 	var snapshotPath string
-	var scheduler *fakescheduler.FakeScheduler
+	var scheduler *sfakes.FakeScheduler
 	var snapshotter *Snapshotter
 
 	var process ifrit.Process
@@ -81,7 +81,7 @@ var _ = Describe("Snapshotter", func() {
 
 		snapshotPath = snapshotFile.Name()
 
-		scheduler = fakescheduler.New()
+		scheduler = new(sfakes.FakeScheduler)
 		snapshotter = NewSnapshotter(lagertest.NewTestLogger("test"), snapshotPath, scheduler)
 	})
 
@@ -108,7 +108,7 @@ var _ = Describe("Snapshotter", func() {
 			})
 
 			BeforeEach(func() {
-				scheduler.DrainResult = theRunningBuilds
+				scheduler.DrainReturns(theRunningBuilds)
 			})
 
 			It("drains the scheduler and snapshots the results", func() {
@@ -137,7 +137,11 @@ var _ = Describe("Snapshotter", func() {
 			})
 
 			It("attaches to the builds via the scheduler", func() {
-				Eventually(scheduler.Attached).Should(Equal(theRunningBuilds))
+				Eventually(scheduler.AttachCallCount).Should(Equal(len(theRunningBuilds)))
+
+				for i, build := range theRunningBuilds {
+					Ω(scheduler.AttachArgsForCall(i)).Should(Equal(build))
+				}
 			})
 		})
 
