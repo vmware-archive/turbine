@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"sync"
 
 	"code.google.com/p/go.net/websocket"
 	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
@@ -223,7 +224,13 @@ var _ = Describe("Builder", func() {
 			})
 
 			Context("when the build emits output", func() {
+				var logging *sync.WaitGroup
+
 				BeforeEach(func() {
+					logging = new(sync.WaitGroup)
+
+					logging.Add(1)
+
 					wardenClient.Connection.RunStub = func(handle string, spec warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error) {
 						go func() {
 							defer GinkgoRecover()
@@ -234,7 +241,7 @@ var _ = Describe("Builder", func() {
 							_, err = io.Stderr.Write([]byte("some stderr data"))
 							Ω(err).ShouldNot(HaveOccurred())
 
-							started.LogStream.Close()
+							logging.Done()
 						}()
 
 						return new(wfakes.FakeProcess), nil
@@ -257,6 +264,9 @@ var _ = Describe("Builder", func() {
 						})
 
 						It("emits the build's output via websockets", func() {
+							logging.Wait()
+							started.LogStream.Close()
+
 							Eventually(logBuffer).Should(gbytes.Say("creating container from some-rootfs...\n"))
 							Eventually(logBuffer).Should(gbytes.Say("starting...\n"))
 
@@ -265,17 +275,28 @@ var _ = Describe("Builder", func() {
 						})
 
 						Context("and the resources emit logs", func() {
+							BeforeEach(func() {
+								tracker.InitStub = func(typ string, logs io.Writer, abort <-chan struct{}) (resource.Resource, error) {
+									logging.Add(1)
+
+									go func() {
+										defer GinkgoRecover()
+
+										_, err := logs.Write([]byte("hello from the resource"))
+										Ω(err).ShouldNot(HaveOccurred())
+
+										logging.Done()
+									}()
+
+									return new(resourcefakes.FakeResource), nil
+								}
+							})
+
 							It("emits them to the sink", func() {
-								Ω(tracker.InitCallCount()).ShouldNot(Equal(0))
-
-								_, logs, _ := tracker.InitArgsForCall(0)
-								Ω(logs).ShouldNot(BeNil())
-
-								logs.Write([]byte("hello from the resource"))
+								logging.Wait()
+								started.LogStream.Close()
 
 								Eventually(logBuffer).Should(gbytes.Say("hello from the resource"))
-
-								started.LogStream.Close()
 							})
 						})
 					})
@@ -292,6 +313,9 @@ var _ = Describe("Builder", func() {
 						})
 
 						It("retries until it is", func() {
+							logging.Wait()
+							started.LogStream.Close()
+
 							Eventually(logBuffer, 2).Should(gbytes.Say("starting...\n"))
 						})
 					})
