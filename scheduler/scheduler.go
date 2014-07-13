@@ -76,22 +76,20 @@ func (scheduler *scheduler) Start(build builds.Build) {
 
 	abort := scheduler.abortChannel(build.Guid)
 
-	started, errored := scheduler.builder.Start(build, abort)
-
 	go func() {
-		select {
-		case running := <-started:
+		running, err := scheduler.builder.Start(build, abort)
+		if err != nil {
+			log.Error("errored", err)
+
+			build.Status = builds.StatusErrored
+			scheduler.reportBuild(build, log)
+		} else {
 			log.Info("started")
 
 			running.Build.Status = builds.StatusStarted
 			scheduler.reportBuild(running.Build, log)
 
 			scheduler.Attach(running)
-		case err := <-errored:
-			log.Error("errored", err)
-
-			build.Status = builds.StatusErrored
-			scheduler.reportBuild(build, log)
 		}
 
 		scheduler.unregisterAbortChannel(build.Guid)
@@ -108,30 +106,40 @@ func (scheduler *scheduler) Attach(running builder.RunningBuild) {
 	abort := scheduler.abortChannel(running.Build.Guid)
 	defer scheduler.unregisterAbortChannel(running.Build.Guid)
 
-	succeeded, failed, errored := scheduler.builder.Attach(running, abort)
-
 	log := scheduler.logger.Session("attach", lager.Data{
 		"build": running.Build,
 	})
 
+	succeeded := make(chan builder.SucceededBuild, 1)
+	failed := make(chan error, 1)
+	errored := make(chan error, 1)
+
+	go func() {
+		s, f, e := scheduler.builder.Attach(running, abort)
+		if e != nil {
+			errored <- e
+		} else if f != nil {
+			failed <- e
+		} else {
+			succeeded <- s
+		}
+	}()
+
 	select {
+	case build := <-succeeded:
+		log.Info("succeeded")
+
+		scheduler.complete(build)
 	case err := <-failed:
 		log.Error("failed", err)
 
 		running.Build.Status = builds.StatusFailed
 		scheduler.reportBuild(running.Build, log)
-
-	case succeededBuild := <-succeeded:
-		log.Info("succeeded")
-
-		scheduler.complete(succeededBuild)
-
 	case err := <-errored:
 		log.Error("errored", err)
 
 		running.Build.Status = builds.StatusErrored
 		scheduler.reportBuild(running.Build, log)
-
 	case <-scheduler.draining:
 		return
 	}
@@ -140,7 +148,15 @@ func (scheduler *scheduler) Attach(running builder.RunningBuild) {
 }
 
 func (scheduler *scheduler) Abort(guid string) {
-	scheduler.abortBuild(guid)
+	scheduler.mutex.Lock()
+	defer scheduler.mutex.Unlock()
+
+	abort, found := scheduler.aborting[guid]
+	if !found {
+		return
+	}
+
+	close(abort)
 }
 
 func (scheduler *scheduler) Hijack(guid string, spec warden.ProcessSpec, io warden.ProcessIO) error {
@@ -157,24 +173,22 @@ func (scheduler *scheduler) Hijack(guid string, spec warden.ProcessSpec, io ward
 
 func (scheduler *scheduler) complete(succeeded builder.SucceededBuild) {
 	abort := scheduler.abortChannel(succeeded.Build.Guid)
-	finished, errored := scheduler.builder.Complete(succeeded, abort)
 
 	log := scheduler.logger.Session("complete", lager.Data{
 		"build": succeeded.Build,
 	})
 
-	select {
-	case finishedBuild := <-finished:
-		log.Info("completed")
-
-		finishedBuild.Status = builds.StatusSucceeded
-		scheduler.reportBuild(finishedBuild, log)
-
-	case err := <-errored:
+	finished, err := scheduler.builder.Complete(succeeded, abort)
+	if err != nil {
 		log.Error("failed", err)
 
 		succeeded.Build.Status = builds.StatusErrored
 		scheduler.reportBuild(succeeded.Build, log)
+	} else {
+		log.Info("completed")
+
+		finished.Status = builds.StatusSucceeded
+		scheduler.reportBuild(finished, log)
 	}
 }
 
@@ -221,21 +235,6 @@ func (scheduler *scheduler) unregisterAbortChannel(guid string) {
 	defer scheduler.mutex.Unlock()
 
 	delete(scheduler.aborting, guid)
-}
-
-func (scheduler *scheduler) abortBuild(guid string) {
-	scheduler.mutex.Lock()
-	defer scheduler.mutex.Unlock()
-
-	abort, found := scheduler.aborting[guid]
-	if !found {
-		return
-	}
-
-	close(abort)
-}
-
-func (scheduler *scheduler) runBuild(originalBuild builds.Build, started <-chan builder.RunningBuild, errored <-chan error) {
 }
 
 func (scheduler *scheduler) reportBuild(build builds.Build, logger lager.Logger) {

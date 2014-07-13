@@ -13,18 +13,18 @@ import (
 	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder"
-	"github.com/concourse/turbine/builder/fakebuilder"
+	bfakes "github.com/concourse/turbine/builder/fakes"
 	. "github.com/concourse/turbine/scheduler"
 )
 
 var _ = Describe("Scheduler", func() {
-	var fakeBuilder *fakebuilder.Builder
+	var fakeBuilder *bfakes.FakeBuilder
 	var scheduler Scheduler
 
 	var build builds.Build
 
 	BeforeEach(func() {
-		fakeBuilder = fakebuilder.New()
+		fakeBuilder = new(bfakes.FakeBuilder)
 		scheduler = NewScheduler(lagertest.NewTestLogger("test"), fakeBuilder)
 
 		build = builds.Build{
@@ -49,7 +49,10 @@ var _ = Describe("Scheduler", func() {
 		It("kicks off a builder", func() {
 			scheduler.Start(build)
 
-			Eventually(fakeBuilder.Built).Should(ContainElement(build))
+			Eventually(fakeBuilder.StartCallCount).Should(Equal(1))
+
+			build, _ := fakeBuilder.StartArgsForCall(0)
+			Ω(build).Should(Equal(build))
 		})
 
 		Context("when there is a callback registered", func() {
@@ -101,18 +104,19 @@ var _ = Describe("Scheduler", func() {
 			}
 
 			Context("and the build starts", func() {
-				var startedBuild builds.Build
-
+				var running builder.RunningBuild
 				var gotStartedCallback <-chan struct{}
 
 				BeforeEach(func() {
-					startedBuild = build
-					startedBuild.Config.Image = "some-reconfigured-image"
-					startedBuild.Status = builds.StatusStarted
+					running = builder.RunningBuild{
+						Build: build,
+					}
 
-					fakeBuilder.StartedBuild = &startedBuild
+					running.Build.Status = builds.StatusStarted
 
-					gotStartedCallback = handleBuild(startedBuild)
+					fakeBuilder.StartReturns(running, nil)
+
+					gotStartedCallback = handleBuild(running.Build)
 				})
 
 				It("reports the started build as started", func() {
@@ -129,30 +133,34 @@ var _ = Describe("Scheduler", func() {
 				})
 
 				Context("when the build succeeds", func() {
-					var gotRequest <-chan struct{}
+					var succeeded builder.SucceededBuild
 
 					BeforeEach(func() {
-						fakeBuilder.SucceededBuild = &startedBuild
+						succeeded = builder.SucceededBuild{
+							Build: build,
+						}
+
+						succeeded.Build.Status = builds.StatusSucceeded
+
+						fakeBuilder.AttachReturns(succeeded, nil, nil)
 					})
 
 					It("completes the build", func() {
 						scheduler.Start(build)
 
-						Eventually(fakeBuilder.Completed).Should(Equal([]builder.SucceededBuild{
-							{
-								Build: startedBuild,
-							},
-						}))
+						Eventually(fakeBuilder.CompleteCallCount).Should(Equal(1))
+
+						completing, _ := fakeBuilder.CompleteArgsForCall(0)
+						Ω(completing).Should(Equal(succeeded))
 					})
 
 					Context("and the build completes", func() {
+						var gotRequest <-chan struct{}
+
 						BeforeEach(func() {
-							fakeBuilder.FinishedBuild = startedBuild
+							fakeBuilder.CompleteReturns(running.Build, nil)
 
-							succeededBuild := startedBuild
-							succeededBuild.Status = builds.StatusSucceeded
-
-							gotRequest = handleBuild(succeededBuild)
+							gotRequest = handleBuild(succeeded.Build)
 						})
 
 						It("reports the started build as succeeded", func() {
@@ -167,10 +175,12 @@ var _ = Describe("Scheduler", func() {
 					})
 
 					Context("and the build fails to complete", func() {
-						BeforeEach(func() {
-							fakeBuilder.CompleteError = errors.New("oh no!")
+						var gotRequest <-chan struct{}
 
-							erroredBuild := startedBuild
+						BeforeEach(func() {
+							fakeBuilder.CompleteReturns(builds.Build{}, errors.New("oh no!"))
+
+							erroredBuild := running.Build
 							erroredBuild.Status = builds.StatusErrored
 
 							gotRequest = handleBuild(erroredBuild)
@@ -192,9 +202,9 @@ var _ = Describe("Scheduler", func() {
 					var gotRequest <-chan struct{}
 
 					BeforeEach(func() {
-						fakeBuilder.BuildFailure = errors.New("exit status 1")
+						fakeBuilder.AttachReturns(builder.SucceededBuild{}, errors.New("exit status 1"), nil)
 
-						failedBuild := startedBuild
+						failedBuild := running.Build
 						failedBuild.Status = builds.StatusFailed
 
 						gotRequest = handleBuild(failedBuild)
@@ -215,9 +225,9 @@ var _ = Describe("Scheduler", func() {
 					var gotRequest <-chan struct{}
 
 					BeforeEach(func() {
-						fakeBuilder.BuildError = errors.New("oh no!")
+						fakeBuilder.AttachReturns(builder.SucceededBuild{}, nil, errors.New("oh no!"))
 
-						erroredBuild := startedBuild
+						erroredBuild := running.Build
 						erroredBuild.Status = builds.StatusErrored
 
 						gotRequest = handleBuild(erroredBuild)
@@ -239,7 +249,7 @@ var _ = Describe("Scheduler", func() {
 				var gotRequest <-chan struct{}
 
 				BeforeEach(func() {
-					fakeBuilder.StartError = errors.New("oh no!")
+					fakeBuilder.StartReturns(builder.RunningBuild{}, errors.New("oh no!"))
 
 					erroredBuild := build
 					erroredBuild.Status = builds.StatusErrored
@@ -270,28 +280,26 @@ var _ = Describe("Scheduler", func() {
 
 		Context("when the build is running", func() {
 			var attaching chan struct{}
-			var runningBuild builder.RunningBuild
+			var running builder.RunningBuild
 
 			BeforeEach(func() {
 				attaching = make(chan struct{})
 
 				build.Status = builds.StatusStarted
 
-				runningBuild = builder.RunningBuild{
+				running = builder.RunningBuild{
 					Build:           build,
 					ContainerHandle: "some-handle",
 					ProcessID:       42,
 				}
 
-				fakeBuilder.WhenStarting = func(builds.Build, <-chan struct{}) (<-chan builder.RunningBuild, <-chan error) {
-					running := make(chan builder.RunningBuild, 1)
-					running <- runningBuild
+				fakeBuilder.StartStub = func(builds.Build, <-chan struct{}) (builder.RunningBuild, error) {
 					return running, nil
 				}
 
-				fakeBuilder.WhenAttaching = func(build builder.RunningBuild, abort <-chan struct{}) (<-chan builder.SucceededBuild, <-chan error, <-chan error) {
+				fakeBuilder.AttachStub = func(build builder.RunningBuild, abort <-chan struct{}) (builder.SucceededBuild, error, error) {
 					close(attaching)
-					return nil, nil, nil
+					select {}
 				}
 			})
 
@@ -311,22 +319,22 @@ var _ = Describe("Scheduler", func() {
 					Stdout: new(bytes.Buffer),
 				}
 
-				err := scheduler.Hijack(runningBuild.Build.Guid, spec, io)
+				err := scheduler.Hijack(running.Build.Guid, spec, io)
 				Ω(err).ShouldNot(HaveOccurred())
 
-				hijacked := fakeBuilder.Hijacked()
-				Ω(hijacked).Should(HaveLen(1))
+				Ω(fakeBuilder.HijackCallCount()).Should(Equal(1))
 
-				Ω(hijacked[0].Build).Should(Equal(runningBuild))
-				Ω(hijacked[0].Spec).Should(Equal(spec))
-				Ω(hijacked[0].IO).Should(Equal(io))
+				build, spec, io := fakeBuilder.HijackArgsForCall(0)
+				Ω(build).Should(Equal(running))
+				Ω(spec).Should(Equal(spec))
+				Ω(io).Should(Equal(io))
 			})
 
 			Context("when hijacking fails", func() {
 				disaster := errors.New("oh no!")
 
 				BeforeEach(func() {
-					fakeBuilder.HijackError = disaster
+					fakeBuilder.HijackReturns(disaster)
 				})
 
 				It("returns the error", func() {
@@ -338,7 +346,7 @@ var _ = Describe("Scheduler", func() {
 
 					io := warden.ProcessIO{}
 
-					err := scheduler.Hijack(runningBuild.Build.Guid, spec, io)
+					err := scheduler.Hijack(running.Build.Guid, spec, io)
 					Ω(err).Should(Equal(disaster))
 				})
 			})
@@ -352,9 +360,9 @@ var _ = Describe("Scheduler", func() {
 			BeforeEach(func() {
 				gotAborting = make(chan (<-chan struct{}), 1)
 
-				fakeBuilder.WhenStarting = func(build builds.Build, abort <-chan struct{}) (<-chan builder.RunningBuild, <-chan error) {
+				fakeBuilder.StartStub = func(build builds.Build, abort <-chan struct{}) (builder.RunningBuild, error) {
 					gotAborting <- abort
-					return nil, nil
+					select {}
 				}
 			})
 
@@ -362,7 +370,7 @@ var _ = Describe("Scheduler", func() {
 				scheduler.Start(build)
 
 				var abort <-chan struct{}
-				Ω(gotAborting).Should(Receive(&abort))
+				Eventually(gotAborting).Should(Receive(&abort))
 
 				scheduler.Abort(build.Guid)
 
@@ -376,9 +384,13 @@ var _ = Describe("Scheduler", func() {
 			BeforeEach(func() {
 				gotAborting = make(chan (<-chan struct{}), 1)
 
-				fakeBuilder.WhenAttaching = func(build builder.RunningBuild, abort <-chan struct{}) (<-chan builder.SucceededBuild, <-chan error, <-chan error) {
+				fakeBuilder.StartStub = func(build builds.Build, abort <-chan struct{}) (builder.RunningBuild, error) {
+					return builder.RunningBuild{Build: build}, nil
+				}
+
+				fakeBuilder.AttachStub = func(build builder.RunningBuild, abort <-chan struct{}) (builder.SucceededBuild, error, error) {
 					gotAborting <- abort
-					return nil, nil, nil
+					select {}
 				}
 			})
 
@@ -400,9 +412,17 @@ var _ = Describe("Scheduler", func() {
 			BeforeEach(func() {
 				gotAborting = make(chan (<-chan struct{}), 1)
 
-				fakeBuilder.WhenCompleting = func(build builder.SucceededBuild, abort <-chan struct{}) (<-chan builds.Build, <-chan error) {
+				fakeBuilder.StartStub = func(build builds.Build, abort <-chan struct{}) (builder.RunningBuild, error) {
+					return builder.RunningBuild{Build: build}, nil
+				}
+
+				fakeBuilder.AttachStub = func(running builder.RunningBuild, abort <-chan struct{}) (builder.SucceededBuild, error, error) {
+					return builder.SucceededBuild{Build: running.Build}, nil, nil
+				}
+
+				fakeBuilder.CompleteStub = func(build builder.SucceededBuild, abort <-chan struct{}) (builds.Build, error) {
 					gotAborting <- abort
-					return nil, nil
+					select {}
 				}
 			})
 
@@ -430,18 +450,18 @@ var _ = Describe("Scheduler", func() {
 			BeforeEach(func() {
 				running = make(chan builder.RunningBuild)
 
-				fakeBuilder.WhenStarting = func(build builds.Build, abort <-chan struct{}) (<-chan builder.RunningBuild, <-chan error) {
+				fakeBuilder.StartStub = func(build builds.Build, abort <-chan struct{}) (builder.RunningBuild, error) {
 					if build.Guid == "starting" {
-						return running, nil
-					} else {
-						instantlyRunning := make(chan builder.RunningBuild, 1)
-
-						instantlyRunning <- builder.RunningBuild{
-							Build: build,
-						}
-
-						return instantlyRunning, nil
+						return <-running, nil
 					}
+
+					return builder.RunningBuild{
+						Build: build,
+					}, nil
+				}
+
+				fakeBuilder.AttachStub = func(running builder.RunningBuild, abort <-chan struct{}) (builder.SucceededBuild, error, error) {
+					select {}
 				}
 			})
 
@@ -465,77 +485,14 @@ var _ = Describe("Scheduler", func() {
 				Eventually(drained).Should(Receive(Equal([]builder.RunningBuild{runningBuild})))
 			})
 
-			Context("and another running build starts completing", func() {
-				completingBuild := builds.Build{
-					Guid: "completing",
-				}
-
-				var completing chan struct{}
-				var finished chan builds.Build
-
-				BeforeEach(func() {
-					scheduler.Start(startingBuild)
-
-					completing = make(chan struct{})
-					finished = make(chan builds.Build)
-
-					fakeBuilder.WhenCompleting = func(succeeded builder.SucceededBuild, abort <-chan struct{}) (<-chan builds.Build, <-chan error) {
-						if succeeded.Build.Guid == "completing" {
-							close(completing)
-							return finished, nil
-						} else {
-							instantlyFinished := make(chan builds.Build, 1)
-							instantlyFinished <- succeeded.Build
-							return nil, nil
-						}
-					}
-
-					fakeBuilder.WhenAttaching = func(running builder.RunningBuild, abort <-chan struct{}) (<-chan builder.SucceededBuild, <-chan error, <-chan error) {
-						if running.Build.Guid == "completing" {
-							instantlySucceeded := make(chan builder.SucceededBuild, 1)
-							instantlySucceeded <- builder.SucceededBuild{Build: running.Build}
-							return instantlySucceeded, nil, nil
-						} else {
-							return nil, nil, nil
-						}
-					}
-				})
-
-				It("waits for it to complete", func() {
-					scheduler.Start(completingBuild)
-
-					startedBuild := startingBuild
-					startedBuild.Status = builds.StatusStarted
-					runningBuild := builder.RunningBuild{Build: startedBuild}
-
-					drained := make(chan []builder.RunningBuild)
-
-					go func() {
-						drained <- scheduler.Drain()
-					}()
-
-					Consistently(drained).ShouldNot(Receive())
-
-					running <- runningBuild
-
-					Eventually(completing).Should(BeClosed())
-
-					Consistently(drained).ShouldNot(Receive())
-
-					finished <- completingBuild
-
-					Eventually(drained).Should(Receive(Equal([]builder.RunningBuild{runningBuild})))
-				})
-			})
-
 			Context("and it errors", func() {
 				var errored chan error
 
 				BeforeEach(func() {
 					errored = make(chan error)
 
-					fakeBuilder.WhenStarting = func(builds.Build, <-chan struct{}) (<-chan builder.RunningBuild, <-chan error) {
-						return nil, errored
+					fakeBuilder.StartStub = func(builds.Build, <-chan struct{}) (builder.RunningBuild, error) {
+						return builder.RunningBuild{}, <-errored
 					}
 				})
 
@@ -559,19 +516,13 @@ var _ = Describe("Scheduler", func() {
 
 		Context("when a build is running", func() {
 			var running chan struct{}
-			var succeeded chan builder.SucceededBuild
-			var failed chan error
-			var errored chan error
 
 			BeforeEach(func() {
 				running = make(chan struct{})
-				succeeded = make(chan builder.SucceededBuild)
-				failed = make(chan error)
-				errored = make(chan error)
 
-				fakeBuilder.WhenAttaching = func(builder.RunningBuild, <-chan struct{}) (<-chan builder.SucceededBuild, <-chan error, <-chan error) {
+				fakeBuilder.AttachStub = func(builder.RunningBuild, <-chan struct{}) (builder.SucceededBuild, error, error) {
 					close(running)
-					return succeeded, failed, errored
+					select {}
 				}
 			})
 
@@ -598,9 +549,9 @@ var _ = Describe("Scheduler", func() {
 				completing = make(chan struct{})
 				finished = make(chan builds.Build)
 
-				fakeBuilder.WhenCompleting = func(builder.SucceededBuild, <-chan struct{}) (<-chan builds.Build, <-chan error) {
+				fakeBuilder.CompleteStub = func(builder.SucceededBuild, <-chan struct{}) (builds.Build, error) {
 					close(completing)
-					return finished, nil
+					return <-finished, nil
 				}
 			})
 

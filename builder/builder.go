@@ -15,10 +15,10 @@ import (
 var ErrAborted = errors.New("build aborted")
 
 type Builder interface {
-	Start(builds.Build, <-chan struct{}) (started <-chan RunningBuild, errored <-chan error)
-	Attach(RunningBuild, <-chan struct{}) (finished <-chan SucceededBuild, failed <-chan error, errored <-chan error)
+	Start(builds.Build, <-chan struct{}) (RunningBuild, error)
+	Attach(RunningBuild, <-chan struct{}) (SucceededBuild, error, error)
 	Hijack(RunningBuild, warden.ProcessSpec, warden.ProcessIO) error
-	Complete(SucceededBuild, <-chan struct{}) (finished <-chan builds.Build, errored <-chan error)
+	Complete(SucceededBuild, <-chan struct{}) (builds.Build, error)
 }
 
 type RunningBuild struct {
@@ -62,32 +62,125 @@ type nullSink struct{}
 func (nullSink) Write(data []byte) (int, error) { return len(data), nil }
 func (nullSink) Close() error                   { return nil }
 
-func (builder *builder) Start(build builds.Build, abort <-chan struct{}) (<-chan RunningBuild, <-chan error) {
-	started := make(chan RunningBuild, 1)
-	errored := make(chan error, 1)
+func (builder *builder) Start(build builds.Build, abort <-chan struct{}) (RunningBuild, error) {
+	logs := builder.logsFor(build.LogsURL)
 
-	go builder.start(build, abort, started, errored)
+	resources := map[string]io.Reader{}
 
-	return started, errored
+	for i, input := range build.Inputs {
+		resource, err := builder.tracker.Init(input.Type, logs, abort)
+		if err != nil {
+			logs.Close()
+			return RunningBuild{}, err
+		}
+
+		defer builder.tracker.Release(resource)
+
+		tarStream, computedInput, buildConfig, err := resource.In(input)
+		if err != nil {
+			logs.Close()
+			return RunningBuild{}, err
+		}
+
+		build.Inputs[i] = computedInput
+
+		build.Config = build.Config.Merge(buildConfig)
+
+		resources[input.Name] = tarStream
+	}
+
+	container, err := builder.createBuildContainer(build.Config, logs)
+	if err != nil {
+		logs.Close()
+		return RunningBuild{}, err
+	}
+
+	err = builder.streamInResources(container, resources, build.Config.Paths)
+	if err != nil {
+		logs.Close()
+		return RunningBuild{}, err
+	}
+
+	process, err := builder.runBuild(container, build.Privileged, build.Config, logs)
+	if err != nil {
+		logs.Close()
+		return RunningBuild{}, err
+	}
+
+	return RunningBuild{
+		Build: build,
+
+		ContainerHandle: container.Handle(),
+		Container:       container,
+
+		ProcessID: process.ID(),
+		Process:   process,
+
+		LogStream: logs,
+	}, nil
 }
 
-func (builder *builder) Attach(running RunningBuild, abort <-chan struct{}) (<-chan SucceededBuild, <-chan error, <-chan error) {
-	succeeded := make(chan SucceededBuild, 1)
-	failed := make(chan error, 1)
-	errored := make(chan error, 1)
+func (builder *builder) Attach(running RunningBuild, abort <-chan struct{}) (SucceededBuild, error, error) {
+	if running.LogStream == nil {
+		running.LogStream = builder.logsFor(running.Build.LogsURL)
+	}
 
-	go builder.attach(running, abort, succeeded, failed, errored)
+	if running.Container == nil {
+		container, err := builder.wardenClient.Lookup(running.ContainerHandle)
+		if err != nil {
+			running.LogStream.Close()
+			return SucceededBuild{}, nil, err
+		}
 
-	return succeeded, failed, errored
+		running.Container = container
+	}
+
+	if running.Process == nil {
+		process, err := running.Container.Attach(running.ProcessID, warden.ProcessIO{
+			Stdout: running.LogStream,
+			Stderr: running.LogStream,
+		})
+		if err != nil {
+			running.LogStream.Close()
+			return SucceededBuild{}, nil, err
+		}
+
+		running.Process = process
+	}
+
+	status, err := builder.waitForRunToEnd(running, abort)
+	if err != nil {
+		running.LogStream.Close()
+		return SucceededBuild{}, nil, err
+	}
+
+	if status != 0 {
+		return SucceededBuild{}, fmt.Errorf("exit status %d", status), nil
+	}
+
+	return SucceededBuild{
+		Build:     running.Build,
+		Container: running.Container,
+
+		LogStream: running.LogStream,
+	}, nil, nil
 }
 
-func (builder *builder) Complete(succeeded SucceededBuild, abort <-chan struct{}) (<-chan builds.Build, <-chan error) {
-	finished := make(chan builds.Build, 1)
-	errored := make(chan error, 1)
+func (builder *builder) Complete(succeeded SucceededBuild, abort <-chan struct{}) (builds.Build, error) {
+	if succeeded.LogStream == nil {
+		succeeded.LogStream = builder.logsFor(succeeded.Build.LogsURL)
+	}
 
-	go builder.complete(succeeded, abort, finished, errored)
+	defer succeeded.LogStream.Close()
 
-	return finished, errored
+	outputs, err := builder.performOutputs(succeeded.Container, succeeded.Build, succeeded.LogStream, abort)
+	if err != nil {
+		return builds.Build{}, err
+	}
+
+	succeeded.Build.Outputs = outputs
+
+	return succeeded.Build, nil
 }
 
 func (builder *builder) Hijack(running RunningBuild, spec warden.ProcessSpec, io warden.ProcessIO) error {
@@ -103,137 +196,6 @@ func (builder *builder) Hijack(running RunningBuild, spec warden.ProcessSpec, io
 
 	_, err = process.Wait()
 	return err
-}
-
-func (builder *builder) start(build builds.Build, abort <-chan struct{}, started chan<- RunningBuild, errored chan<- error) {
-	logs := builder.logsFor(build.LogsURL)
-
-	resources := map[string]io.Reader{}
-
-	for i, input := range build.Inputs {
-		resource, err := builder.tracker.Init(input.Type, logs, abort)
-		if err != nil {
-			errored <- err
-			logs.Close()
-			return
-		}
-
-		defer builder.tracker.Release(resource)
-
-		tarStream, computedInput, buildConfig, err := resource.In(input)
-		if err != nil {
-			errored <- err
-			logs.Close()
-			return
-		}
-
-		build.Inputs[i] = computedInput
-
-		build.Config = build.Config.Merge(buildConfig)
-
-		resources[input.Name] = tarStream
-	}
-
-	container, err := builder.createBuildContainer(build.Config, logs)
-	if err != nil {
-		errored <- err
-		logs.Close()
-		return
-	}
-
-	err = builder.streamInResources(container, resources, build.Config.Paths)
-	if err != nil {
-		errored <- err
-		logs.Close()
-		return
-	}
-
-	process, err := builder.runBuild(container, build.Privileged, build.Config, logs)
-	if err != nil {
-		errored <- err
-		logs.Close()
-		return
-	}
-
-	started <- RunningBuild{
-		Build: build,
-
-		ContainerHandle: container.Handle(),
-		Container:       container,
-
-		ProcessID: process.ID(),
-		Process:   process,
-
-		LogStream: logs,
-	}
-}
-
-func (builder *builder) attach(running RunningBuild, abort <-chan struct{}, succeeded chan<- SucceededBuild, failed chan<- error, errored chan<- error) {
-	if running.LogStream == nil {
-		running.LogStream = builder.logsFor(running.Build.LogsURL)
-	}
-
-	if running.Container == nil {
-		container, err := builder.wardenClient.Lookup(running.ContainerHandle)
-		if err != nil {
-			running.LogStream.Close()
-			errored <- err
-			return
-		}
-
-		running.Container = container
-	}
-
-	if running.Process == nil {
-		process, err := running.Container.Attach(running.ProcessID, warden.ProcessIO{
-			Stdout: running.LogStream,
-			Stderr: running.LogStream,
-		})
-		if err != nil {
-			running.LogStream.Close()
-			errored <- err
-			return
-		}
-
-		running.Process = process
-	}
-
-	status, err := builder.waitForRunToEnd(running, abort)
-	if err != nil {
-		running.LogStream.Close()
-		errored <- err
-		return
-	}
-
-	if status != 0 {
-		failed <- fmt.Errorf("exit status %d", status)
-		return
-	}
-
-	succeeded <- SucceededBuild{
-		Build:     running.Build,
-		Container: running.Container,
-
-		LogStream: running.LogStream,
-	}
-}
-
-func (builder *builder) complete(succeeded SucceededBuild, abort <-chan struct{}, finished chan<- builds.Build, errored chan<- error) {
-	if succeeded.LogStream == nil {
-		succeeded.LogStream = builder.logsFor(succeeded.Build.LogsURL)
-	}
-
-	defer succeeded.LogStream.Close()
-
-	outputs, err := builder.performOutputs(succeeded.Container, succeeded.Build, succeeded.LogStream, abort)
-	if err != nil {
-		errored <- err
-		return
-	}
-
-	succeeded.Build.Outputs = outputs
-
-	finished <- succeeded.Build
 }
 
 func (builder *builder) logsFor(logURL string) io.WriteCloser {
