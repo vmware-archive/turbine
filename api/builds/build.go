@@ -50,6 +50,9 @@ type Input struct {
 	// e.g. git url, branch, private_key
 	Source Source `json:"source"`
 
+	// arbitrary config for input
+	Params Params `json:"params,omitempty"`
+
 	// e.g. commit_author, commit_date
 	Metadata []MetadataField `json:"metadata,omitempty"`
 

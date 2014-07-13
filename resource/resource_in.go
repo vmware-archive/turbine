@@ -13,6 +13,7 @@ import (
 type inRequest struct {
 	Version builds.Version `json:"version,omitempty"`
 	Source  builds.Source  `json:"source"`
+	Params  builds.Params  `json:"params,omitempty"`
 }
 
 // Response payload from /tmp/resource/in script to sourcefetcher
@@ -31,7 +32,7 @@ func (resource *resource) In(input builds.Input) (io.Reader, builds.Input, build
 	err := resource.runScript(
 		"/tmp/resource/in",
 		[]string{"/tmp/build/src/" + input.Name},
-		inRequest{input.Version, input.Source},
+		inRequest{input.Version, input.Source, input.Params},
 		&resp,
 	)
 	if err != nil {

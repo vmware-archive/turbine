@@ -36,6 +36,7 @@ var _ = Describe("Resource In", func() {
 			Type:    "some-resource",
 			Source:  builds.Source{"some": "source"},
 			Version: builds.Version{"some": "version"},
+			Params:  builds.Params{"some": "params"},
 		}
 
 		inStdout = "{}"
@@ -77,7 +78,7 @@ var _ = Describe("Resource In", func() {
 		request, err := ioutil.ReadAll(io.Stdin)
 		Ω(err).ShouldNot(HaveOccurred())
 
-		Ω(string(request)).Should(Equal(`{"version":{"some":"version"},"source":{"some":"source"}}`))
+		Ω(string(request)).Should(Equal(`{"version":{"some":"version"},"source":{"some":"source"},"params":{"some":"params"}}`))
 	})
 
 	Context("when /tmp/resource/in prints the source", func() {
