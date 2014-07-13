@@ -62,12 +62,12 @@ var _ = Describe("Resource Check", func() {
 		checkResult, checkErr = resource.Check(input)
 	})
 
-	It("runs /tmp/resource/check the request on stdin", func() {
+	It("runs /opt/resource/check the request on stdin", func() {
 		Ω(checkErr).ShouldNot(HaveOccurred())
 
 		handle, spec, io := wardenClient.Connection.RunArgsForCall(0)
 		Ω(handle).Should(Equal("some-handle"))
-		Ω(spec.Path).Should(Equal("/tmp/resource/check"))
+		Ω(spec.Path).Should(Equal("/opt/resource/check"))
 		Ω(spec.Args).Should(BeEmpty())
 		Ω(spec.Privileged).Should(BeTrue())
 
@@ -93,7 +93,7 @@ var _ = Describe("Resource Check", func() {
 		})
 	})
 
-	Context("when running /tmp/resource/check fails", func() {
+	Context("when running /opt/resource/check fails", func() {
 		disaster := errors.New("oh no!")
 
 		BeforeEach(func() {
@@ -105,7 +105,7 @@ var _ = Describe("Resource Check", func() {
 		})
 	})
 
-	Context("when /tmp/resource/check exits nonzero", func() {
+	Context("when /opt/resource/check exits nonzero", func() {
 		BeforeEach(func() {
 			checkStdout = "some-stdout-data"
 			checkStderr = "some-stderr-data"
@@ -121,7 +121,7 @@ var _ = Describe("Resource Check", func() {
 		})
 	})
 
-	Context("when the output of /tmp/resource/check is malformed", func() {
+	Context("when the output of /opt/resource/check is malformed", func() {
 		BeforeEach(func() {
 			checkStdout = "ß"
 		})

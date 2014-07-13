@@ -6,13 +6,13 @@ import (
 	"github.com/concourse/turbine/api/builds"
 )
 
-// Request payload from resource to /tmp/resource/out script
+// Request payload from resource to /opt/resource/out script
 type outRequest struct {
 	Params builds.Params `json:"params"`
 	Source builds.Source `json:"source"`
 }
 
-// Response payload from /tmp/resource/out script to resource
+// Response payload from /opt/resource/out script to resource
 type outResponse struct {
 	Version  builds.Version         `json:"version"`
 	Metadata []builds.MetadataField `json:"metadata"`
@@ -27,7 +27,7 @@ func (resource *resource) Out(sourceStream io.Reader, output builds.Output) (bui
 	var resp outResponse
 
 	err = resource.runScript(
-		"/tmp/resource/out",
+		"/opt/resource/out",
 		[]string{"/tmp/build/src"},
 		outRequest{
 			Params: output.Params,

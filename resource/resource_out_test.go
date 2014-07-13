@@ -64,12 +64,12 @@ var _ = Describe("Resource Out", func() {
 		outOutput, outErr = resource.Out(bytes.NewBufferString("the-source"), output)
 	})
 
-	It("runs /tmp/resource/out <source path> with the request on stdin", func() {
+	It("runs /opt/resource/out <source path> with the request on stdin", func() {
 		Ω(outErr).ShouldNot(HaveOccurred())
 
 		handle, spec, io := wardenClient.Connection.RunArgsForCall(0)
 		Ω(handle).Should(Equal("some-handle"))
-		Ω(spec.Path).Should(Equal("/tmp/resource/out"))
+		Ω(spec.Path).Should(Equal("/opt/resource/out"))
 		Ω(spec.Args).Should(Equal([]string{"/tmp/build/src"}))
 		Ω(spec.Privileged).Should(BeTrue())
 
@@ -104,7 +104,7 @@ var _ = Describe("Resource Out", func() {
 		})
 	})
 
-	Context("when /tmp/resource/out prints the version and metadata", func() {
+	Context("when /opt/resource/out prints the version and metadata", func() {
 		BeforeEach(func() {
 			outScriptStdout = `{
 				"version": {"some": "new-version"},
@@ -115,7 +115,7 @@ var _ = Describe("Resource Out", func() {
 			}`
 		})
 
-		It("returns the build source printed out by /tmp/resource/out", func() {
+		It("returns the build source printed out by /opt/resource/out", func() {
 			expectedOutput := output
 			expectedOutput.Version = builds.Version{"some": "new-version"}
 			expectedOutput.Metadata = []builds.MetadataField{
@@ -151,7 +151,7 @@ var _ = Describe("Resource Out", func() {
 		})
 	})
 
-	Context("when running /tmp/resource/out fails", func() {
+	Context("when running /opt/resource/out fails", func() {
 		disaster := errors.New("oh no!")
 
 		BeforeEach(func() {
@@ -163,7 +163,7 @@ var _ = Describe("Resource Out", func() {
 		})
 	})
 
-	Context("when /tmp/resource/out exits nonzero", func() {
+	Context("when /opt/resource/out exits nonzero", func() {
 		BeforeEach(func() {
 			outScriptStdout = "some-stdout-data"
 			outScriptStderr = "some-stderr-data"

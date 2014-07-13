@@ -9,14 +9,14 @@ import (
 	"github.com/fraenkel/candiedyaml"
 )
 
-// Request payload from sourcefetcher to /tmp/resource/in script
+// Request payload from sourcefetcher to /opt/resource/in script
 type inRequest struct {
 	Version builds.Version `json:"version,omitempty"`
 	Source  builds.Source  `json:"source"`
 	Params  builds.Params  `json:"params,omitempty"`
 }
 
-// Response payload from /tmp/resource/in script to sourcefetcher
+// Response payload from /opt/resource/in script to sourcefetcher
 type inResponse struct {
 	// Version is returned because request payload
 	// may not contain Version to fetch relying on
@@ -30,7 +30,7 @@ func (resource *resource) In(input builds.Input) (io.Reader, builds.Input, build
 	var resp inResponse
 
 	err := resource.runScript(
-		"/tmp/resource/in",
+		"/opt/resource/in",
 		[]string{"/tmp/build/src/" + input.Name},
 		inRequest{input.Version, input.Source, input.Params},
 		&resp,

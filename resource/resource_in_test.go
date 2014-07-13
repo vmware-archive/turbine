@@ -66,12 +66,12 @@ var _ = Describe("Resource In", func() {
 		fetchedStream, fetchedInput, fetchedConfig, fetchError = resource.In(input)
 	})
 
-	It("runs /tmp/resource/in <destination> with the request on stdin", func() {
+	It("runs /opt/resource/in <destination> with the request on stdin", func() {
 		Ω(fetchError).ShouldNot(HaveOccurred())
 
 		handle, spec, io := wardenClient.Connection.RunArgsForCall(0)
 		Ω(handle).Should(Equal("some-handle"))
-		Ω(spec.Path).Should(Equal("/tmp/resource/in"))
+		Ω(spec.Path).Should(Equal("/opt/resource/in"))
 		Ω(spec.Args).Should(Equal([]string{"/tmp/build/src/some-name"}))
 		Ω(spec.Privileged).Should(BeTrue())
 
@@ -81,7 +81,7 @@ var _ = Describe("Resource In", func() {
 		Ω(string(request)).Should(Equal(`{"version":{"some":"version"},"source":{"some":"source"},"params":{"some":"params"}}`))
 	})
 
-	Context("when /tmp/resource/in prints the source", func() {
+	Context("when /opt/resource/in prints the source", func() {
 		BeforeEach(func() {
 			inStdout = `{
 					"version": {"some": "new-version"},
@@ -92,7 +92,7 @@ var _ = Describe("Resource In", func() {
 				}`
 		})
 
-		It("returns the build source printed out by /tmp/resource/in", func() {
+		It("returns the build source printed out by /opt/resource/in", func() {
 			expectedFetchedInput := input
 			expectedFetchedInput.Version = builds.Version{"some": "new-version"}
 			expectedFetchedInput.Metadata = []builds.MetadataField{
@@ -228,7 +228,7 @@ var _ = Describe("Resource In", func() {
 		})
 	})
 
-	Context("when running /tmp/resource/in fails", func() {
+	Context("when running /opt/resource/in fails", func() {
 		disaster := errors.New("oh no!")
 
 		BeforeEach(func() {
@@ -240,7 +240,7 @@ var _ = Describe("Resource In", func() {
 		})
 	})
 
-	Context("when /tmp/resource/in exits nonzero", func() {
+	Context("when /opt/resource/in exits nonzero", func() {
 		BeforeEach(func() {
 			inStdout = "some-stdout-data"
 			inStderr = "some-stderr-data"
