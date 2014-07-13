@@ -7,8 +7,8 @@
 	"Deps": [
 		{
 			"ImportPath": "code.google.com/p/go.net/websocket",
-			"Comment": "null-136",
-			"Rev": "28ff664507e453c4455b8c65e701bbe2b2ac980d"
+			"Comment": "null-137",
+			"Rev": "335bcad0b70a3ba61b9951992a418c9176a73fd4"
 		},
 		{
 			"ImportPath": "code.google.com/p/gogoprotobuf/proto",
@@ -25,23 +25,23 @@
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/client",
-			"Rev": "cd56129d1bedbab60b49c8daa489a2dd455c3006"
+			"Rev": "3c5f76f22096ab6b4565a9d5b81cce44584df400"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/protocol",
-			"Rev": "cd56129d1bedbab60b49c8daa489a2dd455c3006"
+			"Rev": "3c5f76f22096ab6b4565a9d5b81cce44584df400"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/routes",
-			"Rev": "cd56129d1bedbab60b49c8daa489a2dd455c3006"
+			"Rev": "3c5f76f22096ab6b4565a9d5b81cce44584df400"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/transport",
-			"Rev": "cd56129d1bedbab60b49c8daa489a2dd455c3006"
+			"Rev": "3c5f76f22096ab6b4565a9d5b81cce44584df400"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/warden",
-			"Rev": "cd56129d1bedbab60b49c8daa489a2dd455c3006"
+			"Rev": "3c5f76f22096ab6b4565a9d5b81cce44584df400"
 		},
 		{
 			"ImportPath": "github.com/fraenkel/candiedyaml",
@@ -66,7 +66,7 @@
 		},
 		{
 			"ImportPath": "github.com/tedsuo/ifrit",
-			"Rev": "fee34ad3d56f161c5fba8508befe05169d5e5ece"
+			"Rev": "21ef26b2e0107e0ce523244608e430db73a353bd"
 		},
 		{
 			"ImportPath": "github.com/tedsuo/rata",
