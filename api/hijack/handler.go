@@ -9,6 +9,7 @@ import (
 
 	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/concourse/turbine/scheduler"
+	"github.com/pivotal-golang/lager"
 )
 
 type handler struct {
@@ -34,12 +35,21 @@ func NewHandler(scheduler scheduler.Scheduler) http.Handler {
 func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	guid := r.FormValue(":guid")
 
+	log := handler.logger.Session("hijack", lager.Data{
+		"guid": guid,
+	})
+
 	var spec warden.ProcessSpec
 	err := json.NewDecoder(r.Body).Decode(&spec)
 	if err != nil {
+		log.Error("malformed-request", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+
+	log.Info("start", lager.Data{
+		"spec": spec,
+	})
 
 	w.WriteHeader(http.StatusOK)
 
@@ -61,6 +71,10 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(conn, "error: %s\n", err)
 		return
 	}
+
+	log.Info("hijacked", lager.Data{
+		"process": process.ID(),
+	})
 
 	decoder := gob.NewDecoder(br)
 
@@ -88,5 +102,11 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	process.Wait()
+	status, err := process.Wait()
+
+	log.Info("completed", lager.Data{
+		"process": process.ID(),
+		"status":  status,
+		"error":   fmt.Sprintf("%s", err),
+	})
 }
