@@ -26,7 +26,7 @@ type FakeScheduler struct {
 	abortArgsForCall []struct {
 		guid string
 	}
-	HijackStub        func(guid string, process warden.ProcessSpec, io warden.ProcessIO) error
+	HijackStub        func(guid string, process warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error)
 	hijackMutex       sync.RWMutex
 	hijackArgsForCall []struct {
 		guid    string
@@ -34,7 +34,8 @@ type FakeScheduler struct {
 		io      warden.ProcessIO
 	}
 	hijackReturns struct {
-		result1 error
+		result1 warden.Process
+		result2 error
 	}
 	DrainStub        func() []builder.RunningBuild
 	drainMutex       sync.RWMutex
@@ -113,7 +114,7 @@ func (fake *FakeScheduler) AbortArgsForCall(i int) string {
 	return fake.abortArgsForCall[i].guid
 }
 
-func (fake *FakeScheduler) Hijack(guid string, process warden.ProcessSpec, io warden.ProcessIO) error {
+func (fake *FakeScheduler) Hijack(guid string, process warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error) {
 	fake.hijackMutex.Lock()
 	defer fake.hijackMutex.Unlock()
 	fake.hijackArgsForCall = append(fake.hijackArgsForCall, struct {
@@ -124,7 +125,7 @@ func (fake *FakeScheduler) Hijack(guid string, process warden.ProcessSpec, io wa
 	if fake.HijackStub != nil {
 		return fake.HijackStub(guid, process, io)
 	} else {
-		return fake.hijackReturns.result1
+		return fake.hijackReturns.result1, fake.hijackReturns.result2
 	}
 }
 
@@ -140,11 +141,12 @@ func (fake *FakeScheduler) HijackArgsForCall(i int) (string, warden.ProcessSpec,
 	return fake.hijackArgsForCall[i].guid, fake.hijackArgsForCall[i].process, fake.hijackArgsForCall[i].io
 }
 
-func (fake *FakeScheduler) HijackReturns(result1 error) {
+func (fake *FakeScheduler) HijackReturns(result1 warden.Process, result2 error) {
 	fake.HijackStub = nil
 	fake.hijackReturns = struct {
-		result1 error
-	}{result1}
+		result1 warden.Process
+		result2 error
+	}{result1, result2}
 }
 
 func (fake *FakeScheduler) Drain() []builder.RunningBuild {

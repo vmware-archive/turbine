@@ -1,8 +1,10 @@
 package hijack
 
 import (
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
@@ -11,6 +13,16 @@ import (
 
 type handler struct {
 	scheduler scheduler.Scheduler
+}
+
+type ProcessPayload struct {
+	Stdin      []byte
+	WindowSize *WindowSize
+}
+
+type WindowSize struct {
+	Columns int
+	Rows    int
 }
 
 func NewHandler(scheduler scheduler.Scheduler) http.Handler {
@@ -38,8 +50,10 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	defer conn.Close()
 
-	err = handler.scheduler.Hijack(guid, spec, warden.ProcessIO{
-		Stdin:  br,
+	inR, inW := io.Pipe()
+
+	process, err := handler.scheduler.Hijack(guid, spec, warden.ProcessIO{
+		Stdin:  inR,
 		Stdout: conn,
 		Stderr: conn,
 	})
@@ -47,4 +61,32 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(conn, "error: %s\n", err)
 		return
 	}
+
+	decoder := gob.NewDecoder(br)
+
+	go func() {
+		defer inW.Close()
+
+		for {
+			var payload ProcessPayload
+			err := decoder.Decode(&payload)
+			if err != nil {
+				break
+			}
+
+			if payload.Stdin != nil {
+				_, err := inW.Write(payload.Stdin)
+				if err != nil {
+					break
+				}
+			}
+
+			if payload.WindowSize != nil {
+				size := *payload.WindowSize
+				process.SetWindowSize(size.Columns, size.Rows)
+			}
+		}
+	}()
+
+	process.Wait()
 }

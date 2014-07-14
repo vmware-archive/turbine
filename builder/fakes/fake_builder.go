@@ -31,7 +31,7 @@ type FakeBuilder struct {
 		result2 error
 		result3 error
 	}
-	HijackStub        func(builder.RunningBuild, warden.ProcessSpec, warden.ProcessIO) error
+	HijackStub        func(builder.RunningBuild, warden.ProcessSpec, warden.ProcessIO) (warden.Process, error)
 	hijackMutex       sync.RWMutex
 	hijackArgsForCall []struct {
 		arg1 builder.RunningBuild
@@ -39,7 +39,8 @@ type FakeBuilder struct {
 		arg3 warden.ProcessIO
 	}
 	hijackReturns struct {
-		result1 error
+		result1 warden.Process
+		result2 error
 	}
 	CompleteStub        func(builder.SucceededBuild, <-chan struct{}) (builds.Build, error)
 	completeMutex       sync.RWMutex
@@ -122,7 +123,7 @@ func (fake *FakeBuilder) AttachReturns(result1 builder.SucceededBuild, result2 e
 	}{result1, result2, result3}
 }
 
-func (fake *FakeBuilder) Hijack(arg1 builder.RunningBuild, arg2 warden.ProcessSpec, arg3 warden.ProcessIO) error {
+func (fake *FakeBuilder) Hijack(arg1 builder.RunningBuild, arg2 warden.ProcessSpec, arg3 warden.ProcessIO) (warden.Process, error) {
 	fake.hijackMutex.Lock()
 	defer fake.hijackMutex.Unlock()
 	fake.hijackArgsForCall = append(fake.hijackArgsForCall, struct {
@@ -133,7 +134,7 @@ func (fake *FakeBuilder) Hijack(arg1 builder.RunningBuild, arg2 warden.ProcessSp
 	if fake.HijackStub != nil {
 		return fake.HijackStub(arg1, arg2, arg3)
 	} else {
-		return fake.hijackReturns.result1
+		return fake.hijackReturns.result1, fake.hijackReturns.result2
 	}
 }
 
@@ -149,11 +150,12 @@ func (fake *FakeBuilder) HijackArgsForCall(i int) (builder.RunningBuild, warden.
 	return fake.hijackArgsForCall[i].arg1, fake.hijackArgsForCall[i].arg2, fake.hijackArgsForCall[i].arg3
 }
 
-func (fake *FakeBuilder) HijackReturns(result1 error) {
+func (fake *FakeBuilder) HijackReturns(result1 warden.Process, result2 error) {
 	fake.HijackStub = nil
 	fake.hijackReturns = struct {
-		result1 error
-	}{result1}
+		result1 warden.Process
+		result2 error
+	}{result1, result2}
 }
 
 func (fake *FakeBuilder) Complete(arg1 builder.SucceededBuild, arg2 <-chan struct{}) (builds.Build, error) {

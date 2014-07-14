@@ -723,10 +723,11 @@ var _ = Describe("Builder", func() {
 		var spec warden.ProcessSpec
 		var io warden.ProcessIO
 
+		var process warden.Process
 		var hijackErr error
 
 		JustBeforeEach(func() {
-			hijackErr = builder.Hijack(runningBuild, spec, io)
+			process, hijackErr = builder.Hijack(runningBuild, spec, io)
 		})
 
 		BeforeEach(func() {
@@ -756,6 +757,7 @@ var _ = Describe("Builder", func() {
 
 				BeforeEach(func() {
 					fakeProcess = new(wfakes.FakeProcess)
+					fakeProcess.WaitReturns(42, nil)
 
 					wardenClient.Connection.RunReturns(fakeProcess, nil)
 				})
@@ -771,16 +773,8 @@ var _ = Describe("Builder", func() {
 					Ω(ranIO).Should(Equal(io))
 				})
 
-				Context("and waiting on the process fails", func() {
-					disaster := errors.New("oh no!")
-
-					BeforeEach(func() {
-						fakeProcess.WaitReturns(0, disaster)
-					})
-
-					It("returns the error", func() {
-						Ω(hijackErr).Should(Equal(disaster))
-					})
+				It("returns the process", func() {
+					Ω(process.Wait()).Should(Equal(42))
 				})
 			})
 

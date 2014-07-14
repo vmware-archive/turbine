@@ -11,6 +11,7 @@ import (
 	"github.com/pivotal-golang/lager/lagertest"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
+	wfakes "github.com/cloudfoundry-incubator/garden/warden/fakes"
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder"
 	bfakes "github.com/concourse/turbine/builder/fakes"
@@ -273,7 +274,7 @@ var _ = Describe("Scheduler", func() {
 	Describe("Hijack", func() {
 		Context("when the build is not running", func() {
 			It("returns an error", func() {
-				err := scheduler.Hijack("bogus-guid", warden.ProcessSpec{}, warden.ProcessIO{})
+				_, err := scheduler.Hijack("bogus-guid", warden.ProcessSpec{}, warden.ProcessIO{})
 				Ω(err).Should(HaveOccurred())
 			})
 		})
@@ -303,38 +304,49 @@ var _ = Describe("Scheduler", func() {
 				}
 			})
 
-			It("hijacks via the builder", func() {
-				scheduler.Start(build)
+			Context("when hijacking succeeds", func() {
+				BeforeEach(func() {
+					fakeProcess := new(wfakes.FakeProcess)
+					fakeProcess.WaitReturns(42, nil)
 
-				Eventually(attaching).Should(BeClosed())
+					fakeBuilder.HijackReturns(fakeProcess, nil)
+				})
 
-				spec := warden.ProcessSpec{
-					Path: "process-path",
-					Args: []string{"process", "args"},
-					TTY:  true,
-				}
+				It("hijacks via the builder", func() {
+					scheduler.Start(build)
 
-				io := warden.ProcessIO{
-					Stdin:  new(bytes.Buffer),
-					Stdout: new(bytes.Buffer),
-				}
+					Eventually(attaching).Should(BeClosed())
 
-				err := scheduler.Hijack(running.Build.Guid, spec, io)
-				Ω(err).ShouldNot(HaveOccurred())
+					spec := warden.ProcessSpec{
+						Path: "process-path",
+						Args: []string{"process", "args"},
+						TTY:  true,
+					}
 
-				Ω(fakeBuilder.HijackCallCount()).Should(Equal(1))
+					io := warden.ProcessIO{
+						Stdin:  new(bytes.Buffer),
+						Stdout: new(bytes.Buffer),
+					}
 
-				build, spec, io := fakeBuilder.HijackArgsForCall(0)
-				Ω(build).Should(Equal(running))
-				Ω(spec).Should(Equal(spec))
-				Ω(io).Should(Equal(io))
+					process, err := scheduler.Hijack(running.Build.Guid, spec, io)
+					Ω(err).ShouldNot(HaveOccurred())
+
+					Ω(fakeBuilder.HijackCallCount()).Should(Equal(1))
+
+					build, spec, io := fakeBuilder.HijackArgsForCall(0)
+					Ω(build).Should(Equal(running))
+					Ω(spec).Should(Equal(spec))
+					Ω(io).Should(Equal(io))
+
+					Ω(process.Wait()).Should(Equal(42))
+				})
 			})
 
 			Context("when hijacking fails", func() {
 				disaster := errors.New("oh no!")
 
 				BeforeEach(func() {
-					fakeBuilder.HijackReturns(disaster)
+					fakeBuilder.HijackReturns(nil, disaster)
 				})
 
 				It("returns the error", func() {
@@ -346,7 +358,7 @@ var _ = Describe("Scheduler", func() {
 
 					io := warden.ProcessIO{}
 
-					err := scheduler.Hijack(running.Build.Guid, spec, io)
+					_, err := scheduler.Hijack(running.Build.Guid, spec, io)
 					Ω(err).Should(Equal(disaster))
 				})
 			})
