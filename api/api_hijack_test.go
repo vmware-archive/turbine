@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"sync"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
 	wfakes "github.com/cloudfoundry-incubator/garden/warden/fakes"
@@ -61,17 +60,9 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 
 	Context("when hijacking succeeds", func() {
 		var process *wfakes.FakeProcess
-		var wait *sync.WaitGroup
 
 		BeforeEach(func() {
 			process = new(wfakes.FakeProcess)
-			wait = new(sync.WaitGroup)
-
-			wait.Add(1)
-			process.WaitStub = func() (int, error) {
-				wait.Wait()
-				return 0, nil
-			}
 
 			scheduler.HijackReturns(process, nil)
 		})
@@ -86,7 +77,6 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 		})
 
 		It("waits on the process", func() {
-			wait.Done()
 			Eventually(process.WaitCallCount).Should(Equal(1))
 		})
 
@@ -102,7 +92,7 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 					_, err = fmt.Fprintf(io.Stderr, "hello client err\n")
 					Ω(err).ShouldNot(HaveOccurred())
 
-					return process, nil
+					return new(wfakes.FakeProcess), nil
 				}
 			})
 
@@ -118,6 +108,12 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 		})
 
 		Context("when a stdin payload is received", func() {
+			BeforeEach(func() {
+				process.WaitStub = func() (int, error) {
+					select {}
+				}
+			})
+
 			It("forwards to the process's stdin", func() {
 				err := encoder.Encode(hijack.ProcessPayload{
 					Stdin: []byte("some stdin\n"),
@@ -133,6 +129,12 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 		})
 
 		Context("when a window size payload is received", func() {
+			BeforeEach(func() {
+				process.WaitStub = func() (int, error) {
+					select {}
+				}
+			})
+
 			It("forwards window size paylods to the process", func() {
 				err := encoder.Encode(hijack.ProcessPayload{
 					WindowSize: &hijack.WindowSize{
@@ -163,8 +165,6 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 
 		Context("when the process exits", func() {
 			It("closes the connection", func() {
-				wait.Done()
-
 				_, err := br.ReadBytes('\n')
 				Ω(err).Should(HaveOccurred())
 			})
