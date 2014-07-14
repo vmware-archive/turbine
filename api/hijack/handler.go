@@ -13,6 +13,8 @@ import (
 )
 
 type handler struct {
+	logger lager.Logger
+
 	scheduler scheduler.Scheduler
 }
 
@@ -26,8 +28,10 @@ type WindowSize struct {
 	Rows    int
 }
 
-func NewHandler(scheduler scheduler.Scheduler) http.Handler {
+func NewHandler(logger lager.Logger, scheduler scheduler.Scheduler) http.Handler {
 	return &handler{
+		logger: logger,
+
 		scheduler: scheduler,
 	}
 }

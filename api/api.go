@@ -29,7 +29,7 @@ func New(
 	handlers := map[string]http.Handler{
 		routes.ExecuteBuild:     execute.NewHandler(logger, scheduler, turbineEndpoint),
 		routes.AbortBuild:       abort.NewHandler(scheduler),
-		routes.HijackBuild:      hijack.NewHandler(scheduler),
+		routes.HijackBuild:      hijack.NewHandler(logger, scheduler),
 		routes.CheckInput:       checkHandler,
 		routes.CheckInputStream: websocket.Server{Handler: checkHandler.Stream},
 	}
