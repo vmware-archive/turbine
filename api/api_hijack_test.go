@@ -135,20 +135,22 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 				}
 			})
 
-			It("forwards window size paylods to the process", func() {
-				err := encoder.Encode(hijack.ProcessPayload{
-					WindowSize: &hijack.WindowSize{
+			It("forwards tty spec paylods to the process", func() {
+				ttySpec := &warden.TTYSpec{
+					WindowSize: &warden.WindowSize{
 						Columns: 80,
 						Rows:    24,
 					},
+				}
+
+				err := encoder.Encode(hijack.ProcessPayload{
+					TTYSpec: ttySpec,
 				})
 				Ω(err).ShouldNot(HaveOccurred())
 
-				Eventually(process.SetWindowSizeCallCount).Should(Equal(1))
+				Eventually(process.SetTTYCallCount).Should(Equal(1))
 
-				cols, rows := process.SetWindowSizeArgsForCall(0)
-				Ω(cols).Should(Equal(80))
-				Ω(rows).Should(Equal(24))
+				Ω(process.SetTTYArgsForCall(0)).Should(Equal(*ttySpec))
 			})
 		})
 

@@ -19,13 +19,8 @@ type handler struct {
 }
 
 type ProcessPayload struct {
-	Stdin      []byte
-	WindowSize *WindowSize
-}
-
-type WindowSize struct {
-	Columns int
-	Rows    int
+	Stdin   []byte
+	TTYSpec *warden.TTYSpec
 }
 
 func NewHandler(logger lager.Logger, scheduler scheduler.Scheduler) http.Handler {
@@ -99,9 +94,8 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			if payload.WindowSize != nil {
-				size := *payload.WindowSize
-				process.SetWindowSize(size.Columns, size.Rows)
+			if payload.TTYSpec != nil {
+				process.SetTTY(*payload.TTYSpec)
 			}
 		}
 	}()

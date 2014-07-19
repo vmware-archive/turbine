@@ -25,23 +25,28 @@
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/client",
-			"Rev": "3c5f76f22096ab6b4565a9d5b81cce44584df400"
+			"Comment": "go-wshd-586-ge38da7b",
+			"Rev": "e38da7b145595dc5451ba7dd70f0a9d5ebb8081c"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/protocol",
-			"Rev": "3c5f76f22096ab6b4565a9d5b81cce44584df400"
+			"Comment": "go-wshd-586-ge38da7b",
+			"Rev": "e38da7b145595dc5451ba7dd70f0a9d5ebb8081c"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/routes",
-			"Rev": "3c5f76f22096ab6b4565a9d5b81cce44584df400"
+			"Comment": "go-wshd-586-ge38da7b",
+			"Rev": "e38da7b145595dc5451ba7dd70f0a9d5ebb8081c"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/transport",
-			"Rev": "3c5f76f22096ab6b4565a9d5b81cce44584df400"
+			"Comment": "go-wshd-586-ge38da7b",
+			"Rev": "e38da7b145595dc5451ba7dd70f0a9d5ebb8081c"
 		},
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/garden/warden",
-			"Rev": "3c5f76f22096ab6b4565a9d5b81cce44584df400"
+			"Comment": "go-wshd-586-ge38da7b",
+			"Rev": "e38da7b145595dc5451ba7dd70f0a9d5ebb8081c"
 		},
 		{
 			"ImportPath": "github.com/fraenkel/candiedyaml",
@@ -66,7 +71,7 @@
 		},
 		{
 			"ImportPath": "github.com/tedsuo/ifrit",
-			"Rev": "21ef26b2e0107e0ce523244608e430db73a353bd"
+			"Rev": "52d5ae8c0a69e6e3d6f9cc407ab76345b00b3129"
 		},
 		{
 			"ImportPath": "github.com/tedsuo/rata",
