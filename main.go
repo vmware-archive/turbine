@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"time"
 
@@ -34,6 +36,12 @@ var peerAddr = flag.String(
 	"peerAddr",
 	"127.0.0.1:4637",
 	"external address of the api server, used for callbacks",
+)
+
+var debugListenAddr = flag.String(
+	"debugListenAddr",
+	":4636",
+	"port for the pprof debugger to listen on",
 )
 
 var wardenNetwork = flag.String(
@@ -122,6 +130,7 @@ func main() {
 
 	group := grouper.EnvokeGroup(grouper.RunGroup{
 		"api":         http_server.New(*listenAddr, handler),
+		"debug":       http_server.New(*debugListenAddr, http.DefaultServeMux),
 		"snapshotter": snapshotter.NewSnapshotter(logger.Session("snapshotter"), *snapshotPath, scheduler),
 		"drainer": ifrit.RunFunc(func(signals <-chan os.Signal, ready chan<- struct{}) error {
 			close(ready)
