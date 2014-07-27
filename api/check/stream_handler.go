@@ -34,7 +34,7 @@ func (handler *Handler) Stream(conn *websocket.Conn) {
 		"input": input,
 	})
 
-	resource, err := handler.tracker.Init(input.Type, ioutil.Discard, nil)
+	resource, err := handler.tracker.Init(input.Type, ioutil.Discard, handler.drain)
 	if err != nil {
 		log.Error("failed-to-init", err)
 		return

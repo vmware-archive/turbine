@@ -71,6 +71,20 @@ var _ = Describe("GET /checks/stream", func() {
 				})
 			})
 
+			Describe("draining", func() {
+				It("aborts the check", func() {
+					Eventually(tracker.InitCallCount).Should(Equal(1))
+
+					_, _, abort := tracker.InitArgsForCall(0)
+
+					Ω(abort).ShouldNot(BeClosed())
+
+					close(drain)
+
+					Ω(abort).Should(BeClosed())
+				})
+			})
+
 			Context("when the check fails", func() {
 				BeforeEach(func() {
 					resource.CheckReturns(nil, errors.New("oh no!"))
