@@ -296,12 +296,14 @@ func (builder *builder) performOutputs(
 ) ([]builds.Output, error) {
 	allOutputs := map[string]builds.Output{}
 
-	// Implicit outputs
+	// implicit outputs
 	for _, input := range build.Inputs {
 		allOutputs[input.Name] = builds.Output{
-			Name:    input.Name,
-			Type:    input.Type,
-			Version: input.Version,
+			Name:     input.Name,
+			Type:     input.Type,
+			Source:   input.Source,
+			Version:  input.Version,
+			Metadata: input.Metadata,
 		}
 	}
 

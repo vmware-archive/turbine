@@ -819,12 +819,20 @@ var _ = Describe("Builder", func() {
 				{
 					Name:    "first-resource",
 					Type:    "raw",
+					Source:  builds.Source{"uri": "in-source-1"},
 					Version: builds.Version{"key": "in-version-1"},
+					Metadata: []builds.MetadataField{
+						{Name: "meta1", Value: "value1"},
+					},
 				},
 				{
 					Name:    "second-resource",
 					Type:    "raw",
+					Source:  builds.Source{"uri": "in-source-2"},
 					Version: builds.Version{"key": "in-version-2"},
+					Metadata: []builds.MetadataField{
+						{Name: "meta2", Value: "value2"},
+					},
 				},
 			}
 
@@ -847,13 +855,21 @@ var _ = Describe("Builder", func() {
 			Ω(finished.Outputs).Should(ContainElement(builds.Output{
 				Name:    "first-resource",
 				Type:    "raw",
+				Source:  builds.Source{"uri": "in-source-1"},
 				Version: builds.Version{"key": "in-version-1"},
+				Metadata: []builds.MetadataField{
+					{Name: "meta1", Value: "value1"},
+				},
 			}))
 
 			Ω(finished.Outputs).Should(ContainElement(builds.Output{
 				Name:    "second-resource",
 				Type:    "raw",
+				Source:  builds.Source{"uri": "in-source-2"},
 				Version: builds.Version{"key": "in-version-2"},
+				Metadata: []builds.MetadataField{
+					{Name: "meta2", Value: "value2"},
+				},
 			}))
 		})
 
@@ -949,14 +965,16 @@ var _ = Describe("Builder", func() {
 							Metadata: []builds.MetadataField{{Name: "name", Value: "out-meta-1"}},
 						}))
 
-						// Implicit output created for an input 'second-resource'
+						// implicit output created for an input 'second-resource'
 						Ω(finished.Outputs).Should(ContainElement(builds.Output{
-							Name:     "second-resource",
-							Type:     "raw",
-							Source:   nil,
-							Params:   nil,
-							Version:  builds.Version{"key": "in-version-2"},
-							Metadata: nil,
+							Name:    "second-resource",
+							Type:    "raw",
+							Source:  builds.Source{"uri": "in-source-2"},
+							Params:  nil,
+							Version: builds.Version{"key": "in-version-2"},
+							Metadata: []builds.MetadataField{
+								{Name: "meta2", Value: "value2"},
+							},
 						}))
 
 						Ω(finished.Outputs).Should(ContainElement(builds.Output{
