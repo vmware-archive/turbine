@@ -184,6 +184,7 @@ var _ = Describe("Builder", func() {
 				Ω(spec.Args).Should(Equal([]string{"arg1", "arg2"}))
 				Ω(spec.Env).Should(ConsistOf("FOO=bar", "BAZ=buzz"))
 				Ω(spec.Dir).Should(Equal("/tmp/build/src"))
+				Ω(spec.TTY).Should(Equal(&warden.TTYSpec{}))
 				Ω(spec.Privileged).Should(BeFalse())
 			})
 

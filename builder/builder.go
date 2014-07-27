@@ -252,6 +252,8 @@ func (builder *builder) runBuild(
 		Env:  env,
 		Dir:  "/tmp/build/src",
 
+		TTY: &warden.TTYSpec{},
+
 		Privileged: privileged,
 	}, warden.ProcessIO{
 		Stdout: logs,
