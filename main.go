@@ -121,7 +121,7 @@ func main() {
 			break
 		}
 
-		time.Sleep(time.Second)
+		time.Sleep(10 * time.Second)
 	}
 
 	if pingErr != nil {
