@@ -932,11 +932,13 @@ var _ = Describe("Builder", func() {
 						}
 					})
 
-					It("evaluates every output in parallel with the source and params", func() {
+					It("evaluates every output in parallel with the source, params, and version", func() {
 						Ω(resource1.OutCallCount()).Should(Equal(1))
 
 						streamIn, output := resource1.OutArgsForCall(0)
-						Ω(output).Should(Equal(succeededBuild.Build.Outputs[0]))
+						firstOutputWithVersion := succeededBuild.Build.Outputs[0]
+						firstOutputWithVersion.Version = succeededBuild.Build.Inputs[0].Version
+						Ω(output).Should(Equal(firstOutputWithVersion))
 
 						streamedIn, err := ioutil.ReadAll(streamIn)
 						Ω(err).ShouldNot(HaveOccurred())
@@ -946,7 +948,8 @@ var _ = Describe("Builder", func() {
 						Ω(resource2.OutCallCount()).Should(Equal(1))
 
 						streamIn, output = resource2.OutArgsForCall(0)
-						Ω(output).Should(Equal(succeededBuild.Build.Outputs[1]))
+						secondOutputWithoutVersion := succeededBuild.Build.Outputs[1]
+						Ω(output).Should(Equal(secondOutputWithoutVersion))
 
 						streamedIn, err = ioutil.ReadAll(streamIn)
 						Ω(err).ShouldNot(HaveOccurred())

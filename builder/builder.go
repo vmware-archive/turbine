@@ -315,6 +315,11 @@ func (builder *builder) performOutputs(
 
 		for _, output := range build.Outputs {
 			go func(output builds.Output) {
+				inputOutput, found := allOutputs[output.Name]
+				if found {
+					output.Version = inputOutput.Version
+				}
+
 				streamOut, err := container.StreamOut("/tmp/build/src/")
 				if err != nil {
 					errs <- err
