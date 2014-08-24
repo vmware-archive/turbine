@@ -120,6 +120,8 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 				})
 				Ω(err).ShouldNot(HaveOccurred())
 
+				Eventually(scheduler.HijackCallCount).Should(Equal(1))
+
 				_, _, io := scheduler.HijackArgsForCall(0)
 
 				line, err := bufio.NewReader(io.Stdin).ReadBytes('\n')
