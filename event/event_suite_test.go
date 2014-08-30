@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestEvents(t *testing.T) {
+func TestEvent(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Events Suite")
+	RunSpecs(t, "Event Suite")
 }

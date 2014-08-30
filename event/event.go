@@ -10,4 +10,6 @@ const (
 	EventTypeInvalid = EventType(iota)
 	EventTypeLog
 	EventTypeStatus
+	EventTypeInitialize
+	EventTypeStart
 )

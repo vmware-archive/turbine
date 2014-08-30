@@ -238,7 +238,7 @@ func (scheduler *scheduler) unregisterAbortChannel(guid string) {
 }
 
 func (scheduler *scheduler) reportBuild(build builds.Build, logger lager.Logger) {
-	if build.Callback == "" {
+	if build.StatusCallback == "" {
 		return
 	}
 
@@ -247,7 +247,7 @@ func (scheduler *scheduler) reportBuild(build builds.Build, logger lager.Logger)
 	})
 
 	// this should always successfully parse (it's done via validation)
-	destination, _ := url.ParseRequestURI(build.Callback)
+	destination, _ := url.ParseRequestURI(build.StatusCallback)
 
 	payload, _ := json.Marshal(build)
 

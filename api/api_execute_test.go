@@ -66,7 +66,7 @@ var _ = Describe("POST /builds", func() {
 
 	Context("when the callback url is malformed", func() {
 		BeforeEach(func() {
-			build.Callback = "ß"
+			build.StatusCallback = "ß"
 			requestBody = buildPayload(build)
 		})
 

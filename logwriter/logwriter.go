@@ -2,76 +2,27 @@ package logwriter
 
 import (
 	"io"
-	"sync"
-	"time"
 
-	"code.google.com/p/go.net/websocket"
+	"github.com/concourse/turbine/event"
 )
 
 type writer struct {
-	url string
-
-	conn  *websocket.Conn
-	connL *sync.Mutex
+	emitter event.Emitter
+	origin  event.Origin
 }
 
-func NewWriter(url string) io.WriteCloser {
+func NewWriter(emitter event.Emitter, origin event.Origin) io.Writer {
 	return &writer{
-		url: url,
-
-		connL: new(sync.Mutex),
+		emitter: emitter,
+		origin:  origin,
 	}
 }
 
 func (writer *writer) Write(data []byte) (int, error) {
-	for {
-		writer.connect()
+	writer.emitter.EmitEvent(event.Log{
+		Payload: data,
+		Origin:  writer.origin,
+	})
 
-		n, err := writer.conn.Write(data)
-		if err == nil {
-			return n, err
-		}
-
-		writer.close()
-
-		time.Sleep(time.Second)
-	}
-}
-
-func (writer *writer) Close() error {
-	return writer.close()
-}
-
-func (writer *writer) connect() {
-	writer.connL.Lock()
-	defer writer.connL.Unlock()
-
-	if writer.conn != nil {
-		return
-	}
-
-	var err error
-
-	for {
-		writer.conn, err = websocket.Dial(writer.url, "", "http://0.0.0.0")
-		if err == nil {
-			writer.conn.PayloadType = websocket.BinaryFrame
-			return
-		}
-
-		time.Sleep(time.Second)
-	}
-}
-
-func (writer *writer) close() error {
-	writer.connL.Lock()
-	defer writer.connL.Unlock()
-
-	if writer.conn != nil {
-		conn := writer.conn
-		writer.conn = nil
-		return conn.Close()
-	}
-
-	return nil
+	return len(data), nil
 }

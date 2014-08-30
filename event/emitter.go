@@ -8,7 +8,8 @@ import (
 )
 
 type Emitter interface {
-	EmitEvent(Event) error
+	EmitEvent(Event)
+	Close()
 }
 
 type websocketEmitter struct {
@@ -36,7 +37,7 @@ func NewWebSocketEmitter(logURL string) Emitter {
 	}
 }
 
-func (e *websocketEmitter) EmitEvent(event Event) error {
+func (e *websocketEmitter) EmitEvent(event Event) {
 	for {
 		e.connect()
 
@@ -51,8 +52,10 @@ func (e *websocketEmitter) EmitEvent(event Event) error {
 
 		time.Sleep(time.Second)
 	}
+}
 
-	return nil
+func (e *websocketEmitter) Close() {
+	e.close()
 }
 
 func (e *websocketEmitter) connect() {
@@ -75,15 +78,13 @@ func (e *websocketEmitter) connect() {
 	}
 }
 
-func (e *websocketEmitter) close() error {
+func (e *websocketEmitter) close() {
 	e.connL.Lock()
 	defer e.connL.Unlock()
 
 	if e.conn != nil {
 		conn := e.conn
 		e.conn = nil
-		return conn.Close()
+		conn.Close()
 	}
-
-	return nil
 }

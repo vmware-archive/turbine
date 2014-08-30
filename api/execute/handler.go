@@ -102,8 +102,8 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler *handler) validateBuild(build builds.Build) error {
-	if build.Callback != "" {
-		_, err := url.ParseRequestURI(build.Callback)
+	if build.StatusCallback != "" {
+		_, err := url.ParseRequestURI(build.StatusCallback)
 		if err != nil {
 			return err
 		}

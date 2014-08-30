@@ -20,6 +20,7 @@ import (
 	"github.com/concourse/turbine/api"
 	"github.com/concourse/turbine/builder"
 	"github.com/concourse/turbine/config"
+	"github.com/concourse/turbine/event"
 	"github.com/concourse/turbine/resource"
 	"github.com/concourse/turbine/routes"
 	"github.com/concourse/turbine/scheduler"
@@ -102,7 +103,7 @@ func main() {
 
 	resourceTracker := resource.NewTracker(resourceTypesConfig, wardenClient)
 
-	builder := builder.NewBuilder(resourceTracker, wardenClient)
+	builder := builder.NewBuilder(resourceTracker, wardenClient, event.NewWebSocketEmitter)
 
 	scheduler := scheduler.NewScheduler(logger.Session("scheduler"), builder)
 
@@ -129,7 +130,7 @@ func main() {
 		logger.Fatal("failed-to-ping-warden", err)
 	}
 
-	group := grouper.EnvokeGroup(grouper.RunGroup{
+	group := grouper.RunGroup{
 		"api":         http_server.New(*listenAddr, handler),
 		"debug":       http_server.New(*debugListenAddr, http.DefaultServeMux),
 		"snapshotter": snapshotter.NewSnapshotter(logger.Session("snapshotter"), *snapshotPath, scheduler),
@@ -139,7 +140,7 @@ func main() {
 			close(drain)
 			return nil
 		}),
-	})
+	}
 
 	running := ifrit.Envoke(sigmon.New(group))
 

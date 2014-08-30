@@ -61,7 +61,7 @@ var _ = Describe("Scheduler", func() {
 
 			BeforeEach(func() {
 				callbackServer = ghttp.NewServer()
-				build.Callback = callbackServer.URL() + "/abc"
+				build.StatusCallback = callbackServer.URL() + "/abc"
 			})
 
 			handleBuild := func(build builds.Build) <-chan struct{} {

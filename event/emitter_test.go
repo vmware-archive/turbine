@@ -70,8 +70,7 @@ var _ = Describe("Emitting events", func() {
 		})
 
 		It("sends a log message to the consumer", func() {
-			err := emitter.EmitEvent(event)
-			Ω(err).ShouldNot(HaveOccurred())
+			emitter.EmitEvent(event)
 
 			Eventually(consumedMessages).Should(Receive(Equal(Message{
 				Event: event,
@@ -100,8 +99,7 @@ var _ = Describe("Emitting events", func() {
 		})
 
 		It("retries", func() {
-			err := emitter.EmitEvent(event)
-			Ω(err).ShouldNot(HaveOccurred())
+			emitter.EmitEvent(event)
 
 			Eventually(consumerFailed).Should(BeClosed())
 
