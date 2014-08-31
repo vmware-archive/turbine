@@ -36,7 +36,7 @@ var _ = Describe("Writer", func() {
 		writer.Write([]byte("hello"))
 		Ω(emitter.EmitEventCallCount()).Should(Equal(1))
 		Ω(emitter.EmitEventArgsForCall(0)).Should(Equal(event.Log{
-			Payload: []byte("hello"),
+			Payload: "hello",
 			Origin:  origin,
 		}))
 
@@ -46,7 +46,7 @@ var _ = Describe("Writer", func() {
 		writer.Write([]byte(nihongo[7:]))
 		Ω(emitter.EmitEventCallCount()).Should(Equal(2))
 		Ω(emitter.EmitEventArgsForCall(1)).Should(Equal(event.Log{
-			Payload: []byte(nihongo),
+			Payload: nihongo,
 			Origin:  origin,
 		}))
 	})

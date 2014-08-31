@@ -2,6 +2,7 @@ package event_test
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/concourse/turbine/api/builds"
 	. "github.com/concourse/turbine/event"
@@ -29,7 +30,7 @@ var _ = Describe("Encoding & Decoding messages", func() {
 	Describe("Log", func() {
 		BeforeEach(func() {
 			event = Log{
-				Payload: []byte("some-payload"),
+				Payload: "some-payload",
 				Origin: Origin{
 					Type: OriginTypeInput,
 					Name: "some-input",
@@ -44,6 +45,28 @@ var _ = Describe("Encoding & Decoding messages", func() {
 		BeforeEach(func() {
 			event = Status{
 				Status: builds.StatusSucceeded,
+			}
+		})
+
+		itEncodesAndDecodesToItself()
+	})
+
+	Describe("Initialize", func() {
+		BeforeEach(func() {
+			event = Initialize{
+				BuildConfig: builds.Config{
+					Image: "some-image",
+				},
+			}
+		})
+
+		itEncodesAndDecodesToItself()
+	})
+
+	Describe("Start", func() {
+		BeforeEach(func() {
+			event = Start{
+				Time: time.Now().Unix(),
 			}
 		})
 

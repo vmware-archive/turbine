@@ -33,7 +33,7 @@ func (writer *writer) Write(data []byte) (int, error) {
 	writer.dangling = nil
 
 	writer.emitter.EmitEvent(event.Log{
-		Payload: text,
+		Payload: string(text),
 		Origin:  writer.origin,
 	})
 

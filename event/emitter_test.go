@@ -56,7 +56,7 @@ var _ = Describe("Emitting events", func() {
 		emitter = NewWebSocketEmitter("ws://" + consumerAddr)
 
 		event = Log{
-			Payload: []byte("sup"),
+			Payload: "sup",
 			Origin: Origin{
 				Type: OriginTypeInput,
 				Name: "some-input",

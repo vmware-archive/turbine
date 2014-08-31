@@ -2,7 +2,7 @@ package event
 
 type Log struct {
 	Origin  Origin `json:"origin"`
-	Payload []byte `json:"payload"`
+	Payload string `json:"payload"`
 }
 
 func (Log) EventType() EventType { return EventTypeLog }

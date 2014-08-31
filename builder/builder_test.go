@@ -273,7 +273,7 @@ var _ = Describe("Builder", func() {
 
 				It("emits a build log event", func() {
 					Eventually(emittedEvents).Should(Receive(Equal(event.Log{
-						Payload: []byte("hello from the resource"),
+						Payload: "hello from the resource",
 						Origin: event.Origin{
 							Type: event.OriginTypeInput,
 							Name: "first-resource",
@@ -301,7 +301,7 @@ var _ = Describe("Builder", func() {
 
 				It("emits a build log event", func() {
 					Eventually(emittedEvents).Should(Receive(Equal(event.Log{
-						Payload: []byte("some stdout data"),
+						Payload: "some stdout data",
 						Origin: event.Origin{
 							Type: event.OriginTypeRun,
 							Name: "stdout",
@@ -309,7 +309,7 @@ var _ = Describe("Builder", func() {
 					})))
 
 					Eventually(emittedEvents).Should(Receive(Equal(event.Log{
-						Payload: []byte("some stderr data"),
+						Payload: "some stderr data",
 						Origin: event.Origin{
 							Type: event.OriginTypeRun,
 							Name: "stderr",
@@ -591,7 +591,7 @@ var _ = Describe("Builder", func() {
 
 					It("emits events for the output", func() {
 						Eventually(emittedEvents).Should(Receive(Equal(event.Log{
-							Payload: []byte("stdout\n"),
+							Payload: "stdout\n",
 							Origin: event.Origin{
 								Type: event.OriginTypeRun,
 								Name: "stdout",
@@ -599,7 +599,7 @@ var _ = Describe("Builder", func() {
 						})))
 
 						Eventually(emittedEvents).Should(Receive(Equal(event.Log{
-							Payload: []byte("stderr\n"),
+							Payload: "stderr\n",
 							Origin: event.Origin{
 								Type: event.OriginTypeRun,
 								Name: "stderr",
@@ -1010,7 +1010,7 @@ var _ = Describe("Builder", func() {
 
 					It("emits output events", func() {
 						Eventually(emittedEvents).Should(Receive(Equal(event.Log{
-							Payload: []byte("hello from outputter"),
+							Payload: "hello from outputter",
 							Origin: event.Origin{
 								Type: event.OriginTypeOutput,
 								Name: "first-resource",
