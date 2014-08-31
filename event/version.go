@@ -1,3 +1,5 @@
 package event
 
-const VERSION = "1.0"
+type VersionMessage struct {
+	Version string `json:"version"`
+}

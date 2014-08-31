@@ -4,12 +4,13 @@ type Event interface {
 	EventType() EventType
 }
 
-type EventType int
+type EventType string
 
 const (
-	EventTypeInvalid = EventType(iota)
-	EventTypeLog
-	EventTypeStatus
-	EventTypeInitialize
-	EventTypeStart
+	EventTypeInvalid    EventType = ""
+	EventTypeLog        EventType = "log"
+	EventTypeStatus     EventType = "status"
+	EventTypeInitialize EventType = "initialize"
+	EventTypeStart      EventType = "start"
+	EventTypeErrored    EventType = "errored"
 )

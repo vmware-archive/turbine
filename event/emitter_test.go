@@ -41,10 +41,18 @@ var _ = Describe("Emitting events", func() {
 			conn, err := upgrader.Upgrade(w, r, nil)
 			Ω(err).ShouldNot(HaveOccurred())
 
+			var version VersionMessage
+			err = conn.ReadJSON(&version)
+			Ω(err).ShouldNot(HaveOccurred())
+
+			Ω(version.Version).Should(Equal(VERSION))
+
 			for {
 				var msg Message
 				err := conn.ReadJSON(&msg)
-				Ω(err).ShouldNot(HaveOccurred())
+				if err != nil {
+					break
+				}
 
 				messages <- msg
 			}

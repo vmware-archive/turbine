@@ -7,10 +7,17 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const VERSION = "1.0"
+
 type Emitter interface {
 	EmitEvent(Event)
 	Close()
 }
+
+type NullEmitter struct{}
+
+func (NullEmitter) EmitEvent(Event) {}
+func (NullEmitter) Close()          {}
 
 type websocketEmitter struct {
 	logURL string
@@ -71,7 +78,12 @@ func (e *websocketEmitter) connect() {
 	for {
 		e.conn, _, err = e.dialer.Dial(e.logURL, nil)
 		if err == nil {
-			return
+			err = e.conn.WriteJSON(VersionMessage{
+				Version: VERSION,
+			})
+			if err == nil {
+				return
+			}
 		}
 
 		time.Sleep(time.Second)
