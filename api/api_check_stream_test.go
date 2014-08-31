@@ -1,11 +1,9 @@
 package api_test
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
 
-	"code.google.com/p/go.net/websocket"
+	"github.com/gorilla/websocket"
 
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/resource/fakes"
@@ -16,7 +14,7 @@ import (
 var _ = Describe("GET /checks/stream", func() {
 	var input builds.Input
 
-	var conn io.ReadWriteCloser
+	var conn *websocket.Conn
 
 	BeforeEach(func() {
 		input = builds.Input{
@@ -29,7 +27,9 @@ var _ = Describe("GET /checks/stream", func() {
 	BeforeEach(func() {
 		var err error
 
-		conn, err = websocket.Dial("ws://"+server.Listener.Addr().String()+"/checks/stream", "", "http://0.0.0.0")
+		dialer := &websocket.Dialer{}
+
+		conn, _, err = dialer.Dial("ws://"+server.Listener.Addr().String()+"/checks/stream", nil)
 		Ω(err).ShouldNot(HaveOccurred())
 	})
 
@@ -39,7 +39,7 @@ var _ = Describe("GET /checks/stream", func() {
 
 	Context("when an input is sent", func() {
 		JustBeforeEach(func() {
-			err := json.NewEncoder(conn).Encode(&input)
+			err := conn.WriteJSON(input)
 			Ω(err).ShouldNot(HaveOccurred())
 		})
 
@@ -64,7 +64,7 @@ var _ = Describe("GET /checks/stream", func() {
 					Ω(resource.CheckArgsForCall(0)).Should(Equal(input))
 
 					var returnedVersions []builds.Version
-					err := json.NewDecoder(conn).Decode(&returnedVersions)
+					err := conn.ReadJSON(&returnedVersions)
 					Ω(err).ShouldNot(HaveOccurred())
 
 					Ω(returnedVersions).Should(Equal(versions))
@@ -92,7 +92,7 @@ var _ = Describe("GET /checks/stream", func() {
 
 				It("closes the connection", func() {
 					Eventually(func() error {
-						_, err := conn.Read([]byte{})
+						_, _, err := conn.ReadMessage()
 						return err
 					}).Should(HaveOccurred())
 				})
@@ -116,7 +116,7 @@ var _ = Describe("GET /checks/stream", func() {
 
 			It("closes the connection", func() {
 				Eventually(func() error {
-					_, err := conn.Read([]byte{})
+					_, _, err := conn.ReadMessage()
 					return err
 				}).Should(HaveOccurred())
 			})
@@ -128,21 +128,20 @@ var _ = Describe("GET /checks/stream", func() {
 			close(drain)
 
 			Eventually(func() error {
-				_, err := conn.Write([]byte{})
-				return err
+				return conn.WriteMessage(websocket.BinaryMessage, nil)
 			}).Should(HaveOccurred())
 		})
 	})
 
 	Context("when an invalid payload is sent", func() {
 		JustBeforeEach(func() {
-			_, err := conn.Write([]byte("ß"))
+			err := conn.WriteMessage(websocket.BinaryMessage, []byte("ß"))
 			Ω(err).ShouldNot(HaveOccurred())
 		})
 
 		It("closes the connection", func() {
 			Eventually(func() error {
-				_, err := conn.Read([]byte{})
+				_, _, err := conn.ReadMessage()
 				return err
 			}).Should(HaveOccurred())
 		})

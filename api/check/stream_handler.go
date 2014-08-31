@@ -1,17 +1,31 @@
 package check
 
 import (
-	"encoding/json"
 	"io"
 	"io/ioutil"
+	"net/http"
 
-	"code.google.com/p/go.net/websocket"
+	"github.com/gorilla/websocket"
 	"github.com/pivotal-golang/lager"
 
 	"github.com/concourse/turbine/api/builds"
 )
 
-func (handler *Handler) Stream(conn *websocket.Conn) {
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(*http.Request) bool {
+		return true
+	},
+}
+
+func (handler *Handler) Stream(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		handler.logger.Error("upgrade-failed", err)
+		return
+	}
+
+	defer conn.Close()
+
 	done := make(chan struct{})
 	defer close(done)
 
@@ -24,7 +38,7 @@ func (handler *Handler) Stream(conn *websocket.Conn) {
 	}()
 
 	var input builds.Input
-	err := json.NewDecoder(conn).Decode(&input)
+	err = conn.ReadJSON(&input)
 	if err != nil {
 		handler.logger.Error("malformed-request", err)
 		return
@@ -42,8 +56,6 @@ func (handler *Handler) Stream(conn *websocket.Conn) {
 
 	defer handler.tracker.Release(resource)
 
-	encoder := json.NewEncoder(conn)
-
 	for {
 		log.Info("checking")
 
@@ -53,13 +65,13 @@ func (handler *Handler) Stream(conn *websocket.Conn) {
 			return
 		}
 
-		err = encoder.Encode(versions)
+		err = conn.WriteJSON(versions)
 		if err != nil {
 			log.Error("failed-to-encode", err)
 			break
 		}
 
-		err = json.NewDecoder(conn).Decode(&input)
+		err = conn.ReadJSON(&input)
 		if err == io.EOF {
 			break
 		}

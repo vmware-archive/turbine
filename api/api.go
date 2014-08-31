@@ -3,8 +3,6 @@ package api
 import (
 	"net/http"
 
-	"code.google.com/p/go.net/websocket"
-
 	"github.com/pivotal-golang/lager"
 	"github.com/tedsuo/rata"
 
@@ -31,7 +29,7 @@ func New(
 		routes.AbortBuild:       abort.NewHandler(scheduler),
 		routes.HijackBuild:      hijack.NewHandler(logger, scheduler),
 		routes.CheckInput:       checkHandler,
-		routes.CheckInputStream: websocket.Server{Handler: checkHandler.Stream},
+		routes.CheckInputStream: http.HandlerFunc(checkHandler.Stream),
 	}
 
 	return rata.NewRouter(routes.Routes, handlers)
