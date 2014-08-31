@@ -17,10 +17,10 @@ import (
 var ErrAborted = errors.New("build aborted")
 
 type Builder interface {
-	Start(builds.Build, <-chan struct{}) (RunningBuild, error)
-	Attach(RunningBuild, <-chan struct{}) (SucceededBuild, error, error)
+	Start(builds.Build, event.Emitter, <-chan struct{}) (RunningBuild, error)
+	Attach(RunningBuild, event.Emitter, <-chan struct{}) (SucceededBuild, error, error)
 	Hijack(RunningBuild, warden.ProcessSpec, warden.ProcessIO) (warden.Process, error)
-	Complete(SucceededBuild, <-chan struct{}) (builds.Build, error)
+	Complete(SucceededBuild, event.Emitter, <-chan struct{}) (builds.Build, error)
 }
 
 type RunningBuild struct {
@@ -31,8 +31,6 @@ type RunningBuild struct {
 
 	ProcessID uint32
 	Process   warden.Process
-
-	Emitter event.Emitter
 }
 
 type SucceededBuild struct {
@@ -40,38 +38,24 @@ type SucceededBuild struct {
 
 	ContainerHandle string
 	Container       warden.Container
-
-	Emitter event.Emitter
 }
 
 type builder struct {
-	tracker       resource.Tracker
-	wardenClient  warden.Client
-	createEmitter EmitterFactory
+	tracker      resource.Tracker
+	wardenClient warden.Client
 }
-
-type EmitterFactory func(logsURL string) event.Emitter
 
 func NewBuilder(
 	tracker resource.Tracker,
 	wardenClient warden.Client,
-	createEmitter EmitterFactory,
 ) Builder {
 	return &builder{
-		tracker:       tracker,
-		wardenClient:  wardenClient,
-		createEmitter: createEmitter,
+		tracker:      tracker,
+		wardenClient: wardenClient,
 	}
 }
 
-type nullSink struct{}
-
-func (nullSink) Write(data []byte) (int, error) { return len(data), nil }
-func (nullSink) Close() error                   { return nil }
-
-func (builder *builder) Start(build builds.Build, abort <-chan struct{}) (RunningBuild, error) {
-	emitter := builder.createEmitter(build.EventsCallback)
-
+func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <-chan struct{}) (RunningBuild, error) {
 	resources := map[string]io.Reader{}
 
 	for i, input := range build.Inputs {
@@ -82,7 +66,6 @@ func (builder *builder) Start(build builds.Build, abort <-chan struct{}) (Runnin
 
 		resource, err := builder.tracker.Init(input.Type, eventLog, abort)
 		if err != nil {
-			emitter.Close()
 			return RunningBuild{}, err
 		}
 
@@ -90,7 +73,6 @@ func (builder *builder) Start(build builds.Build, abort <-chan struct{}) (Runnin
 
 		tarStream, computedInput, buildConfig, err := resource.In(input)
 		if err != nil {
-			emitter.Close()
 			return RunningBuild{}, err
 		}
 
@@ -103,19 +85,16 @@ func (builder *builder) Start(build builds.Build, abort <-chan struct{}) (Runnin
 
 	container, err := builder.createBuildContainer(build.Config, emitter)
 	if err != nil {
-		emitter.Close()
 		return RunningBuild{}, err
 	}
 
 	err = builder.streamInResources(container, resources, build.Config.Paths)
 	if err != nil {
-		emitter.Close()
 		return RunningBuild{}, err
 	}
 
 	process, err := builder.runBuild(container, build.Privileged, build.Config, emitter)
 	if err != nil {
-		emitter.Close()
 		return RunningBuild{}, err
 	}
 
@@ -127,20 +106,13 @@ func (builder *builder) Start(build builds.Build, abort <-chan struct{}) (Runnin
 
 		ProcessID: process.ID(),
 		Process:   process,
-
-		Emitter: emitter,
 	}, nil
 }
 
-func (builder *builder) Attach(running RunningBuild, abort <-chan struct{}) (SucceededBuild, error, error) {
-	if running.Emitter == nil {
-		running.Emitter = builder.createEmitter(running.Build.EventsCallback)
-	}
-
+func (builder *builder) Attach(running RunningBuild, emitter event.Emitter, abort <-chan struct{}) (SucceededBuild, error, error) {
 	if running.Container == nil {
 		container, err := builder.wardenClient.Lookup(running.ContainerHandle)
 		if err != nil {
-			running.Emitter.Close()
 			return SucceededBuild{}, nil, err
 		}
 
@@ -150,10 +122,9 @@ func (builder *builder) Attach(running RunningBuild, abort <-chan struct{}) (Suc
 	if running.Process == nil {
 		process, err := running.Container.Attach(
 			running.ProcessID,
-			emitterProcessIO(running.Emitter),
+			emitterProcessIO(emitter),
 		)
 		if err != nil {
-			running.Emitter.Close()
 			return SucceededBuild{}, nil, err
 		}
 
@@ -162,7 +133,6 @@ func (builder *builder) Attach(running RunningBuild, abort <-chan struct{}) (Suc
 
 	status, err := builder.waitForRunToEnd(running, abort)
 	if err != nil {
-		running.Emitter.Close()
 		return SucceededBuild{}, nil, err
 	}
 
@@ -173,19 +143,11 @@ func (builder *builder) Attach(running RunningBuild, abort <-chan struct{}) (Suc
 	return SucceededBuild{
 		Build:     running.Build,
 		Container: running.Container,
-
-		Emitter: running.Emitter,
 	}, nil, nil
 }
 
-func (builder *builder) Complete(succeeded SucceededBuild, abort <-chan struct{}) (builds.Build, error) {
-	if succeeded.Emitter == nil {
-		succeeded.Emitter = builder.createEmitter(succeeded.Build.EventsCallback)
-	}
-
-	defer succeeded.Emitter.Close()
-
-	outputs, err := builder.performOutputs(succeeded.Container, succeeded.Build, succeeded.Emitter, abort)
+func (builder *builder) Complete(succeeded SucceededBuild, emitter event.Emitter, abort <-chan struct{}) (builds.Build, error) {
+	outputs, err := builder.performOutputs(succeeded.Container, succeeded.Build, emitter, abort)
 	if err != nil {
 		return builds.Build{}, err
 	}

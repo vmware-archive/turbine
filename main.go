@@ -103,9 +103,9 @@ func main() {
 
 	resourceTracker := resource.NewTracker(resourceTypesConfig, wardenClient)
 
-	builder := builder.NewBuilder(resourceTracker, wardenClient, event.NewWebSocketEmitter)
+	builder := builder.NewBuilder(resourceTracker, wardenClient)
 
-	scheduler := scheduler.NewScheduler(logger.Session("scheduler"), builder)
+	scheduler := scheduler.NewScheduler(logger.Session("scheduler"), builder, event.NewWebSocketEmitter)
 
 	generator := rata.NewRequestGenerator("http://"+*peerAddr, routes.Routes)
 

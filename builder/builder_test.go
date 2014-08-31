@@ -56,10 +56,7 @@ var _ = Describe("Builder", func() {
 			events <- duped.Event
 		}
 
-		builder = NewBuilder(tracker, wardenClient, func(url string) event.Emitter {
-			Ω(url).Should(Equal("some-events-callback"))
-			return emitter
-		})
+		builder = NewBuilder(tracker, wardenClient)
 
 		build = builds.Build{
 			EventsCallback: "some-events-callback",
@@ -122,7 +119,7 @@ var _ = Describe("Builder", func() {
 
 		JustBeforeEach(func() {
 			abort = make(chan struct{})
-			started, startErr = builder.Start(build, abort)
+			started, startErr = builder.Start(build, emitter, abort)
 		})
 
 		Context("when fetching the build's inputs succeeds", func() {
@@ -376,7 +373,6 @@ var _ = Describe("Builder", func() {
 					Ω(started.ContainerHandle).Should(Equal("some-handle"))
 					Ω(started.ProcessID).Should(Equal(uint32(42)))
 					Ω(started.Process).ShouldNot(BeNil())
-					Ω(started.Emitter).Should(Equal(emitter))
 				})
 			})
 
@@ -486,7 +482,7 @@ var _ = Describe("Builder", func() {
 
 		JustBeforeEach(func() {
 			abort = make(chan struct{})
-			succeeded, failed, attachErr = builder.Attach(runningBuild, abort)
+			succeeded, failed, attachErr = builder.Attach(runningBuild, emitter, abort)
 		})
 
 		BeforeEach(func() {
@@ -778,7 +774,7 @@ var _ = Describe("Builder", func() {
 
 		JustBeforeEach(func() {
 			abort = make(chan struct{})
-			finished, completeErr = builder.Complete(succeededBuild, abort)
+			finished, completeErr = builder.Complete(succeededBuild, emitter, abort)
 		})
 
 		BeforeEach(func() {
