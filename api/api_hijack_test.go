@@ -68,6 +68,8 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 		})
 
 		It("hijacks the build via the scheduler", func() {
+			Eventually(scheduler.HijackCallCount).Should(Equal(1))
+
 			guid, spec, _ := scheduler.HijackArgsForCall(0)
 			Ω(guid).Should(Equal("some-build-guid"))
 			Ω(spec).Should(Equal(warden.ProcessSpec{
@@ -159,6 +161,8 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 		Context("when the connection breaks", func() {
 			It("closes the process's stdin", func() {
 				conn.Close()
+
+				Eventually(scheduler.HijackCallCount).Should(Equal(1))
 
 				_, _, io := scheduler.HijackArgsForCall(0)
 
