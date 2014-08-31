@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -137,6 +138,10 @@ func (c *connection) Create(spec warden.ContainerSpec) (string, error) {
 
 	if spec.Network != "" {
 		req.Network = proto.String(spec.Network)
+	}
+
+	if spec.Env != nil {
+		req.Env = convertEnvironmentVariables(spec.Env)
 	}
 
 	for _, bm := range spec.BindMounts {
@@ -815,8 +820,12 @@ func (c *connection) doStream(
 	}
 
 	if httpResp.StatusCode < 200 || httpResp.StatusCode > 299 {
+		errResponse, err := ioutil.ReadAll(httpResp.Body)
 		httpResp.Body.Close()
-		return nil, fmt.Errorf("bad response: %s", httpResp.Status)
+		if err != nil {
+			return nil, fmt.Errorf("bad response: %s", httpResp.Status)
+		}
+		return nil, fmt.Errorf(string(errResponse))
 	}
 
 	return httpResp.Body, nil
