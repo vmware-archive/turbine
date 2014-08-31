@@ -12,11 +12,11 @@ type Origin struct {
 	Name string     `json:"name"`
 }
 
-type OriginType int
+type OriginType string
 
 const (
-	OriginTypeInvalid = OriginType(iota)
-	OriginTypeInput
-	OriginTypeOutput
-	OriginTypeRun
+	OriginTypeInvalid OriginType = ""
+	OriginTypeInput   OriginType = "input"
+	OriginTypeOutput  OriginType = "output"
+	OriginTypeRun     OriginType = "run"
 )
