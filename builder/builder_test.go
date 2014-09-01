@@ -527,8 +527,7 @@ var _ = Describe("Builder", func() {
 	})
 
 	Describe("Attach", func() {
-		var succeeded ExitedBuild
-		var failed error
+		var exitedBuild ExitedBuild
 		var attachErr error
 
 		var runningBuild RunningBuild
@@ -536,7 +535,7 @@ var _ = Describe("Builder", func() {
 
 		JustBeforeEach(func() {
 			abort = make(chan struct{})
-			succeeded, failed, attachErr = builder.Attach(runningBuild, emitter, abort)
+			exitedBuild, attachErr = builder.Attach(runningBuild, emitter, abort)
 		})
 
 		BeforeEach(func() {
@@ -728,21 +727,7 @@ var _ = Describe("Builder", func() {
 			})
 		})
 
-		Context("when the build's script exits 0", func() {
-			BeforeEach(func() {
-				process := new(wfakes.FakeProcess)
-				process.WaitReturns(0, nil)
-
-				runningBuild.Process = process
-			})
-
-			It("returns a successful build", func() {
-				Ω(succeeded).ShouldNot(BeZero())
-				Ω(failed).Should(BeZero())
-			})
-		})
-
-		Context("when the build's script exits nonzero", func() {
+		Context("when the build's script exits", func() {
 			BeforeEach(func() {
 				process := new(wfakes.FakeProcess)
 				process.WaitReturns(2, nil)
@@ -750,9 +735,8 @@ var _ = Describe("Builder", func() {
 				runningBuild.Process = process
 			})
 
-			It("returns a failure", func() {
-				Ω(succeeded).Should(BeZero())
-				Ω(failed).ShouldNot(BeZero())
+			It("returns the exited build with the status present", func() {
+				Ω(exitedBuild.ExitStatus).Should(Equal(2))
 			})
 		})
 	})
@@ -842,11 +826,14 @@ var _ = Describe("Builder", func() {
 	})
 
 	Describe("Finish", func() {
-		var finished builds.Build
-		var finishErr error
-
 		var exitedBuild ExitedBuild
 		var abort chan struct{}
+
+		var resource1 *resourcefakes.FakeResource
+		var resource2 *resourcefakes.FakeResource
+
+		var finished builds.Build
+		var finishErr error
 
 		JustBeforeEach(func() {
 			abort = make(chan struct{})
@@ -875,6 +862,32 @@ var _ = Describe("Builder", func() {
 				},
 			}
 
+			build.Outputs = []builds.Output{
+				{
+					Name:   "first-resource",
+					Type:   "git",
+					Params: builds.Params{"key": "param-1"},
+					Source: builds.Source{"uri": "http://first-uri"},
+				},
+				{
+					Name:   "extra-output",
+					Type:   "git",
+					Params: builds.Params{"key": "param-2"},
+					Source: builds.Source{"uri": "http://extra-uri"},
+				},
+			}
+
+			resource1 = new(resourcefakes.FakeResource)
+			resource2 = new(resourcefakes.FakeResource)
+
+			resources := make(chan resource.Resource, 2)
+			resources <- resource1
+			resources <- resource2
+
+			tracker.InitStub = func(typ string, logs io.Writer, abort <-chan struct{}) (resource.Resource, error) {
+				return <-resources, nil
+			}
+
 			wardenClient.Connection.CreateReturns("the-attached-container", nil)
 
 			container, err := wardenClient.Create(warden.ContainerSpec{})
@@ -886,77 +899,54 @@ var _ = Describe("Builder", func() {
 				Build: build,
 
 				Container: container,
-
-				ExitStatus: 2,
 			}
 		})
 
-		It("reports inputs as implicit outputs", func() {
-			Ω(finished.Outputs).Should(HaveLen(2))
-
-			Ω(finished.Outputs).Should(ContainElement(builds.Output{
-				Name:    "first-resource",
-				Type:    "raw",
-				Source:  builds.Source{"uri": "in-source-1"},
-				Version: builds.Version{"key": "in-version-1"},
-				Metadata: []builds.MetadataField{
-					{Name: "meta1", Value: "value1"},
-				},
-			}))
-
-			Ω(finished.Outputs).Should(ContainElement(builds.Output{
-				Name:    "second-resource",
-				Type:    "raw",
-				Source:  builds.Source{"uri": "in-source-2"},
-				Version: builds.Version{"key": "in-version-2"},
-				Metadata: []builds.MetadataField{
-					{Name: "meta2", Value: "value2"},
-				},
-			}))
-		})
-
-		It("emits a Finish event", func() {
-			var finishEvent event.Finish
-			Eventually(events.Sent).Should(ContainElement(BeAssignableToTypeOf(finishEvent)))
-
-			for _, ev := range events.Sent() {
-				switch finishEvent := ev.(type) {
-				case event.Finish:
-					Ω(finishEvent.ExitStatus).Should(Equal(2))
-					Ω(finishEvent.Time).Should(BeNumerically("~", time.Now().Unix()))
-				}
-			}
-		})
-
-		Context("and outputs are configured on the build", func() {
-			var resource1 *resourcefakes.FakeResource
-			var resource2 *resourcefakes.FakeResource
-
+		Context("when the build exited with a nonzero status", func() {
 			BeforeEach(func() {
-				exitedBuild.Build.Outputs = []builds.Output{
-					{
-						Name:   "first-resource",
-						Type:   "git",
-						Params: builds.Params{"key": "param-1"},
-						Source: builds.Source{"uri": "http://first-uri"},
-					},
-					{
-						Name:   "extra-output",
-						Type:   "git",
-						Params: builds.Params{"key": "param-2"},
-						Source: builds.Source{"uri": "http://extra-uri"},
-					},
+				exitedBuild.ExitStatus = 2
+			})
+
+			It("does not perform any outputs", func() {
+				Ω(wardenClient.Connection.StreamOutCallCount()).Should(Equal(0))
+				Ω(tracker.InitCallCount()).Should(Equal(0))
+				Ω(resource1.OutCallCount()).Should(Equal(0))
+				Ω(resource2.OutCallCount()).Should(Equal(0))
+			})
+
+			It("reports no outputs", func() {
+				Ω(finished.Outputs).Should(BeEmpty())
+			})
+
+			It("emits a Finish event", func() {
+				var finishEvent event.Finish
+				Eventually(events.Sent).Should(ContainElement(BeAssignableToTypeOf(finishEvent)))
+
+				for _, ev := range events.Sent() {
+					switch finishEvent := ev.(type) {
+					case event.Finish:
+						Ω(finishEvent.ExitStatus).Should(Equal(2))
+						Ω(finishEvent.Time).Should(BeNumerically("~", time.Now().Unix()))
+					}
 				}
+			})
+		})
 
-				resource1 = new(resourcefakes.FakeResource)
-				resource2 = new(resourcefakes.FakeResource)
+		Context("when the build exited with status 0", func() {
+			BeforeEach(func() {
+				exitedBuild.ExitStatus = 0
+			})
 
-				resources := make(chan resource.Resource, 2)
-				resources <- resource1
-				resources <- resource2
+			It("emits a Finish event", func() {
+				var finishEvent event.Finish
+				Eventually(events.Sent).Should(ContainElement(BeAssignableToTypeOf(finishEvent)))
 
-				tracker.InitStub = func(typ string, logs io.Writer, abort <-chan struct{}) (resource.Resource, error) {
-					return <-resources, nil
+				for _, ev := range events.Sent() {
+					switch finishEvent := ev.(type) {
+					case event.Finish:
+						Ω(finishEvent.ExitStatus).Should(Equal(0))
+						Ω(finishEvent.Time).Should(BeNumerically("~", time.Now().Unix()))
+					}
 				}
 			})
 

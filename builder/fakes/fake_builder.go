@@ -22,7 +22,7 @@ type FakeBuilder struct {
 		result1 builder.RunningBuild
 		result2 error
 	}
-	AttachStub        func(builder.RunningBuild, event.Emitter, <-chan struct{}) (builder.ExitedBuild, error, error)
+	AttachStub        func(builder.RunningBuild, event.Emitter, <-chan struct{}) (builder.ExitedBuild, error)
 	attachMutex       sync.RWMutex
 	attachArgsForCall []struct {
 		arg1 builder.RunningBuild
@@ -32,7 +32,6 @@ type FakeBuilder struct {
 	attachReturns struct {
 		result1 builder.ExitedBuild
 		result2 error
-		result3 error
 	}
 	HijackStub        func(builder.RunningBuild, warden.ProcessSpec, warden.ProcessIO) (warden.Process, error)
 	hijackMutex       sync.RWMutex
@@ -93,7 +92,7 @@ func (fake *FakeBuilder) StartReturns(result1 builder.RunningBuild, result2 erro
 	}{result1, result2}
 }
 
-func (fake *FakeBuilder) Attach(arg1 builder.RunningBuild, arg2 event.Emitter, arg3 <-chan struct{}) (builder.ExitedBuild, error, error) {
+func (fake *FakeBuilder) Attach(arg1 builder.RunningBuild, arg2 event.Emitter, arg3 <-chan struct{}) (builder.ExitedBuild, error) {
 	fake.attachMutex.Lock()
 	fake.attachArgsForCall = append(fake.attachArgsForCall, struct {
 		arg1 builder.RunningBuild
@@ -104,7 +103,7 @@ func (fake *FakeBuilder) Attach(arg1 builder.RunningBuild, arg2 event.Emitter, a
 	if fake.AttachStub != nil {
 		return fake.AttachStub(arg1, arg2, arg3)
 	} else {
-		return fake.attachReturns.result1, fake.attachReturns.result2, fake.attachReturns.result3
+		return fake.attachReturns.result1, fake.attachReturns.result2
 	}
 }
 
@@ -120,13 +119,12 @@ func (fake *FakeBuilder) AttachArgsForCall(i int) (builder.RunningBuild, event.E
 	return fake.attachArgsForCall[i].arg1, fake.attachArgsForCall[i].arg2, fake.attachArgsForCall[i].arg3
 }
 
-func (fake *FakeBuilder) AttachReturns(result1 builder.ExitedBuild, result2 error, result3 error) {
+func (fake *FakeBuilder) AttachReturns(result1 builder.ExitedBuild, result2 error) {
 	fake.AttachStub = nil
 	fake.attachReturns = struct {
 		result1 builder.ExitedBuild
 		result2 error
-		result3 error
-	}{result1, result2, result3}
+	}{result1, result2}
 }
 
 func (fake *FakeBuilder) Hijack(arg1 builder.RunningBuild, arg2 warden.ProcessSpec, arg3 warden.ProcessIO) (warden.Process, error) {

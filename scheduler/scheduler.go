@@ -153,31 +153,23 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, emitter event.E
 		"build": running.Build,
 	})
 
-	succeeded := make(chan builder.ExitedBuild, 1)
-	failed := make(chan error, 1)
+	exited := make(chan builder.ExitedBuild, 1)
 	errored := make(chan error, 1)
 
 	go func() {
-		s, f, e := scheduler.builder.Attach(running, emitter, abort)
-		if e != nil {
-			errored <- e
-		} else if f != nil {
-			failed <- e
+		ex, err := scheduler.builder.Attach(running, emitter, abort)
+		if err != nil {
+			errored <- err
 		} else {
-			succeeded <- s
+			exited <- ex
 		}
 	}()
 
 	select {
-	case build := <-succeeded:
-		log.Info("succeeded")
+	case build := <-exited:
+		log.Info("exited")
 
 		scheduler.finish(build, emitter)
-	case err := <-failed:
-		log.Error("failed", err)
-
-		running.Build.Status = builds.StatusFailed
-		scheduler.reportBuild(running.Build, log, emitter)
 	case err := <-errored:
 		log.Error("errored", err)
 
@@ -190,23 +182,28 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, emitter event.E
 	scheduler.removeRunning(running)
 }
 
-func (scheduler *scheduler) finish(succeeded builder.ExitedBuild, emitter event.Emitter) {
-	abort := scheduler.abortChannel(succeeded.Build.Guid)
+func (scheduler *scheduler) finish(exited builder.ExitedBuild, emitter event.Emitter) {
+	abort := scheduler.abortChannel(exited.Build.Guid)
 
 	log := scheduler.logger.Session("finish", lager.Data{
-		"build": succeeded.Build,
+		"build": exited.Build,
 	})
 
-	finished, err := scheduler.builder.Finish(succeeded, emitter, abort)
+	finished, err := scheduler.builder.Finish(exited, emitter, abort)
 	if err != nil {
 		log.Error("failed", err)
 
-		succeeded.Build.Status = builds.StatusErrored
-		scheduler.reportBuild(succeeded.Build, log, emitter)
+		exited.Build.Status = builds.StatusErrored
+		scheduler.reportBuild(exited.Build, log, emitter)
 	} else {
-		log.Info("succeeded")
+		log.Info("finished")
 
-		finished.Status = builds.StatusSucceeded
+		if exited.ExitStatus == 0 {
+			finished.Status = builds.StatusSucceeded
+		} else {
+			finished.Status = builds.StatusFailed
+		}
+
 		scheduler.reportBuild(finished, log, emitter)
 	}
 }

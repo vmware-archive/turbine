@@ -23,7 +23,7 @@ type Builder interface {
 	// attach to a running build, forwarding output events
 	//
 	// this will be called again after turbine restarts
-	Attach(RunningBuild, event.Emitter, <-chan struct{}) (ExitedBuild, error, error)
+	Attach(RunningBuild, event.Emitter, <-chan struct{}) (ExitedBuild, error)
 
 	// execute an arbitrary process in a running build
 	Hijack(RunningBuild, warden.ProcessSpec, warden.ProcessIO) (warden.Process, error)
@@ -132,11 +132,11 @@ func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <
 	}, nil
 }
 
-func (builder *builder) Attach(running RunningBuild, emitter event.Emitter, abort <-chan struct{}) (ExitedBuild, error, error) {
+func (builder *builder) Attach(running RunningBuild, emitter event.Emitter, abort <-chan struct{}) (ExitedBuild, error) {
 	if running.Container == nil {
 		container, err := builder.wardenClient.Lookup(running.ContainerHandle)
 		if err != nil {
-			return ExitedBuild{}, nil, builder.emitError(emitter, "failed to lookup container", err)
+			return ExitedBuild{}, builder.emitError(emitter, "failed to lookup container", err)
 		}
 
 		running.Container = container
@@ -148,7 +148,7 @@ func (builder *builder) Attach(running RunningBuild, emitter event.Emitter, abor
 			emitterProcessIO(emitter),
 		)
 		if err != nil {
-			return ExitedBuild{}, nil, builder.emitError(emitter, "failed to attach to process", err)
+			return ExitedBuild{}, builder.emitError(emitter, "failed to attach to process", err)
 		}
 
 		running.Process = process
@@ -156,17 +156,15 @@ func (builder *builder) Attach(running RunningBuild, emitter event.Emitter, abor
 
 	status, err := builder.waitForRunToEnd(running, abort)
 	if err != nil {
-		return ExitedBuild{}, nil, builder.emitError(emitter, "result unknown", err)
-	}
-
-	if status != 0 {
-		return ExitedBuild{}, fmt.Errorf("exit status %d", status), nil
+		return ExitedBuild{}, builder.emitError(emitter, "result unknown", err)
 	}
 
 	return ExitedBuild{
 		Build:     running.Build,
 		Container: running.Container,
-	}, nil, nil
+
+		ExitStatus: status,
+	}, nil
 }
 
 func (builder *builder) Finish(exited ExitedBuild, emitter event.Emitter, abort <-chan struct{}) (builds.Build, error) {
@@ -175,12 +173,16 @@ func (builder *builder) Finish(exited ExitedBuild, emitter event.Emitter, abort 
 		ExitStatus: exited.ExitStatus,
 	})
 
-	outputs, err := builder.performOutputs(exited.Container, exited.Build, emitter, abort)
-	if err != nil {
-		return builds.Build{}, builder.emitError(emitter, "outputs failed", err)
-	}
+	if exited.ExitStatus == 0 {
+		outputs, err := builder.performOutputs(exited.Container, exited.Build, emitter, abort)
+		if err != nil {
+			return builds.Build{}, builder.emitError(emitter, "outputs failed", err)
+		}
 
-	exited.Build.Outputs = outputs
+		exited.Build.Outputs = outputs
+	} else {
+		exited.Build.Outputs = nil
+	}
 
 	return exited.Build, nil
 }

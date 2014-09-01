@@ -176,19 +176,17 @@ var _ = Describe("Scheduler", func() {
 					Eventually(gotStartedCallback, 3).Should(BeClosed())
 				})
 
-				Context("when the build succeeds", func() {
-					var succeeded builder.ExitedBuild
+				Context("when the build exits 0", func() {
+					var exited builder.ExitedBuild
 
 					BeforeEach(func() {
-						succeeded = builder.ExitedBuild{
+						exited = builder.ExitedBuild{
 							Build: build,
 
 							ExitStatus: 0,
 						}
 
-						succeeded.Build.Status = builds.StatusSucceeded
-
-						fakeBuilder.AttachReturns(succeeded, nil, nil)
+						fakeBuilder.AttachReturns(exited, nil)
 					})
 
 					It("finishes the build", func() {
@@ -197,7 +195,7 @@ var _ = Describe("Scheduler", func() {
 						Eventually(fakeBuilder.FinishCallCount).Should(Equal(1))
 
 						completing, completingEmitter, _ := fakeBuilder.FinishArgsForCall(0)
-						Ω(completing).Should(Equal(succeeded))
+						Ω(completing).Should(Equal(exited))
 						Ω(completingEmitter).Should(Equal(emitter))
 					})
 
@@ -207,7 +205,10 @@ var _ = Describe("Scheduler", func() {
 						BeforeEach(func() {
 							fakeBuilder.FinishReturns(running.Build, nil)
 
-							gotRequest = handleBuild(succeeded.Build)
+							succeededBuild := exited.Build
+							succeededBuild.Status = builds.StatusSucceeded
+
+							gotRequest = handleBuild(succeededBuild)
 						})
 
 						It("reports the started build as succeeded", func() {
@@ -261,34 +262,89 @@ var _ = Describe("Scheduler", func() {
 					})
 				})
 
-				Context("when the build fails", func() {
-					var gotRequest <-chan struct{}
+				Context("when the build exited nonzero", func() {
+					var exited builder.ExitedBuild
 
 					BeforeEach(func() {
-						fakeBuilder.AttachReturns(builder.ExitedBuild{}, errors.New("exit status 1"), nil)
+						exited = builder.ExitedBuild{
+							Build: build,
 
-						failedBuild := running.Build
-						failedBuild.Status = builds.StatusFailed
+							ExitStatus: 2,
+						}
 
-						gotRequest = handleBuild(failedBuild)
+						fakeBuilder.AttachReturns(exited, nil)
 					})
 
-					It("reports the build as failed", func() {
+					It("finishes the build", func() {
 						scheduler.Start(build)
 
-						Eventually(gotRequest).Should(BeClosed())
+						Eventually(fakeBuilder.FinishCallCount).Should(Equal(1))
+
+						completing, completingEmitter, _ := fakeBuilder.FinishArgsForCall(0)
+						Ω(completing).Should(Equal(exited))
+						Ω(completingEmitter).Should(Equal(emitter))
 					})
 
-					It("emits a failed status event", func() {
-						scheduler.Start(build)
+					Context("and the build finishes", func() {
+						var gotRequest <-chan struct{}
 
-						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-							Status: builds.StatusFailed,
-						})))
+						BeforeEach(func() {
+							fakeBuilder.FinishReturns(running.Build, nil)
+
+							failedBuild := exited.Build
+							failedBuild.Status = builds.StatusFailed
+
+							gotRequest = handleBuild(failedBuild)
+						})
+
+						It("reports the started build as fao;ed", func() {
+							scheduler.Start(build)
+
+							Eventually(gotRequest).Should(BeClosed())
+						})
+
+						It("emits a failed status event", func() {
+							scheduler.Start(build)
+
+							Eventually(emittedEvents).Should(Receive(Equal(event.Status{
+								Status: builds.StatusFailed,
+							})))
+						})
+
+						itRetries(1, func() {
+							Eventually(gotRequest, 3).Should(BeClosed())
+						})
 					})
 
-					itRetries(1, func() {
-						Eventually(gotRequest, 3).Should(BeClosed())
+					Context("and the build fails to finish", func() {
+						var gotRequest <-chan struct{}
+
+						BeforeEach(func() {
+							fakeBuilder.FinishReturns(builds.Build{}, errors.New("oh no!"))
+
+							erroredBuild := running.Build
+							erroredBuild.Status = builds.StatusErrored
+
+							gotRequest = handleBuild(erroredBuild)
+						})
+
+						It("reports the started build as errored", func() {
+							scheduler.Start(build)
+
+							Eventually(gotRequest).Should(BeClosed())
+						})
+
+						It("emits an errored status event", func() {
+							scheduler.Start(build)
+
+							Eventually(emittedEvents).Should(Receive(Equal(event.Status{
+								Status: builds.StatusErrored,
+							})))
+						})
+
+						itRetries(1, func() {
+							Eventually(gotRequest, 3).Should(BeClosed())
+						})
 					})
 				})
 
@@ -296,7 +352,7 @@ var _ = Describe("Scheduler", func() {
 					var gotRequest <-chan struct{}
 
 					BeforeEach(func() {
-						fakeBuilder.AttachReturns(builder.ExitedBuild{}, nil, errors.New("oh no!"))
+						fakeBuilder.AttachReturns(builder.ExitedBuild{}, errors.New("oh no!"))
 
 						erroredBuild := running.Build
 						erroredBuild.Status = builds.StatusErrored
@@ -384,7 +440,7 @@ var _ = Describe("Scheduler", func() {
 					return running, nil
 				}
 
-				fakeBuilder.AttachStub = func(build builder.RunningBuild, emitter event.Emitter, abort <-chan struct{}) (builder.ExitedBuild, error, error) {
+				fakeBuilder.AttachStub = func(build builder.RunningBuild, emitter event.Emitter, abort <-chan struct{}) (builder.ExitedBuild, error) {
 					close(attaching)
 					select {}
 				}
@@ -491,7 +547,7 @@ var _ = Describe("Scheduler", func() {
 					return builder.RunningBuild{Build: build}, nil
 				}
 
-				fakeBuilder.AttachStub = func(build builder.RunningBuild, emitter event.Emitter, abort <-chan struct{}) (builder.ExitedBuild, error, error) {
+				fakeBuilder.AttachStub = func(build builder.RunningBuild, emitter event.Emitter, abort <-chan struct{}) (builder.ExitedBuild, error) {
 					gotAborting <- abort
 					select {}
 				}
@@ -519,8 +575,8 @@ var _ = Describe("Scheduler", func() {
 					return builder.RunningBuild{Build: build}, nil
 				}
 
-				fakeBuilder.AttachStub = func(running builder.RunningBuild, emitter event.Emitter, abort <-chan struct{}) (builder.ExitedBuild, error, error) {
-					return builder.ExitedBuild{Build: running.Build}, nil, nil
+				fakeBuilder.AttachStub = func(running builder.RunningBuild, emitter event.Emitter, abort <-chan struct{}) (builder.ExitedBuild, error) {
+					return builder.ExitedBuild{Build: running.Build}, nil
 				}
 
 				fakeBuilder.FinishStub = func(build builder.ExitedBuild, emitter event.Emitter, abort <-chan struct{}) (builds.Build, error) {
@@ -563,7 +619,7 @@ var _ = Describe("Scheduler", func() {
 					}, nil
 				}
 
-				fakeBuilder.AttachStub = func(running builder.RunningBuild, emitter event.Emitter, abort <-chan struct{}) (builder.ExitedBuild, error, error) {
+				fakeBuilder.AttachStub = func(running builder.RunningBuild, emitter event.Emitter, abort <-chan struct{}) (builder.ExitedBuild, error) {
 					select {}
 				}
 			})
@@ -623,7 +679,7 @@ var _ = Describe("Scheduler", func() {
 			BeforeEach(func() {
 				running = make(chan struct{})
 
-				fakeBuilder.AttachStub = func(builder.RunningBuild, event.Emitter, <-chan struct{}) (builder.ExitedBuild, error, error) {
+				fakeBuilder.AttachStub = func(builder.RunningBuild, event.Emitter, <-chan struct{}) (builder.ExitedBuild, error) {
 					close(running)
 					select {}
 				}
