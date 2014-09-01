@@ -2,12 +2,12 @@
 package fakes
 
 import (
+	"sync"
+
 	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder"
 	"github.com/concourse/turbine/event"
-
-	"sync"
 )
 
 type FakeBuilder struct {
@@ -22,7 +22,7 @@ type FakeBuilder struct {
 		result1 builder.RunningBuild
 		result2 error
 	}
-	AttachStub        func(builder.RunningBuild, event.Emitter, <-chan struct{}) (builder.SucceededBuild, error, error)
+	AttachStub        func(builder.RunningBuild, event.Emitter, <-chan struct{}) (builder.ExitedBuild, error, error)
 	attachMutex       sync.RWMutex
 	attachArgsForCall []struct {
 		arg1 builder.RunningBuild
@@ -30,7 +30,7 @@ type FakeBuilder struct {
 		arg3 <-chan struct{}
 	}
 	attachReturns struct {
-		result1 builder.SucceededBuild
+		result1 builder.ExitedBuild
 		result2 error
 		result3 error
 	}
@@ -45,14 +45,14 @@ type FakeBuilder struct {
 		result1 warden.Process
 		result2 error
 	}
-	CompleteStub        func(builder.SucceededBuild, event.Emitter, <-chan struct{}) (builds.Build, error)
-	completeMutex       sync.RWMutex
-	completeArgsForCall []struct {
-		arg1 builder.SucceededBuild
+	FinishStub        func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (builds.Build, error)
+	finishMutex       sync.RWMutex
+	finishArgsForCall []struct {
+		arg1 builder.ExitedBuild
 		arg2 event.Emitter
 		arg3 <-chan struct{}
 	}
-	completeReturns struct {
+	finishReturns struct {
 		result1 builds.Build
 		result2 error
 	}
@@ -60,12 +60,12 @@ type FakeBuilder struct {
 
 func (fake *FakeBuilder) Start(arg1 builds.Build, arg2 event.Emitter, arg3 <-chan struct{}) (builder.RunningBuild, error) {
 	fake.startMutex.Lock()
-	defer fake.startMutex.Unlock()
 	fake.startArgsForCall = append(fake.startArgsForCall, struct {
 		arg1 builds.Build
 		arg2 event.Emitter
 		arg3 <-chan struct{}
 	}{arg1, arg2, arg3})
+	fake.startMutex.Unlock()
 	if fake.StartStub != nil {
 		return fake.StartStub(arg1, arg2, arg3)
 	} else {
@@ -93,14 +93,14 @@ func (fake *FakeBuilder) StartReturns(result1 builder.RunningBuild, result2 erro
 	}{result1, result2}
 }
 
-func (fake *FakeBuilder) Attach(arg1 builder.RunningBuild, arg2 event.Emitter, arg3 <-chan struct{}) (builder.SucceededBuild, error, error) {
+func (fake *FakeBuilder) Attach(arg1 builder.RunningBuild, arg2 event.Emitter, arg3 <-chan struct{}) (builder.ExitedBuild, error, error) {
 	fake.attachMutex.Lock()
-	defer fake.attachMutex.Unlock()
 	fake.attachArgsForCall = append(fake.attachArgsForCall, struct {
 		arg1 builder.RunningBuild
 		arg2 event.Emitter
 		arg3 <-chan struct{}
 	}{arg1, arg2, arg3})
+	fake.attachMutex.Unlock()
 	if fake.AttachStub != nil {
 		return fake.AttachStub(arg1, arg2, arg3)
 	} else {
@@ -120,10 +120,10 @@ func (fake *FakeBuilder) AttachArgsForCall(i int) (builder.RunningBuild, event.E
 	return fake.attachArgsForCall[i].arg1, fake.attachArgsForCall[i].arg2, fake.attachArgsForCall[i].arg3
 }
 
-func (fake *FakeBuilder) AttachReturns(result1 builder.SucceededBuild, result2 error, result3 error) {
+func (fake *FakeBuilder) AttachReturns(result1 builder.ExitedBuild, result2 error, result3 error) {
 	fake.AttachStub = nil
 	fake.attachReturns = struct {
-		result1 builder.SucceededBuild
+		result1 builder.ExitedBuild
 		result2 error
 		result3 error
 	}{result1, result2, result3}
@@ -131,12 +131,12 @@ func (fake *FakeBuilder) AttachReturns(result1 builder.SucceededBuild, result2 e
 
 func (fake *FakeBuilder) Hijack(arg1 builder.RunningBuild, arg2 warden.ProcessSpec, arg3 warden.ProcessIO) (warden.Process, error) {
 	fake.hijackMutex.Lock()
-	defer fake.hijackMutex.Unlock()
 	fake.hijackArgsForCall = append(fake.hijackArgsForCall, struct {
 		arg1 builder.RunningBuild
 		arg2 warden.ProcessSpec
 		arg3 warden.ProcessIO
 	}{arg1, arg2, arg3})
+	fake.hijackMutex.Unlock()
 	if fake.HijackStub != nil {
 		return fake.HijackStub(arg1, arg2, arg3)
 	} else {
@@ -164,36 +164,36 @@ func (fake *FakeBuilder) HijackReturns(result1 warden.Process, result2 error) {
 	}{result1, result2}
 }
 
-func (fake *FakeBuilder) Complete(arg1 builder.SucceededBuild, arg2 event.Emitter, arg3 <-chan struct{}) (builds.Build, error) {
-	fake.completeMutex.Lock()
-	defer fake.completeMutex.Unlock()
-	fake.completeArgsForCall = append(fake.completeArgsForCall, struct {
-		arg1 builder.SucceededBuild
+func (fake *FakeBuilder) Finish(arg1 builder.ExitedBuild, arg2 event.Emitter, arg3 <-chan struct{}) (builds.Build, error) {
+	fake.finishMutex.Lock()
+	fake.finishArgsForCall = append(fake.finishArgsForCall, struct {
+		arg1 builder.ExitedBuild
 		arg2 event.Emitter
 		arg3 <-chan struct{}
 	}{arg1, arg2, arg3})
-	if fake.CompleteStub != nil {
-		return fake.CompleteStub(arg1, arg2, arg3)
+	fake.finishMutex.Unlock()
+	if fake.FinishStub != nil {
+		return fake.FinishStub(arg1, arg2, arg3)
 	} else {
-		return fake.completeReturns.result1, fake.completeReturns.result2
+		return fake.finishReturns.result1, fake.finishReturns.result2
 	}
 }
 
-func (fake *FakeBuilder) CompleteCallCount() int {
-	fake.completeMutex.RLock()
-	defer fake.completeMutex.RUnlock()
-	return len(fake.completeArgsForCall)
+func (fake *FakeBuilder) FinishCallCount() int {
+	fake.finishMutex.RLock()
+	defer fake.finishMutex.RUnlock()
+	return len(fake.finishArgsForCall)
 }
 
-func (fake *FakeBuilder) CompleteArgsForCall(i int) (builder.SucceededBuild, event.Emitter, <-chan struct{}) {
-	fake.completeMutex.RLock()
-	defer fake.completeMutex.RUnlock()
-	return fake.completeArgsForCall[i].arg1, fake.completeArgsForCall[i].arg2, fake.completeArgsForCall[i].arg3
+func (fake *FakeBuilder) FinishArgsForCall(i int) (builder.ExitedBuild, event.Emitter, <-chan struct{}) {
+	fake.finishMutex.RLock()
+	defer fake.finishMutex.RUnlock()
+	return fake.finishArgsForCall[i].arg1, fake.finishArgsForCall[i].arg2, fake.finishArgsForCall[i].arg3
 }
 
-func (fake *FakeBuilder) CompleteReturns(result1 builds.Build, result2 error) {
-	fake.CompleteStub = nil
-	fake.completeReturns = struct {
+func (fake *FakeBuilder) FinishReturns(result1 builds.Build, result2 error) {
+	fake.FinishStub = nil
+	fake.finishReturns = struct {
 		result1 builds.Build
 		result2 error
 	}{result1, result2}

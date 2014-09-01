@@ -527,7 +527,7 @@ var _ = Describe("Builder", func() {
 	})
 
 	Describe("Attach", func() {
-		var succeeded SucceededBuild
+		var succeeded ExitedBuild
 		var failed error
 		var attachErr error
 
@@ -754,19 +754,6 @@ var _ = Describe("Builder", func() {
 				Ω(succeeded).Should(BeZero())
 				Ω(failed).ShouldNot(BeZero())
 			})
-
-			It("emits a Finish event", func() {
-				var finishEvent event.Finish
-				Eventually(events.Sent).Should(ContainElement(BeAssignableToTypeOf(finishEvent)))
-
-				for _, ev := range events.Sent() {
-					switch finishEvent := ev.(type) {
-					case event.Finish:
-						Ω(finishEvent.ExitStatus).Should(Equal(2))
-						Ω(finishEvent.Time).Should(BeNumerically("~", time.Now().Unix()))
-					}
-				}
-			})
 		})
 	})
 
@@ -854,16 +841,16 @@ var _ = Describe("Builder", func() {
 		})
 	})
 
-	Describe("Complete", func() {
+	Describe("Finish", func() {
 		var finished builds.Build
-		var completeErr error
+		var finishErr error
 
-		var succeededBuild SucceededBuild
+		var exitedBuild ExitedBuild
 		var abort chan struct{}
 
 		JustBeforeEach(func() {
 			abort = make(chan struct{})
-			finished, completeErr = builder.Complete(succeededBuild, emitter, abort)
+			finished, finishErr = builder.Finish(exitedBuild, emitter, abort)
 		})
 
 		BeforeEach(func() {
@@ -895,9 +882,12 @@ var _ = Describe("Builder", func() {
 
 			wardenClient.Connection.CreateReturns("", nil)
 
-			succeededBuild = SucceededBuild{
-				Build:     build,
+			exitedBuild = ExitedBuild{
+				Build: build,
+
 				Container: container,
+
+				ExitStatus: 2,
 			}
 		})
 
@@ -925,12 +915,25 @@ var _ = Describe("Builder", func() {
 			}))
 		})
 
+		It("emits a Finish event", func() {
+			var finishEvent event.Finish
+			Eventually(events.Sent).Should(ContainElement(BeAssignableToTypeOf(finishEvent)))
+
+			for _, ev := range events.Sent() {
+				switch finishEvent := ev.(type) {
+				case event.Finish:
+					Ω(finishEvent.ExitStatus).Should(Equal(2))
+					Ω(finishEvent.Time).Should(BeNumerically("~", time.Now().Unix()))
+				}
+			}
+		})
+
 		Context("and outputs are configured on the build", func() {
 			var resource1 *resourcefakes.FakeResource
 			var resource2 *resourcefakes.FakeResource
 
 			BeforeEach(func() {
-				succeededBuild.Build.Outputs = []builds.Output{
+				exitedBuild.Build.Outputs = []builds.Output{
 					{
 						Name:   "first-resource",
 						Type:   "git",
@@ -987,8 +990,8 @@ var _ = Describe("Builder", func() {
 						Ω(resource1.OutCallCount()).Should(Equal(1))
 
 						streamIn, output := resource1.OutArgsForCall(0)
-						firstOutputWithVersion := succeededBuild.Build.Outputs[0]
-						firstOutputWithVersion.Version = succeededBuild.Build.Inputs[0].Version
+						firstOutputWithVersion := exitedBuild.Build.Outputs[0]
+						firstOutputWithVersion.Version = exitedBuild.Build.Inputs[0].Version
 						Ω(output).Should(Equal(firstOutputWithVersion))
 
 						streamedIn, err := ioutil.ReadAll(streamIn)
@@ -999,7 +1002,7 @@ var _ = Describe("Builder", func() {
 						Ω(resource2.OutCallCount()).Should(Equal(1))
 
 						streamIn, output = resource2.OutArgsForCall(0)
-						secondOutputWithoutVersion := succeededBuild.Build.Outputs[1]
+						secondOutputWithoutVersion := exitedBuild.Build.Outputs[1]
 						Ω(output).Should(Equal(secondOutputWithoutVersion))
 
 						streamedIn, err = ioutil.ReadAll(streamIn)
@@ -1100,7 +1103,7 @@ var _ = Describe("Builder", func() {
 					})
 
 					It("returns an error", func() {
-						Ω(completeErr).Should(Equal(disaster))
+						Ω(finishErr).Should(Equal(disaster))
 					})
 
 					It("emits an error event", func() {
@@ -1157,7 +1160,7 @@ var _ = Describe("Builder", func() {
 					})
 
 					It("aborts all resource activity", func() {
-						Ω(completeErr).Should(Equal(ErrAborted))
+						Ω(finishErr).Should(Equal(ErrAborted))
 
 						close(abort)
 
@@ -1174,8 +1177,8 @@ var _ = Describe("Builder", func() {
 					wardenClient.Connection.StreamOutReturns(nil, disaster)
 				})
 
-				It("sends the error result", func() {
-					Ω(completeErr).Should(Equal(disaster))
+				It("returns the error", func() {
+					Ω(finishErr).Should(Equal(disaster))
 				})
 			})
 		})

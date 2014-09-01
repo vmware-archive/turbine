@@ -17,10 +17,19 @@ import (
 var ErrAborted = errors.New("build aborted")
 
 type Builder interface {
+	// begin execution of a build, fetching all inputs and spawning the process
 	Start(builds.Build, event.Emitter, <-chan struct{}) (RunningBuild, error)
-	Attach(RunningBuild, event.Emitter, <-chan struct{}) (SucceededBuild, error, error)
+
+	// attach to a running build, forwarding output events
+	//
+	// this will be called again after turbine restarts
+	Attach(RunningBuild, event.Emitter, <-chan struct{}) (ExitedBuild, error, error)
+
+	// execute an arbitrary process in a running build
 	Hijack(RunningBuild, warden.ProcessSpec, warden.ProcessIO) (warden.Process, error)
-	Complete(SucceededBuild, event.Emitter, <-chan struct{}) (builds.Build, error)
+
+	// process an exited build's outputs
+	Finish(ExitedBuild, event.Emitter, <-chan struct{}) (builds.Build, error)
 }
 
 type RunningBuild struct {
@@ -33,11 +42,13 @@ type RunningBuild struct {
 	Process   warden.Process
 }
 
-type SucceededBuild struct {
+type ExitedBuild struct {
 	Build builds.Build
 
 	ContainerHandle string
 	Container       warden.Container
+
+	ExitStatus int
 }
 
 type builder struct {
@@ -45,10 +56,7 @@ type builder struct {
 	wardenClient warden.Client
 }
 
-func NewBuilder(
-	tracker resource.Tracker,
-	wardenClient warden.Client,
-) Builder {
+func NewBuilder(tracker resource.Tracker, wardenClient warden.Client) Builder {
 	return &builder{
 		tracker:      tracker,
 		wardenClient: wardenClient,
@@ -124,11 +132,11 @@ func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <
 	}, nil
 }
 
-func (builder *builder) Attach(running RunningBuild, emitter event.Emitter, abort <-chan struct{}) (SucceededBuild, error, error) {
+func (builder *builder) Attach(running RunningBuild, emitter event.Emitter, abort <-chan struct{}) (ExitedBuild, error, error) {
 	if running.Container == nil {
 		container, err := builder.wardenClient.Lookup(running.ContainerHandle)
 		if err != nil {
-			return SucceededBuild{}, nil, builder.emitError(emitter, "failed to lookup container", err)
+			return ExitedBuild{}, nil, builder.emitError(emitter, "failed to lookup container", err)
 		}
 
 		running.Container = container
@@ -140,7 +148,7 @@ func (builder *builder) Attach(running RunningBuild, emitter event.Emitter, abor
 			emitterProcessIO(emitter),
 		)
 		if err != nil {
-			return SucceededBuild{}, nil, builder.emitError(emitter, "failed to attach to process", err)
+			return ExitedBuild{}, nil, builder.emitError(emitter, "failed to attach to process", err)
 		}
 
 		running.Process = process
@@ -148,33 +156,33 @@ func (builder *builder) Attach(running RunningBuild, emitter event.Emitter, abor
 
 	status, err := builder.waitForRunToEnd(running, abort)
 	if err != nil {
-		return SucceededBuild{}, nil, builder.emitError(emitter, "result unknown", err)
+		return ExitedBuild{}, nil, builder.emitError(emitter, "result unknown", err)
 	}
-
-	emitter.EmitEvent(event.Finish{
-		Time:       time.Now().Unix(),
-		ExitStatus: status,
-	})
 
 	if status != 0 {
-		return SucceededBuild{}, fmt.Errorf("exit status %d", status), nil
+		return ExitedBuild{}, fmt.Errorf("exit status %d", status), nil
 	}
 
-	return SucceededBuild{
+	return ExitedBuild{
 		Build:     running.Build,
 		Container: running.Container,
 	}, nil, nil
 }
 
-func (builder *builder) Complete(succeeded SucceededBuild, emitter event.Emitter, abort <-chan struct{}) (builds.Build, error) {
-	outputs, err := builder.performOutputs(succeeded.Container, succeeded.Build, emitter, abort)
+func (builder *builder) Finish(exited ExitedBuild, emitter event.Emitter, abort <-chan struct{}) (builds.Build, error) {
+	emitter.EmitEvent(event.Finish{
+		Time:       time.Now().Unix(),
+		ExitStatus: exited.ExitStatus,
+	})
+
+	outputs, err := builder.performOutputs(exited.Container, exited.Build, emitter, abort)
 	if err != nil {
 		return builds.Build{}, builder.emitError(emitter, "outputs failed", err)
 	}
 
-	succeeded.Build.Outputs = outputs
+	exited.Build.Outputs = outputs
 
-	return succeeded.Build, nil
+	return exited.Build, nil
 }
 
 func (builder *builder) Hijack(running RunningBuild, spec warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error) {

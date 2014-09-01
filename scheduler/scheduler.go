@@ -153,7 +153,7 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, emitter event.E
 		"build": running.Build,
 	})
 
-	succeeded := make(chan builder.SucceededBuild, 1)
+	succeeded := make(chan builder.ExitedBuild, 1)
 	failed := make(chan error, 1)
 	errored := make(chan error, 1)
 
@@ -172,7 +172,7 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, emitter event.E
 	case build := <-succeeded:
 		log.Info("succeeded")
 
-		scheduler.complete(build, emitter)
+		scheduler.finish(build, emitter)
 	case err := <-failed:
 		log.Error("failed", err)
 
@@ -190,21 +190,21 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, emitter event.E
 	scheduler.removeRunning(running)
 }
 
-func (scheduler *scheduler) complete(succeeded builder.SucceededBuild, emitter event.Emitter) {
+func (scheduler *scheduler) finish(succeeded builder.ExitedBuild, emitter event.Emitter) {
 	abort := scheduler.abortChannel(succeeded.Build.Guid)
 
-	log := scheduler.logger.Session("complete", lager.Data{
+	log := scheduler.logger.Session("finish", lager.Data{
 		"build": succeeded.Build,
 	})
 
-	finished, err := scheduler.builder.Complete(succeeded, emitter, abort)
+	finished, err := scheduler.builder.Finish(succeeded, emitter, abort)
 	if err != nil {
 		log.Error("failed", err)
 
 		succeeded.Build.Status = builds.StatusErrored
 		scheduler.reportBuild(succeeded.Build, log, emitter)
 	} else {
-		log.Info("completed")
+		log.Info("succeeded")
 
 		finished.Status = builds.StatusSucceeded
 		scheduler.reportBuild(finished, log, emitter)
