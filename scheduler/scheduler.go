@@ -290,8 +290,15 @@ func (scheduler *scheduler) reportBuild(build builds.Build, logger lager.Logger,
 
 		if err != nil {
 			log.Error("failed", err)
-			time.Sleep(time.Second)
-			continue
+
+			select {
+			case <-time.After(time.Second):
+				// retry every second
+				continue
+			case <-scheduler.draining:
+				// don't block draining on failing callbacks
+				return
+			}
 		}
 
 		res.Body.Close()
