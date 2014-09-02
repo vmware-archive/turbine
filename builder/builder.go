@@ -9,6 +9,7 @@ import (
 	"github.com/cloudfoundry-incubator/garden/warden"
 
 	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine/builder/outputs"
 	"github.com/concourse/turbine/event"
 	"github.com/concourse/turbine/logwriter"
 	"github.com/concourse/turbine/resource"
@@ -52,14 +53,20 @@ type ExitedBuild struct {
 }
 
 type builder struct {
-	tracker      resource.Tracker
-	wardenClient warden.Client
+	tracker         resource.Tracker
+	wardenClient    warden.Client
+	outputPerformer outputs.Performer
 }
 
-func NewBuilder(tracker resource.Tracker, wardenClient warden.Client) Builder {
+func NewBuilder(
+	tracker resource.Tracker,
+	wardenClient warden.Client,
+	outputPerformer outputs.Performer,
+) Builder {
 	return &builder{
-		tracker:      tracker,
-		wardenClient: wardenClient,
+		tracker:         tracker,
+		wardenClient:    wardenClient,
+		outputPerformer: outputPerformer,
 	}
 }
 
@@ -173,16 +180,12 @@ func (builder *builder) Finish(exited ExitedBuild, emitter event.Emitter, abort 
 		ExitStatus: exited.ExitStatus,
 	})
 
-	if exited.ExitStatus == 0 {
-		outputs, err := builder.performOutputs(exited.Container, exited.Build, emitter, abort)
-		if err != nil {
-			return builds.Build{}, builder.emitError(emitter, "outputs failed", err)
-		}
-
-		exited.Build.Outputs = outputs
-	} else {
-		exited.Build.Outputs = nil
+	outputs, err := builder.performOutputs(exited.Container, exited, emitter, abort)
+	if err != nil {
+		return builds.Build{}, err
 	}
+
+	exited.Build.Outputs = outputs
 
 	return exited.Build, nil
 }
@@ -286,78 +289,42 @@ func (builder *builder) waitForRunToEnd(
 
 func (builder *builder) performOutputs(
 	container warden.Container,
-	build builds.Build,
+	build ExitedBuild,
 	emitter event.Emitter,
 	abort <-chan struct{},
 ) ([]builds.Output, error) {
 	allOutputs := map[string]builds.Output{}
 
 	// implicit outputs
-	for _, input := range build.Inputs {
-		allOutputs[input.Name] = builds.Output{
-			Name:     input.Name,
-			Type:     input.Type,
-			Source:   input.Source,
-			Version:  input.Version,
-			Metadata: input.Metadata,
+	if build.ExitStatus == 0 {
+		for _, input := range build.Build.Inputs {
+			allOutputs[input.Name] = builds.Output{
+				Name:     input.Name,
+				Type:     input.Type,
+				Source:   input.Source,
+				Version:  input.Version,
+				Metadata: input.Metadata,
+			}
 		}
 	}
 
-	if len(build.Outputs) > 0 {
-		errs := make(chan error, len(build.Outputs))
-		results := make(chan builds.Output, len(build.Outputs))
-
-		for _, output := range build.Outputs {
-			go func(output builds.Output) {
-				inputOutput, found := allOutputs[output.Name]
-				if found {
-					output.Version = inputOutput.Version
-				}
-
-				streamOut, err := container.StreamOut("/tmp/build/src/")
-				if err != nil {
-					errs <- err
-					return
-				}
-
-				eventLog := logwriter.NewWriter(emitter, event.Origin{
-					Type: event.OriginTypeOutput,
-					Name: output.Name,
-				})
-
-				resource, err := builder.tracker.Init(output.Type, eventLog, abort)
-				if err != nil {
-					errs <- err
-					return
-				}
-
-				defer builder.tracker.Release(resource)
-
-				computedOutput, err := resource.Out(streamOut, output)
-
-				emitter.EmitEvent(event.Output{Output: computedOutput})
-
-				errs <- err
-				results <- computedOutput
-			}(output)
-		}
-
-		var outputErr error
-		for i := 0; i < len(build.Outputs); i++ {
-			err := <-errs
-			if err != nil {
-				outputErr = err
+	outputsToPerform := []builds.Output{}
+	for _, output := range build.Build.Outputs {
+		for _, status := range output.On {
+			if status == builds.OutputConditionSuccess && build.ExitStatus == 0 ||
+				status == builds.OutputConditionFailure && build.ExitStatus != 0 {
+				outputsToPerform = append(outputsToPerform, output)
 			}
 		}
+	}
 
-		if outputErr != nil {
-			return nil, outputErr
-		}
+	performedOutputs, err := builder.outputPerformer.PerformOutputs(container, outputsToPerform, emitter, abort)
+	if err != nil {
+		return nil, err
+	}
 
-		for i := 0; i < len(build.Outputs); i++ {
-			output := <-results
-			allOutputs[output.Name] = output
-		}
+	for _, output := range performedOutputs {
+		allOutputs[output.Name] = output
 	}
 
 	outputs := []builds.Output{}
