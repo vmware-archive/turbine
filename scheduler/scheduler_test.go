@@ -48,7 +48,7 @@ var _ = Describe("Scheduler", func() {
 			events <- duped.Event
 		}
 
-		scheduler = NewScheduler(lagertest.NewTestLogger("test"), fakeBuilder, func(logsURL string) event.Emitter {
+		createEmitter := func(logsURL string, draining <-chan struct{}) event.Emitter {
 			defer GinkgoRecover()
 
 			if logsURL == "" {
@@ -56,9 +56,12 @@ var _ = Describe("Scheduler", func() {
 			}
 
 			Ω(logsURL).Should(Equal("some-events-callback"))
+			Ω(draining).ShouldNot(BeNil())
 
 			return emitter
-		})
+		}
+
+		scheduler = NewScheduler(lagertest.NewTestLogger("test"), fakeBuilder, createEmitter)
 
 		build = builds.Build{
 			Guid: "abc",

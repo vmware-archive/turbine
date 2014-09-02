@@ -43,7 +43,7 @@ type scheduler struct {
 	mutex *sync.RWMutex
 }
 
-type EmitterFactory func(logsURL string) event.Emitter
+type EmitterFactory func(logsURL string, drain <-chan struct{}) event.Emitter
 
 func NewScheduler(
 	l lager.Logger,
@@ -88,7 +88,7 @@ func (scheduler *scheduler) Start(build builds.Build) {
 	abort := scheduler.abortChannel(build.Guid)
 
 	go func() {
-		emitter := scheduler.createEmitter(build.EventsCallback)
+		emitter := scheduler.createEmitter(build.EventsCallback, scheduler.draining)
 		defer emitter.Close()
 
 		running, err := scheduler.builder.Start(build, emitter, abort)
@@ -112,7 +112,7 @@ func (scheduler *scheduler) Start(build builds.Build) {
 }
 
 func (scheduler *scheduler) Attach(running builder.RunningBuild) {
-	emitter := scheduler.createEmitter(running.Build.EventsCallback)
+	emitter := scheduler.createEmitter(running.Build.EventsCallback, scheduler.draining)
 	scheduler.attach(running, emitter)
 }
 
