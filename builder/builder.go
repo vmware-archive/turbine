@@ -311,8 +311,8 @@ func (builder *builder) performOutputs(
 	outputsToPerform := []builds.Output{}
 	for _, output := range build.Build.Outputs {
 		for _, status := range output.On {
-			if status == builds.OutputConditionSuccess && build.ExitStatus == 0 ||
-				status == builds.OutputConditionFailure && build.ExitStatus != 0 {
+			if (status == builds.OutputConditionSuccess && build.ExitStatus == 0) ||
+				(status == builds.OutputConditionFailure && build.ExitStatus != 0) {
 				outputsToPerform = append(outputsToPerform, output)
 			}
 		}
