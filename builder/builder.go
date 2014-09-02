@@ -274,16 +274,24 @@ func (builder *builder) waitForRunToEnd(
 		}
 	}()
 
-	select {
-	case status := <-statusCh:
-		return status, nil
+	var runErr error
 
-	case err := <-errCh:
-		return 0, err
+	for {
+		select {
+		case status := <-statusCh:
+			return status, runErr
 
-	case <-abort:
-		running.Container.Stop(false)
-		return 0, ErrAborted
+		case err := <-errCh:
+			return 0, err
+
+		case <-abort:
+			abort = nil
+
+			// delay return until process dies
+			runErr = ErrAborted
+
+			running.Container.Stop(false)
+		}
 	}
 }
 
