@@ -71,6 +71,7 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 
 	snapshotFile, err = os.Create(snapshotter.snapshotPath)
 	if err != nil {
+		log.Error("failed-to-create-snapshot", err)
 		return err
 	}
 
@@ -85,6 +86,7 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 
 	err = json.NewEncoder(snapshotFile).Encode(&snapshots)
 	if err != nil {
+		log.Error("failed-to-encode-snapshot", err)
 		return err
 	}
 
