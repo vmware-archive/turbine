@@ -52,7 +52,9 @@ func NewWebSocketEmitter(logURL string, drain <-chan struct{}) Emitter {
 
 func (e *websocketEmitter) EmitEvent(event Event) {
 	for {
-		e.connect()
+		if !e.connect() {
+			return
+		}
 
 		e.writeL.Lock()
 
@@ -80,12 +82,12 @@ func (e *websocketEmitter) Close() {
 	e.close()
 }
 
-func (e *websocketEmitter) connect() {
+func (e *websocketEmitter) connect() bool {
 	e.connL.Lock()
 	defer e.connL.Unlock()
 
 	if e.conn != nil {
-		return
+		return true
 	}
 
 	var err error
@@ -97,14 +99,14 @@ func (e *websocketEmitter) connect() {
 				Version: VERSION,
 			})
 			if err == nil {
-				return
+				return false
 			}
 		}
 
 		select {
 		case <-time.After(time.Second):
 		case <-e.drain:
-			return
+			return false
 		}
 	}
 }
