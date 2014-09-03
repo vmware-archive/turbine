@@ -99,7 +99,7 @@ func (e *websocketEmitter) connect() bool {
 				Version: VERSION,
 			})
 			if err == nil {
-				return false
+				return true
 			}
 		}
 
