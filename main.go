@@ -66,7 +66,8 @@ var resourceTypes = flag.String(
 		"docker-image": "docker:///concourse/docker-image-resource",
 		"time": "docker:///concourse/time-resource",
 		"s3": "docker:///concourse/s3-resource",
-		"tracker": "docker:///concourse/tracker-resource"
+		"tracker": "docker:///concourse/tracker-resource",
+		"semver": "docker:///concourse/semver-resource"
 	}`,
 	"map of resource type to its docker image",
 )
