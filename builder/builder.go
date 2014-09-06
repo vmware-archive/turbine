@@ -301,29 +301,14 @@ func (builder *builder) performOutputs(
 	emitter event.Emitter,
 	abort <-chan struct{},
 ) ([]builds.Output, error) {
-	allOutputs := map[string]builds.Output{}
-
-	// implicit outputs
-	if build.ExitStatus == 0 {
-		for _, input := range build.Build.Inputs {
-			allOutputs[input.Name] = builds.Output{
-				Name:     input.Name,
-				Type:     input.Type,
-				Source:   input.Source,
-				Version:  input.Version,
-				Metadata: input.Metadata,
-			}
-		}
-	}
-
+	implicitOutputs := []builds.Output{}
 	outputsToPerform := []builds.Output{}
 	for _, output := range build.Build.Outputs {
-		for _, status := range output.On {
-			if (status == builds.OutputConditionSuccess && build.ExitStatus == 0) ||
-				(status == builds.OutputConditionFailure && build.ExitStatus != 0) {
-				outputsToPerform = append(outputsToPerform, output)
-			}
+		if !output.On.SatisfiedBy(build.ExitStatus) {
+			continue
 		}
+
+		outputsToPerform = append(outputsToPerform, output)
 	}
 
 	performedOutputs, err := builder.outputPerformer.PerformOutputs(container, outputsToPerform, emitter, abort)
@@ -331,16 +316,7 @@ func (builder *builder) performOutputs(
 		return nil, err
 	}
 
-	for _, output := range performedOutputs {
-		allOutputs[output.Name] = output
-	}
-
-	outputs := []builds.Output{}
-	for _, output := range allOutputs {
-		outputs = append(outputs, output)
-	}
-
-	return outputs, nil
+	return append(implicitOutputs, performedOutputs...), nil
 }
 
 func emitterProcessIO(emitter event.Emitter) warden.ProcessIO {

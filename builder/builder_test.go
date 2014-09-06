@@ -822,7 +822,6 @@ var _ = Describe("Builder", func() {
 		var exitedBuild ExitedBuild
 		var abort chan struct{}
 
-		var passedThroughOutput builds.Output
 		var onSuccessOutput builds.Output
 		var onSuccessOrFailureOutput builds.Output
 		var onFailureOutput builds.Output
@@ -857,14 +856,6 @@ var _ = Describe("Builder", func() {
 				},
 			}
 
-			passedThroughOutput = builds.Output{
-				Name:   "first-input",
-				Type:   "some-type",
-				On:     []builds.OutputCondition{builds.OutputConditionSuccess},
-				Params: builds.Params{"key": "first-param"},
-				Source: builds.Source{"uri": "http://first-uri"},
-			}
-
 			onSuccessOutput = builds.Output{
 				Name:   "on-success",
 				Type:   "some-type",
@@ -895,7 +886,6 @@ var _ = Describe("Builder", func() {
 			}
 
 			build.Outputs = []builds.Output{
-				passedThroughOutput,
 				onSuccessOutput,
 				onSuccessOrFailureOutput,
 				onFailureOutput,
@@ -939,7 +929,6 @@ var _ = Describe("Builder", func() {
 				container, outputs, performingEmitter, _ := outputPerformer.PerformOutputsArgsForCall(0)
 				Ω(container).Should(Equal(exitedBuild.Container))
 				Ω(outputs).Should(Equal([]builds.Output{
-					passedThroughOutput,
 					onSuccessOutput,
 					onSuccessOrFailureOutput,
 				}))
@@ -959,27 +948,6 @@ var _ = Describe("Builder", func() {
 			})
 
 			Context("when performing outputs succeeds", func() {
-				explicitOutputForFirstInput := builds.Output{
-					Name:     "first-input",
-					Type:     "some-type",
-					On:       []builds.OutputCondition{builds.OutputConditionSuccess},
-					Source:   builds.Source{"uri": "http://first-uri"},
-					Params:   builds.Params{"key": "first-param"},
-					Version:  builds.Version{"version": "first-input-performed"},
-					Metadata: []builds.MetadataField{{Name: "output", Value: "first-input"}},
-				}
-
-				implicitOutputForSecondInput := builds.Output{
-					Name:    "second-input",
-					Type:    "some-type",
-					Source:  builds.Source{"uri": "in-source-2"},
-					Params:  nil,
-					Version: builds.Version{"key": "in-version-2"},
-					Metadata: []builds.MetadataField{
-						{Name: "second-meta-name", Value: "second-meta-value"},
-					},
-				}
-
 				explicitOutputOnSuccess := builds.Output{
 					Name:     "on-success",
 					Type:     "some-type",
@@ -1005,7 +973,6 @@ var _ = Describe("Builder", func() {
 
 				BeforeEach(func() {
 					performedOutputs := []builds.Output{
-						explicitOutputForFirstInput,
 						explicitOutputOnSuccess,
 						explicitOutputOnSuccessOrFailure,
 					}
@@ -1013,11 +980,9 @@ var _ = Describe("Builder", func() {
 					outputPerformer.PerformOutputsReturns(performedOutputs, nil)
 				})
 
-				It("returns the implicit outputs, overlayed with the performed outputs", func() {
-					Ω(finished.Outputs).Should(HaveLen(4))
+				It("returns the performed outputs", func() {
+					Ω(finished.Outputs).Should(HaveLen(2))
 
-					Ω(finished.Outputs).Should(ContainElement(explicitOutputForFirstInput))
-					Ω(finished.Outputs).Should(ContainElement(implicitOutputForSecondInput))
 					Ω(finished.Outputs).Should(ContainElement(explicitOutputOnSuccess))
 					Ω(finished.Outputs).Should(ContainElement(explicitOutputOnSuccessOrFailure))
 				})
@@ -1111,7 +1076,7 @@ var _ = Describe("Builder", func() {
 					outputPerformer.PerformOutputsReturns(performedOutputs, nil)
 				})
 
-				It("returns the implicit outputs, overlayed with the performed outputs", func() {
+				It("returns the explicitly-performed outputs", func() {
 					Ω(finished.Outputs).Should(HaveLen(2))
 
 					Ω(finished.Outputs).Should(ContainElement(explicitOutputOnSuccessOrFailure))
