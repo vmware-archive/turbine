@@ -95,7 +95,7 @@ func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <
 
 		build.Inputs[i] = computedInput
 
-		build.Config = build.Config.Merge(buildConfig)
+		build.Config = buildConfig.Merge(build.Config)
 
 		resources[input.Name] = tarStream
 	}

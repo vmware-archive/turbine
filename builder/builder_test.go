@@ -404,7 +404,7 @@ var _ = Describe("Builder", func() {
 				})
 			})
 
-			Context("when an input reconfigured the build", func() {
+			Context("when an input provides build configuration", func() {
 				BeforeEach(func() {
 					resource2.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
 						sourceStream := bytes.NewBufferString("some-data-2")
@@ -413,15 +413,25 @@ var _ = Describe("Builder", func() {
 						input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-2"}}
 
 						config := builds.Config{
-							Image: "some-reconfigured-image",
+							Image: "build-config-image",
+
+							Params: map[string]string{
+								"FOO":         "build-config-foo",
+								"CONFIG_ONLY": "build-config-only",
+							},
 						}
 
 						return sourceStream, input, config, nil
 					}
 				})
 
-				It("returns the reconfigured build", func() {
-					Ω(started.Build.Config.Image).Should(Equal("some-reconfigured-image"))
+				It("returns merges the original config over them", func() {
+					Ω(started.Build.Config.Image).Should(Equal("some-rootfs"))
+					Ω(started.Build.Config.Params).Should(Equal(map[string]string{
+						"FOO":         "bar",
+						"BAZ":         "buzz",
+						"CONFIG_ONLY": "build-config-only",
+					}))
 				})
 
 				Context("with new input destinations", func() {
