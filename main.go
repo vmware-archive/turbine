@@ -48,13 +48,13 @@ var debugListenAddr = flag.String(
 
 var wardenNetwork = flag.String(
 	"wardenNetwork",
-	"unix",
+	"tcp",
 	"warden API connection network (unix or tcp)",
 )
 
 var wardenAddr = flag.String(
 	"wardenAddr",
-	"/tmp/warden.sock",
+	"127.0.0.1:7777",
 	"warden API connection address",
 )
 
