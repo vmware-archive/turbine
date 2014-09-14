@@ -118,7 +118,7 @@ var _ = Describe("Emitting events", func() {
 			Eventually(consumerFailed).Should(BeClosed())
 
 			// retrying has a 1s delay
-			Eventually(consumedMessages, 2*time.Second).Should(Receive(Equal(Message{
+			Eventually(consumedMessages, 5*time.Second).Should(Receive(Equal(Message{
 				Event: event,
 			})))
 		})
