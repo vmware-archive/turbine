@@ -46,16 +46,16 @@ var debugListenAddr = flag.String(
 	"port for the pprof debugger to listen on",
 )
 
-var wardenNetwork = flag.String(
-	"wardenNetwork",
+var gardenNetwork = flag.String(
+	"gardenNetwork",
 	"tcp",
-	"warden API connection network (unix or tcp)",
+	"garden API connection network (unix or tcp)",
 )
 
-var wardenAddr = flag.String(
-	"wardenAddr",
+var gardenAddr = flag.String(
+	"gardenAddr",
 	"127.0.0.1:7777",
-	"warden API connection address",
+	"garden API connection address",
 )
 
 var resourceTypes = flag.String(
@@ -82,8 +82,8 @@ func main() {
 	flag.Parse()
 
 	wardenClient := WardenClient.New(WardenConnection.New(
-		*wardenNetwork,
-		*wardenAddr,
+		*gardenNetwork,
+		*gardenAddr,
 	))
 
 	logger := lager.NewLogger("turbine")
