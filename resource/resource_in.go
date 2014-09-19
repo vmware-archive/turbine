@@ -5,8 +5,9 @@ import (
 	"io"
 	"path"
 
+	"github.com/cloudfoundry-incubator/candiedyaml"
+
 	"github.com/concourse/turbine/api/builds"
-	"github.com/fraenkel/candiedyaml"
 )
 
 // Request payload from sourcefetcher to /opt/resource/in script
