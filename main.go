@@ -19,6 +19,7 @@ import (
 
 	"github.com/concourse/turbine/api"
 	"github.com/concourse/turbine/builder"
+	"github.com/concourse/turbine/builder/inputs"
 	"github.com/concourse/turbine/builder/outputs"
 	"github.com/concourse/turbine/config"
 	"github.com/concourse/turbine/event"
@@ -105,7 +106,11 @@ func main() {
 
 	resourceTracker := resource.NewTracker(resourceTypesConfig, wardenClient)
 
-	builder := builder.NewBuilder(resourceTracker, wardenClient, outputs.NewParallelPerformer(resourceTracker))
+	builder := builder.NewBuilder(
+		wardenClient,
+		inputs.NewParallelFetcher(resourceTracker),
+		outputs.NewParallelPerformer(resourceTracker),
+	)
 
 	scheduler := scheduler.NewScheduler(logger.Session("scheduler"), builder, event.NewWebSocketEmitter)
 

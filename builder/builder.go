@@ -3,16 +3,15 @@ package builder
 import (
 	"errors"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
 
 	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine/builder/inputs"
 	"github.com/concourse/turbine/builder/outputs"
 	"github.com/concourse/turbine/event"
 	"github.com/concourse/turbine/logwriter"
-	"github.com/concourse/turbine/resource"
 )
 
 var ErrAborted = errors.New("build aborted")
@@ -53,52 +52,36 @@ type ExitedBuild struct {
 }
 
 type builder struct {
-	tracker         resource.Tracker
 	wardenClient    warden.Client
+	inputFetcher    inputs.Fetcher
 	outputPerformer outputs.Performer
 }
 
 func NewBuilder(
-	tracker resource.Tracker,
 	wardenClient warden.Client,
+	inputFetcher inputs.Fetcher,
 	outputPerformer outputs.Performer,
 ) Builder {
 	return &builder{
-		tracker:         tracker,
 		wardenClient:    wardenClient,
+		inputFetcher:    inputFetcher,
 		outputPerformer: outputPerformer,
 	}
 }
 
 func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <-chan struct{}) (RunningBuild, error) {
-	resources := map[string]io.Reader{}
-
-	for i, input := range build.Inputs {
-		eventLog := logwriter.NewWriter(emitter, event.Origin{
-			Type: event.OriginTypeInput,
-			Name: input.Name,
-		})
-
-		resource, err := builder.tracker.Init(input.Type, eventLog, abort)
-		if err != nil {
-			return RunningBuild{}, builder.emitError(emitter, "failed to initialize "+input.Name, err)
-		}
-
-		defer builder.tracker.Release(resource)
-
-		tarStream, computedInput, buildConfig, err := resource.In(input)
-		if err != nil {
-			return RunningBuild{}, builder.emitError(emitter, "failed to fetch "+input.Name, err)
-		}
-
-		emitter.EmitEvent(event.Input{Input: computedInput})
-
-		build.Inputs[i] = computedInput
-
-		build.Config = buildConfig.Merge(build.Config)
-
-		resources[input.Name] = tarStream
+	fetchedInputs, err := builder.inputFetcher.Fetch(build.Inputs, emitter, abort)
+	if err != nil {
+		return RunningBuild{}, builder.emitError(emitter, "failed to fetch inputs", err)
 	}
+
+	newInputs := make([]builds.Input, len(fetchedInputs))
+	for i, fetched := range fetchedInputs {
+		newInputs[i] = fetched.Input
+		build.Config = fetched.Config.Merge(build.Config)
+	}
+
+	build.Inputs = newInputs
 
 	emitter.EmitEvent(event.Initialize{
 		BuildConfig: build.Config,
@@ -109,7 +92,7 @@ func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <
 		return RunningBuild{}, builder.emitError(emitter, "failed to create container", err)
 	}
 
-	err = builder.streamInResources(container, resources, build.Config.Paths)
+	err = builder.streamInResources(container, fetchedInputs, build.Config.Paths)
 	if err != nil {
 		return RunningBuild{}, builder.emitError(emitter, "failed to stream in resources", err)
 	}
@@ -217,16 +200,16 @@ func (builder *builder) createBuildContainer(
 
 func (builder *builder) streamInResources(
 	container warden.Container,
-	resources map[string]io.Reader,
+	fetchedInputs []inputs.FetchedInput,
 	paths map[string]string,
 ) error {
-	for name, streamOut := range resources {
-		destination, found := paths[name]
+	for _, input := range fetchedInputs {
+		destination, found := paths[input.Input.Name]
 		if !found {
-			destination = name
+			destination = input.Input.Name
 		}
 
-		err := container.StreamIn("/tmp/build/src/"+destination, streamOut)
+		err := container.StreamIn("/tmp/build/src/"+destination, input.Stream)
 		if err != nil {
 			return err
 		}

@@ -17,6 +17,7 @@ import (
 
 	"github.com/concourse/turbine/api/builds"
 	. "github.com/concourse/turbine/builder"
+	"github.com/concourse/turbine/builder/inputs"
 	ofakes "github.com/concourse/turbine/builder/outputs/fakes"
 	"github.com/concourse/turbine/event"
 	efakes "github.com/concourse/turbine/event/fakes"
@@ -49,7 +50,7 @@ var _ = Describe("Builder", func() {
 
 		outputPerformer = new(ofakes.FakePerformer)
 
-		builder = NewBuilder(tracker, wardenClient, outputPerformer)
+		builder = NewBuilder(wardenClient, inputs.NewParallelFetcher(tracker), outputPerformer)
 
 		build = builds.Build{
 			EventsCallback: "some-events-callback",
@@ -491,7 +492,7 @@ var _ = Describe("Builder", func() {
 
 			It("emits an error event", func() {
 				Eventually(events.Sent).Should(ContainElement(event.Error{
-					Message: "failed to initialize first-resource: oh no!",
+					Message: "failed to fetch inputs: oh no!",
 				}))
 			})
 		})
@@ -509,7 +510,7 @@ var _ = Describe("Builder", func() {
 
 			It("emits an error event", func() {
 				Eventually(events.Sent).Should(ContainElement(event.Error{
-					Message: "failed to fetch first-resource: oh no!",
+					Message: "failed to fetch inputs: oh no!",
 				}))
 			})
 		})
