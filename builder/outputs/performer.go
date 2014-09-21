@@ -28,14 +28,15 @@ func (p parallelPerformer) PerformOutputs(
 	emitter event.Emitter,
 	abort <-chan struct{},
 ) ([]builds.Output, error) {
-	errs := make(chan error, len(outputs))
-	results := make(chan builds.Output, len(outputs))
+	resultingOutputs := make([]builds.Output, len(outputs))
 
-	for _, output := range outputs {
-		go func(output builds.Output) {
+	errResults := make(chan error, len(outputs))
+
+	for i, output := range outputs {
+		go func(i int, output builds.Output) {
 			streamOut, err := container.StreamOut("/tmp/build/src/")
 			if err != nil {
-				errs <- err
+				errResults <- err
 				return
 			}
 
@@ -46,30 +47,33 @@ func (p parallelPerformer) PerformOutputs(
 
 			resource, err := p.tracker.Init(output.Type, eventLog, abort)
 			if err != nil {
-				errs <- err
+				errResults <- err
 				return
 			}
 
 			defer p.tracker.Release(resource)
 
 			computedOutput, err := resource.Out(streamOut, output)
-
 			if err != nil {
 				emitter.EmitEvent(event.Error{
 					Message: fmt.Sprintf(output.Name+" output failed: %s", err),
 				})
-			} else {
-				emitter.EmitEvent(event.Output{Output: computedOutput})
+
+				errResults <- err
+				return
 			}
 
-			errs <- err
-			results <- computedOutput
-		}(output)
+			emitter.EmitEvent(event.Output{Output: computedOutput})
+
+			resultingOutputs[i] = computedOutput
+
+			errResults <- nil
+		}(i, output)
 	}
 
 	var outputErr error
 	for i := 0; i < len(outputs); i++ {
-		err := <-errs
+		err := <-errResults
 		if err != nil {
 			outputErr = err
 		}
@@ -77,11 +81,6 @@ func (p parallelPerformer) PerformOutputs(
 
 	if outputErr != nil {
 		return nil, outputErr
-	}
-
-	var resultingOutputs []builds.Output
-	for i := 0; i < len(outputs); i++ {
-		resultingOutputs = append(resultingOutputs, <-results)
 	}
 
 	return resultingOutputs, nil
