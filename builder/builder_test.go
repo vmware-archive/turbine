@@ -433,6 +433,18 @@ var _ = Describe("Builder", func() {
 				})
 			})
 		})
+
+		Context("when the build has no inputs", func() {
+			BeforeEach(func() {
+				build.Inputs = nil
+			})
+
+			It("executes it in the default directory", func() {
+				handle, spec, _ := wardenClient.Connection.RunArgsForCall(0)
+				Ω(handle).Should(Equal("some-handle"))
+				Ω(spec.Dir).Should(BeEmpty())
+			})
+		})
 	})
 
 	Describe("Attach", func() {

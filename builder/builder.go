@@ -3,6 +3,7 @@ package builder
 import (
 	"errors"
 	"fmt"
+	"path"
 	"time"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
@@ -94,7 +95,7 @@ func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <
 		return RunningBuild{}, builder.emitError(emitter, "failed to create container", err)
 	}
 
-	err = builder.streamInResources(container, fetchedInputs, build.Config.Paths)
+	sourcesDir, err := builder.streamInResources(container, fetchedInputs, build.Config.Paths)
 	if err != nil {
 		return RunningBuild{}, builder.emitError(emitter, "failed to stream in resources", err)
 	}
@@ -105,6 +106,7 @@ func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <
 
 	process, err := builder.runBuild(
 		container,
+		sourcesDir,
 		emitterProcessIO(emitter),
 		build.Privileged,
 		build.Config,
@@ -204,24 +206,31 @@ func (builder *builder) streamInResources(
 	container warden.Container,
 	fetchedInputs []inputs.FetchedInput,
 	paths map[string]string,
-) error {
+) (string, error) {
+	if len(fetchedInputs) == 0 {
+		return "", nil
+	}
+
+	sourcesDir := "/tmp/build/src"
+
 	for _, input := range fetchedInputs {
 		destination, found := paths[input.Input.Name]
 		if !found {
 			destination = input.Input.Name
 		}
 
-		err := container.StreamIn("/tmp/build/src/"+destination, input.Stream)
+		err := container.StreamIn(path.Join(sourcesDir, destination), input.Stream)
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
 
-	return nil
+	return sourcesDir, nil
 }
 
 func (builder *builder) runBuild(
 	container warden.Container,
+	sourcesDir string,
 	processIO warden.ProcessIO,
 	privileged bool,
 	buildConfig builds.Config,
@@ -235,7 +244,7 @@ func (builder *builder) runBuild(
 		Path: buildConfig.Run.Path,
 		Args: buildConfig.Run.Args,
 		Env:  env,
-		Dir:  "/tmp/build/src",
+		Dir:  sourcesDir,
 
 		TTY: &warden.TTYSpec{},
 
