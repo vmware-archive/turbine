@@ -20,7 +20,7 @@ type outResponse struct {
 }
 
 func (resource *resource) Out(sourceStream io.Reader, output builds.Output) (builds.Output, error) {
-	err := resource.container.StreamIn("/tmp/build/src", sourceStream)
+	err := resource.container.StreamIn(ResourcesDir, sourceStream)
 	if err != nil {
 		return builds.Output{}, err
 	}
@@ -29,7 +29,7 @@ func (resource *resource) Out(sourceStream io.Reader, output builds.Output) (bui
 
 	err = resource.runScript(
 		"/opt/resource/out",
-		[]string{"/tmp/build/src"},
+		[]string{ResourcesDir},
 		outRequest{
 			Params:  output.Params,
 			Source:  output.Source,

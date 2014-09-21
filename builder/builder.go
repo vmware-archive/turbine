@@ -1,6 +1,8 @@
 package builder
 
 import (
+	"archive/tar"
+	"bytes"
 	"errors"
 	"fmt"
 	"path"
@@ -13,6 +15,7 @@ import (
 	"github.com/concourse/turbine/builder/outputs"
 	"github.com/concourse/turbine/event"
 	"github.com/concourse/turbine/logwriter"
+	"github.com/concourse/turbine/resource"
 )
 
 var ErrAborted = errors.New("build aborted")
@@ -95,7 +98,7 @@ func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <
 		return RunningBuild{}, builder.emitError(emitter, "failed to create container", err)
 	}
 
-	sourcesDir, err := builder.streamInResources(container, fetchedInputs, build.Config.Paths)
+	err = builder.streamInResources(container, fetchedInputs, build.Config.Paths)
 	if err != nil {
 		return RunningBuild{}, builder.emitError(emitter, "failed to stream in resources", err)
 	}
@@ -106,7 +109,6 @@ func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <
 
 	process, err := builder.runBuild(
 		container,
-		sourcesDir,
 		emitterProcessIO(emitter),
 		build.Privileged,
 		build.Config,
@@ -206,31 +208,39 @@ func (builder *builder) streamInResources(
 	container warden.Container,
 	fetchedInputs []inputs.FetchedInput,
 	paths map[string]string,
-) (string, error) {
+) error {
 	if len(fetchedInputs) == 0 {
-		return "", nil
-	}
+		// ensure sources dir exists by streaming an empty tarball in to it
+		emptyTar := new(bytes.Buffer)
 
-	sourcesDir := "/tmp/build/src"
-
-	for _, input := range fetchedInputs {
-		destination, found := paths[input.Input.Name]
-		if !found {
-			destination = input.Input.Name
-		}
-
-		err := container.StreamIn(path.Join(sourcesDir, destination), input.Stream)
+		err := tar.NewWriter(emptyTar).Close()
 		if err != nil {
-			return "", err
+			return err
+		}
+
+		err = container.StreamIn(resource.ResourcesDir, emptyTar)
+		if err != nil {
+			return err
+		}
+	} else {
+		for _, input := range fetchedInputs {
+			destination, found := paths[input.Input.Name]
+			if !found {
+				destination = input.Input.Name
+			}
+
+			err := container.StreamIn(path.Join(resource.ResourcesDir, destination), input.Stream)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
-	return sourcesDir, nil
+	return nil
 }
 
 func (builder *builder) runBuild(
 	container warden.Container,
-	sourcesDir string,
 	processIO warden.ProcessIO,
 	privileged bool,
 	buildConfig builds.Config,
@@ -244,7 +254,7 @@ func (builder *builder) runBuild(
 		Path: buildConfig.Run.Path,
 		Args: buildConfig.Run.Args,
 		Env:  env,
-		Dir:  sourcesDir,
+		Dir:  resource.ResourcesDir,
 
 		TTY: &warden.TTYSpec{},
 

@@ -33,7 +33,7 @@ func (resource *resource) In(input builds.Input) (io.Reader, builds.Input, build
 
 	err := resource.runScript(
 		"/opt/resource/in",
-		[]string{"/tmp/build/src/" + input.Name},
+		[]string{path.Join(ResourcesDir, input.Name)},
 		inRequest{input.Source, input.Params, input.Version},
 		&resp,
 	)
@@ -49,7 +49,7 @@ func (resource *resource) In(input builds.Input) (io.Reader, builds.Input, build
 	input.Version = resp.Version
 	input.Metadata = resp.Metadata
 
-	outStream, err := resource.container.StreamOut(path.Join("/tmp/build/src", input.Name) + "/")
+	outStream, err := resource.container.StreamOut(path.Join(ResourcesDir, input.Name) + "/")
 	if err != nil {
 		return nil, builds.Input{}, builds.Config{}, err
 	}
@@ -62,7 +62,7 @@ func (resource *resource) extractConfig(input builds.Input) (builds.Config, erro
 		return builds.Config{}, nil
 	}
 
-	configPath := path.Join("/tmp/build/src", input.Name, input.ConfigPath)
+	configPath := path.Join(ResourcesDir, input.Name, input.ConfigPath)
 
 	configStream, err := resource.container.StreamOut(configPath)
 	if err != nil {

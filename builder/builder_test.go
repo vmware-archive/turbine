@@ -1,9 +1,11 @@
 package builder_test
 
 import (
+	"archive/tar"
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"time"
 
@@ -439,10 +441,18 @@ var _ = Describe("Builder", func() {
 				build.Inputs = nil
 			})
 
-			It("executes it in the default directory", func() {
-				handle, spec, _ := wardenClient.Connection.RunArgsForCall(0)
+			It("streams an empty tarball in to /tmp/build/src", func() {
+				streamInCalls := wardenClient.Connection.StreamInCallCount()
+				Ω(streamInCalls).Should(Equal(1))
+
+				handle, dst, reader := wardenClient.Connection.StreamInArgsForCall(0)
 				Ω(handle).Should(Equal("some-handle"))
-				Ω(spec.Dir).Should(BeEmpty())
+				Ω(dst).Should(Equal("/tmp/build/src"))
+
+				tarReader := tar.NewReader(reader)
+
+				_, err := tarReader.Next()
+				Ω(err).Should(Equal(io.EOF))
 			})
 		})
 	})

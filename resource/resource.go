@@ -13,6 +13,8 @@ type Resource interface {
 	Check(builds.Input) ([]builds.Version, error)
 }
 
+const ResourcesDir = "/tmp/build/src"
+
 type resource struct {
 	container warden.Container
 	logs      io.Writer
