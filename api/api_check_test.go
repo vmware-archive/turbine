@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
-	"time"
 
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/resource/fakes"
@@ -59,23 +57,13 @@ var _ = Describe("POST /checks", func() {
 			tracker.InitReturns(resource, nil)
 		})
 
-		It("returns 200", func() {
-			Ω(response.StatusCode).Should(Equal(http.StatusOK))
-		})
+		Context("and checking succeeds", func() {
+			var (
+				version1 builds.Version
+				version2 builds.Version
 
-		It("checks for new versions of the given input", func() {
-			Ω(resource.CheckCallCount()).Should(Equal(1))
-			Ω(resource.CheckArgsForCall(0)).Should(Equal(input))
-		})
-
-		It("releases the resource", func() {
-			Ω(tracker.ReleaseCallCount()).Should(Equal(1))
-			Ω(tracker.ReleaseArgsForCall(0)).Should(Equal(resource))
-		})
-
-		Context("when the check returns versions", func() {
-			var version1 builds.Version
-			var version2 builds.Version
+				returnedVersions []builds.Version
+			)
 
 			BeforeEach(func() {
 				version1 = builds.Version{"ref": "a"}
@@ -84,73 +72,31 @@ var _ = Describe("POST /checks", func() {
 				resource.CheckReturns([]builds.Version{version1, version2}, nil)
 			})
 
-			It("responds with them", func() {
-				var versions []builds.Version
-				err := json.NewDecoder(response.Body).Decode(&versions)
-				Ω(err).ShouldNot(HaveOccurred())
-
-				Ω(versions).Should(Equal([]builds.Version{version1, version2}))
-			})
-		})
-
-		Context("when an interval is specified", func() {
-			BeforeEach(func() {
-				requestURL = requestURL + "?interval=100ms"
-			})
-
-			var times chan time.Time
-			var responseStream *json.Decoder
-
-			BeforeEach(func() {
-				times = make(chan time.Time, 100)
-				versions := make(chan []builds.Version, 100)
-
-				versions <- []builds.Version{}
-				versions <- []builds.Version{}
-				versions <- []builds.Version{{"version": "1"}, {"version": "2"}}
-
-				resource.CheckStub = func(builds.Input) ([]builds.Version, error) {
-					times <- time.Now()
-					return <-versions, nil
-				}
-			})
-
 			JustBeforeEach(func() {
-				responseStream = json.NewDecoder(response.Body)
+				err := json.NewDecoder(response.Body).Decode(&returnedVersions)
+				Ω(err).ShouldNot(HaveOccurred())
 			})
 
-			It("writes the versions and stops once some show up", func() {
-				var t1, t2, t3 time.Time
+			It("returns 200", func() {
+				Ω(response.StatusCode).Should(Equal(http.StatusOK))
+			})
 
-				Eventually(times).Should(Receive(&t1))
+			It("checks for new versions of the given input", func() {
+				Ω(resource.CheckCallCount()).Should(Equal(1))
+				Ω(resource.CheckArgsForCall(0)).Should(Equal(input))
+			})
 
-				var versions []builds.Version
-				err := responseStream.Decode(&versions)
-				Ω(err).ShouldNot(HaveOccurred())
-				Ω(versions).Should(BeEmpty())
+			It("returns the detected versions", func() {
+				Ω(returnedVersions).Should(Equal([]builds.Version{version1, version2}))
+			})
 
-				Eventually(times).Should(Receive(&t2))
-
-				err = responseStream.Decode(&versions)
-				Ω(err).ShouldNot(HaveOccurred())
-				Ω(versions).Should(BeEmpty())
-
-				Ω(t2.Sub(t1)).Should(BeNumerically("~", 100*time.Millisecond, 50*time.Millisecond))
-
-				Eventually(times).Should(Receive(&t3))
-
-				err = responseStream.Decode(&versions)
-				Ω(err).ShouldNot(HaveOccurred())
-				Ω(versions).Should(Equal([]builds.Version{{"version": "1"}, {"version": "2"}}))
-
-				Ω(t3.Sub(t2)).Should(BeNumerically("~", 100*time.Millisecond, 50*time.Millisecond))
-
-				err = responseStream.Decode(&versions)
-				Ω(err).Should(Equal(io.EOF))
+			It("releases the resource", func() {
+				Ω(tracker.ReleaseCallCount()).Should(Equal(1))
+				Ω(tracker.ReleaseArgsForCall(0)).Should(Equal(resource))
 			})
 		})
 
-		Context("when the check fails", func() {
+		Context("and checking fails", func() {
 			BeforeEach(func() {
 				resource.CheckReturns(nil, errors.New("oh no!"))
 			})
