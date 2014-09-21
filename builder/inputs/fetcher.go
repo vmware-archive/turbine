@@ -33,32 +33,66 @@ func NewParallelFetcher(tracker resource.Tracker) Fetcher {
 func (fetcher *parallelFetcher) Fetch(inputs []builds.Input, emitter event.Emitter, abort <-chan struct{}) ([]FetchedInput, error) {
 	fetchedInputs := make([]FetchedInput, len(inputs))
 
+	errResults := make(chan error, len(inputs))
+
+	initializedResources := make(chan resource.Resource, len(inputs))
+
 	for i, input := range inputs {
-		eventLog := logwriter.NewWriter(emitter, event.Origin{
-			Type: event.OriginTypeInput,
-			Name: input.Name,
-		})
+		go func(i int, input builds.Input) {
+			eventLog := logwriter.NewWriter(emitter, event.Origin{
+				Type: event.OriginTypeInput,
+				Name: input.Name,
+			})
 
-		resource, err := fetcher.tracker.Init(input.Type, eventLog, abort)
+			resource, err := fetcher.tracker.Init(input.Type, eventLog, abort)
+			if err != nil {
+				errResults <- err
+				return
+			}
+
+			initializedResources <- resource
+
+			tarStream, computedInput, buildConfig, err := resource.In(input)
+			if err != nil {
+				errResults <- err
+				return
+			}
+
+			emitter.EmitEvent(event.Input{Input: computedInput})
+
+			fetchedInputs[i] = FetchedInput{
+				Input:  computedInput,
+				Stream: tarStream,
+				Config: buildConfig,
+				Release: func() error {
+					return fetcher.tracker.Release(resource)
+				},
+			}
+
+			errResults <- nil
+		}(i, input)
+	}
+
+	var fetchErr error
+	for i := 0; i < len(inputs); i++ {
+		err := <-errResults
 		if err != nil {
-			return nil, err
+			fetchErr = err
+		}
+	}
+
+	if fetchErr != nil {
+	dance:
+		for {
+			select {
+			case res := <-initializedResources:
+				fetcher.tracker.Release(res)
+			default:
+				break dance
+			}
 		}
 
-		tarStream, computedInput, buildConfig, err := resource.In(input)
-		if err != nil {
-			return nil, err
-		}
-
-		emitter.EmitEvent(event.Input{Input: computedInput})
-
-		fetchedInputs[i] = FetchedInput{
-			Input:  computedInput,
-			Stream: tarStream,
-			Config: buildConfig,
-			Release: func() error {
-				return fetcher.tracker.Release(resource)
-			},
-		}
+		return nil, fetchErr
 	}
 
 	return fetchedInputs, nil

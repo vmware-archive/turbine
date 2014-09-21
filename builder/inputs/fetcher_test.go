@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
+	"sync"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -79,19 +80,38 @@ var _ = Describe("Inputs", func() {
 		})
 
 		Context("when each resource in action succeeds", func() {
+			var (
+				firstConfig  builds.Config
+				secondConfig builds.Config
+			)
+
 			BeforeEach(func() {
+				firstConfig = builds.Config{}
+				secondConfig = builds.Config{}
+
+				sync := new(sync.WaitGroup)
+				sync.Add(2)
+
 				resource1.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
+					// asserts that inputs are fetched in parallel
+					sync.Done()
+					sync.Wait()
+
 					sourceStream := bytes.NewBufferString("some-data-1")
 					input.Version = builds.Version{"version": "1"}
 					input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-1"}}
-					return sourceStream, input, builds.Config{}, nil
+					return sourceStream, input, firstConfig, nil
 				}
 
 				resource2.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
+					// asserts that inputs are fetched in parallel
+					sync.Done()
+					sync.Wait()
+
 					sourceStream := bytes.NewBufferString("some-data-2")
 					input.Version = builds.Version{"version": "2"}
 					input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-2"}}
-					return sourceStream, input, builds.Config{}, nil
+					return sourceStream, input, secondConfig, nil
 				}
 			})
 
@@ -159,27 +179,18 @@ var _ = Describe("Inputs", func() {
 
 			Context("when an input provides build configuration", func() {
 				BeforeEach(func() {
-					resource2.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
-						sourceStream := bytes.NewBufferString("some-data-2")
+					firstConfig = builds.Config{
+						Image: "build-config-image",
 
-						input.Version = builds.Version{"key": "version-2"}
-						input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-2"}}
-
-						config := builds.Config{
-							Image: "build-config-image",
-
-							Params: map[string]string{
-								"FOO":         "build-config-foo",
-								"CONFIG_ONLY": "build-config-only",
-							},
-						}
-
-						return sourceStream, input, config, nil
+						Params: map[string]string{
+							"FOO":         "build-config-foo",
+							"CONFIG_ONLY": "build-config-only",
+						},
 					}
 				})
 
 				It("returns it on the fetched input", func() {
-					Ω(fetchedInputs[1].Config).Should(Equal(builds.Config{
+					Ω(fetchedInputs[0].Config).Should(Equal(builds.Config{
 						Image: "build-config-image",
 
 						Params: map[string]string{
@@ -231,11 +242,26 @@ var _ = Describe("Inputs", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
-				tracker.InitReturns(nil, disaster)
+				resources := make(chan resource.Resource, 1)
+				resources <- resource1
+
+				tracker.InitStub = func(typ string, logs io.Writer, abort <-chan struct{}) (resource.Resource, error) {
+					select {
+					case res := <-resources:
+						return res, nil
+					default:
+						return nil, disaster
+					}
+				}
 			})
 
 			It("returns the error", func() {
 				Ω(fetchErr).Should(Equal(disaster))
+			})
+
+			It("releases all successfully-initialized resources", func() {
+				Ω(tracker.ReleaseCallCount()).Should(Equal(1))
+				Ω(tracker.ReleaseArgsForCall(0)).Should(Equal(resource1))
 			})
 		})
 
@@ -248,6 +274,12 @@ var _ = Describe("Inputs", func() {
 
 			It("returns the error", func() {
 				Ω(fetchErr).Should(Equal(disaster))
+			})
+
+			It("releases all resources", func() {
+				Ω(tracker.ReleaseCallCount()).Should(Equal(2))
+				Ω(tracker.ReleaseArgsForCall(0)).Should(Equal(resource1))
+				Ω(tracker.ReleaseArgsForCall(1)).Should(Equal(resource2))
 			})
 		})
 	})
