@@ -1,8 +1,6 @@
 package outputs
 
 import (
-	"fmt"
-
 	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/event"
@@ -36,6 +34,7 @@ func (p parallelPerformer) PerformOutputs(
 		go func(i int, output builds.Output) {
 			streamOut, err := container.StreamOut("/tmp/build/src/")
 			if err != nil {
+				emitOutputError(emitter, output, err)
 				errResults <- err
 				return
 			}
@@ -47,6 +46,7 @@ func (p parallelPerformer) PerformOutputs(
 
 			resource, err := p.tracker.Init(output.Type, eventLog, abort)
 			if err != nil {
+				emitOutputError(emitter, output, err)
 				errResults <- err
 				return
 			}
@@ -55,10 +55,7 @@ func (p parallelPerformer) PerformOutputs(
 
 			computedOutput, err := resource.Out(streamOut, output)
 			if err != nil {
-				emitter.EmitEvent(event.Error{
-					Message: fmt.Sprintf(output.Name+" output failed: %s", err),
-				})
-
+				emitOutputError(emitter, output, err)
 				errResults <- err
 				return
 			}
@@ -84,4 +81,14 @@ func (p parallelPerformer) PerformOutputs(
 	}
 
 	return resultingOutputs, nil
+}
+
+func emitOutputError(emitter event.Emitter, output builds.Output, err error) {
+	emitter.EmitEvent(event.Error{
+		Message: err.Error(),
+		Origin: event.Origin{
+			Type: event.OriginTypeOutput,
+			Name: output.Name,
+		},
+	})
 }

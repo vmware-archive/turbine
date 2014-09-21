@@ -88,6 +88,10 @@ var _ = Describe("Encoding & Decoding messages", func() {
 		BeforeEach(func() {
 			event = Error{
 				Message: "oh no!",
+				Origin: Origin{
+					Type: OriginTypeInput,
+					Name: "some-input",
+				},
 			}
 		})
 

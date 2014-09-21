@@ -200,7 +200,11 @@ var _ = Describe("Performer", func() {
 				_, output := resource1.OutArgsForCall(0)
 
 				Eventually(events.Sent).Should(ContainElement(event.Error{
-					Message: output.Name + " output failed: oh no!",
+					Message: "oh no!",
+					Origin: event.Origin{
+						Type: event.OriginTypeOutput,
+						Name: output.Name,
+					},
 				}))
 			})
 
@@ -282,6 +286,36 @@ var _ = Describe("Performer", func() {
 		})
 	})
 
+	Context("when initializing the resource fails", func() {
+		disaster := errors.New("oh no!")
+
+		BeforeEach(func() {
+			tracker.InitReturns(nil, disaster)
+		})
+
+		It("returns the error", func() {
+			Ω(performErr).Should(Equal(disaster))
+		})
+
+		It("emits an error event", func() {
+			Eventually(events.Sent).Should(ContainElement(event.Error{
+				Message: "oh no!",
+				Origin: event.Origin{
+					Type: event.OriginTypeOutput,
+					Name: "monkey",
+				},
+			}))
+
+			Eventually(events.Sent).Should(ContainElement(event.Error{
+				Message: "oh no!",
+				Origin: event.Origin{
+					Type: event.OriginTypeOutput,
+					Name: "banana",
+				},
+			}))
+		})
+	})
+
 	Context("when streaming out fails", func() {
 		disaster := errors.New("oh no!")
 
@@ -291,6 +325,24 @@ var _ = Describe("Performer", func() {
 
 		It("returns the error", func() {
 			Ω(performErr).Should(Equal(disaster))
+		})
+
+		It("emits an error event", func() {
+			Eventually(events.Sent).Should(ContainElement(event.Error{
+				Message: "oh no!",
+				Origin: event.Origin{
+					Type: event.OriginTypeOutput,
+					Name: "monkey",
+				},
+			}))
+
+			Eventually(events.Sent).Should(ContainElement(event.Error{
+				Message: "oh no!",
+				Origin: event.Origin{
+					Type: event.OriginTypeOutput,
+					Name: "banana",
+				},
+			}))
 		})
 	})
 })
