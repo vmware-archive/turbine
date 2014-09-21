@@ -79,6 +79,8 @@ func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <
 	for i, fetched := range fetchedInputs {
 		newInputs[i] = fetched.Input
 		build.Config = fetched.Config.Merge(build.Config)
+
+		defer fetched.Release()
 	}
 
 	build.Inputs = newInputs

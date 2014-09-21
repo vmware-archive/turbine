@@ -10,9 +10,10 @@ import (
 )
 
 type FetchedInput struct {
-	Input  builds.Input
-	Stream io.Reader
-	Config builds.Config
+	Input   builds.Input
+	Stream  io.Reader
+	Config  builds.Config
+	Release func() error
 }
 
 type Fetcher interface {
@@ -43,8 +44,6 @@ func (fetcher *parallelFetcher) Fetch(inputs []builds.Input, emitter event.Emitt
 			return nil, err
 		}
 
-		defer fetcher.tracker.Release(resource)
-
 		tarStream, computedInput, buildConfig, err := resource.In(input)
 		if err != nil {
 			return nil, err
@@ -56,6 +55,9 @@ func (fetcher *parallelFetcher) Fetch(inputs []builds.Input, emitter event.Emitt
 			Input:  computedInput,
 			Stream: tarStream,
 			Config: buildConfig,
+			Release: func() error {
+				return fetcher.tracker.Release(resource)
+			},
 		}
 	}
 

@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
-	"sync"
 	"time"
 
 	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
@@ -18,21 +16,22 @@ import (
 	"github.com/concourse/turbine/api/builds"
 	. "github.com/concourse/turbine/builder"
 	"github.com/concourse/turbine/builder/inputs"
+	ifakes "github.com/concourse/turbine/builder/inputs/fakes"
 	ofakes "github.com/concourse/turbine/builder/outputs/fakes"
 	"github.com/concourse/turbine/event"
 	efakes "github.com/concourse/turbine/event/fakes"
+	"github.com/concourse/turbine/event/testlog"
 	"github.com/concourse/turbine/resource"
-	rfakes "github.com/concourse/turbine/resource/fakes"
 )
 
 var _ = Describe("Builder", func() {
 	var (
-		tracker         *rfakes.FakeTracker
 		wardenClient    *fake_warden_client.FakeClient
+		inputFetcher    *ifakes.FakeFetcher
 		outputPerformer *ofakes.FakePerformer
 
 		emitter *efakes.FakeEmitter
-		events  *eventLog
+		events  *testlog.EventLog
 
 		builder Builder
 
@@ -40,17 +39,17 @@ var _ = Describe("Builder", func() {
 	)
 
 	BeforeEach(func() {
-		tracker = new(rfakes.FakeTracker)
 		wardenClient = fake_warden_client.New()
 
 		emitter = new(efakes.FakeEmitter)
 
-		events = &eventLog{}
+		events = &testlog.EventLog{}
 		emitter.EmitEventStub = events.Add
 
+		inputFetcher = new(ifakes.FakeFetcher)
 		outputPerformer = new(ofakes.FakePerformer)
 
-		builder = NewBuilder(wardenClient, inputs.NewParallelFetcher(tracker), outputPerformer)
+		builder = NewBuilder(wardenClient, inputFetcher, outputPerformer)
 
 		build = builds.Build{
 			EventsCallback: "some-events-callback",
@@ -72,11 +71,10 @@ var _ = Describe("Builder", func() {
 	})
 
 	Describe("Start", func() {
-		var started RunningBuild
-		var startErr error
-
-		var resource1 *rfakes.FakeResource
-		var resource2 *rfakes.FakeResource
+		var (
+			started  RunningBuild
+			startErr error
+		)
 
 		BeforeEach(func() {
 			build.Inputs = []builds.Input{
@@ -88,17 +86,6 @@ var _ = Describe("Builder", func() {
 					Name: "second-resource",
 					Type: "raw",
 				},
-			}
-
-			resource1 = new(rfakes.FakeResource)
-			resource2 = new(rfakes.FakeResource)
-
-			resources := make(chan resource.Resource, 2)
-			resources <- resource1
-			resources <- resource2
-
-			tracker.InitStub = func(typ string, logs io.Writer, abort <-chan struct{}) (resource.Resource, error) {
-				return <-resources, nil
 			}
 
 			wardenClient.Connection.CreateReturns("some-handle", nil)
@@ -117,44 +104,56 @@ var _ = Describe("Builder", func() {
 		})
 
 		Context("when fetching the build's inputs succeeds", func() {
+			var (
+				fetchedInputs []inputs.FetchedInput
+
+				firstReleased  chan struct{}
+				secondReleased chan struct{}
+			)
+
 			BeforeEach(func() {
-				resource1.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
-					sourceStream := bytes.NewBufferString("some-data-1")
-					input.Version = builds.Version{"key": "version-1"}
-					input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-1"}}
-					return sourceStream, input, builds.Config{}, nil
+				firstReleased = make(chan struct{})
+				secondReleased = make(chan struct{})
+
+				fetchedInputs = []inputs.FetchedInput{
+					{
+						Input: builds.Input{
+							Name:     "first-resource",
+							Type:     "raw",
+							Version:  builds.Version{"version": "1"},
+							Metadata: []builds.MetadataField{{Name: "key", Value: "meta-1"}},
+						},
+						Stream: bytes.NewBufferString("some-data-1"),
+						Release: func() error {
+							close(firstReleased)
+							return nil
+						},
+					},
+					{
+						Input: builds.Input{
+							Name:     "second-resource",
+							Type:     "raw",
+							Version:  builds.Version{"version": "2"},
+							Metadata: []builds.MetadataField{{Name: "key", Value: "meta-2"}},
+						},
+						Stream: bytes.NewBufferString("some-data-2"),
+						Release: func() error {
+							close(secondReleased)
+							return nil
+						},
+					},
 				}
 
-				resource2.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
-					sourceStream := bytes.NewBufferString("some-data-2")
-					input.Version = builds.Version{"key": "version-2"}
-					input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-2"}}
-					return sourceStream, input, builds.Config{}, nil
+				inputFetcher.FetchStub = func(fetchInputs []builds.Input, fetchEmitter event.Emitter, fetchAbort <-chan struct{}) ([]inputs.FetchedInput, error) {
+					Ω(fetchInputs).Should(Equal(build.Inputs))
+					Ω(fetchEmitter).Should(Equal(emitter))
+
+					return fetchedInputs, nil
 				}
 			})
 
 			It("successfully starts", func() {
 				Ω(startErr).ShouldNot(HaveOccurred())
-			})
-
-			It("emits input events", func() {
-				Eventually(events.Sent).Should(ContainElement(event.Input{
-					Input: builds.Input{
-						Name:     "first-resource",
-						Type:     "raw",
-						Version:  builds.Version{"key": "version-1"},
-						Metadata: []builds.MetadataField{{Name: "key", Value: "meta-1"}},
-					},
-				}))
-
-				Eventually(events.Sent).Should(ContainElement(event.Input{
-					Input: builds.Input{
-						Name:     "second-resource",
-						Type:     "raw",
-						Version:  builds.Version{"key": "version-2"},
-						Metadata: []builds.MetadataField{{Name: "key", Value: "meta-2"}},
-					},
-				}))
 			})
 
 			It("creates a container with the specified image", func() {
@@ -163,18 +162,6 @@ var _ = Describe("Builder", func() {
 			})
 
 			It("streams them in to the container", func() {
-				Ω(resource1.InCallCount()).Should(Equal(1))
-				Ω(resource1.InArgsForCall(0)).Should(Equal(builds.Input{
-					Name: "first-resource",
-					Type: "raw",
-				}))
-
-				Ω(resource2.InCallCount()).Should(Equal(1))
-				Ω(resource2.InArgsForCall(0)).Should(Equal(builds.Input{
-					Name: "second-resource",
-					Type: "raw",
-				}))
-
 				streamInCalls := wardenClient.Connection.StreamInCallCount()
 				Ω(streamInCalls).Should(Equal(2))
 
@@ -194,6 +181,11 @@ var _ = Describe("Builder", func() {
 						Fail("unknown stream destination: " + dst)
 					}
 				}
+			})
+
+			It("releases each resource", func() {
+				Ω(firstReleased).Should(BeClosed())
+				Ω(secondReleased).Should(BeClosed())
 			})
 
 			It("runs the build's script in the container", func() {
@@ -235,6 +227,80 @@ var _ = Describe("Builder", func() {
 				}
 			})
 
+			Context("when an input provides build configuration", func() {
+				BeforeEach(func() {
+					fetchedInputs[0].Config = builds.Config{
+						Image: "build-config-image",
+
+						Params: map[string]string{
+							"FOO":         "build-config-foo",
+							"CONFIG_ONLY": "build-config-only",
+						},
+					}
+				})
+
+				It("returns merges the original config over them", func() {
+					Ω(started.Build.Config.Image).Should(Equal("some-rootfs"))
+					Ω(started.Build.Config.Params).Should(Equal(map[string]string{
+						"FOO":         "bar",
+						"BAZ":         "buzz",
+						"CONFIG_ONLY": "build-config-only",
+					}))
+				})
+
+				Context("with new input destinations", func() {
+					BeforeEach(func() {
+						fetchedInputs[0].Config = builds.Config{
+							Paths: map[string]string{
+								"first-resource":  "reconfigured-first/source/path",
+								"second-resource": "reconfigured-second/source/path",
+							},
+						}
+					})
+
+					It("streams them in using the new destinations", func() {
+						streamInCalls := wardenClient.Connection.StreamInCallCount()
+						Ω(streamInCalls).Should(Equal(2))
+
+						for i := 0; i < streamInCalls; i++ {
+							handle, dst, reader := wardenClient.Connection.StreamInArgsForCall(i)
+							Ω(handle).Should(Equal("some-handle"))
+
+							in, err := ioutil.ReadAll(reader)
+							Ω(err).ShouldNot(HaveOccurred())
+
+							switch string(in) {
+							case "some-data-1":
+								Ω(dst).Should(Equal("/tmp/build/src/reconfigured-first/source/path"))
+							case "some-data-2":
+								Ω(dst).Should(Equal("/tmp/build/src/reconfigured-second/source/path"))
+							default:
+								Fail("unknown stream destination: " + dst)
+							}
+						}
+					})
+				})
+			})
+
+			Context("when the build is aborted", func() {
+				BeforeEach(func() {
+					// simulate abort so that start returns it
+					inputFetcher.FetchReturns(nil, resource.ErrAborted)
+				})
+
+				It("aborts fetching", func() {
+					Ω(startErr).Should(Equal(resource.ErrAborted))
+
+					_, _, fetchAbort := inputFetcher.FetchArgsForCall(0)
+
+					Ω(fetchAbort).ShouldNot(BeClosed())
+
+					close(abort)
+
+					Ω(fetchAbort).Should(BeClosed())
+				})
+			})
+
 			Context("when running the build's script fails", func() {
 				disaster := errors.New("oh no!")
 
@@ -262,43 +328,6 @@ var _ = Describe("Builder", func() {
 					handle, spec, _ := wardenClient.Connection.RunArgsForCall(0)
 					Ω(handle).Should(Equal("some-handle"))
 					Ω(spec.Privileged).Should(BeTrue())
-				})
-			})
-
-			It("releases each resource", func() {
-				Ω(tracker.ReleaseCallCount()).Should(Equal(2))
-
-				allReleased := []resource.Resource{
-					tracker.ReleaseArgsForCall(0),
-					tracker.ReleaseArgsForCall(1),
-				}
-
-				Ω(allReleased).Should(ContainElement(resource1))
-				Ω(allReleased).Should(ContainElement(resource2))
-			})
-
-			Context("when the inputs emit logs", func() {
-				BeforeEach(func() {
-					tracker.InitStub = func(typ string, logs io.Writer, abort <-chan struct{}) (resource.Resource, error) {
-						go func() {
-							defer GinkgoRecover()
-
-							_, err := logs.Write([]byte("hello from the resource"))
-							Ω(err).ShouldNot(HaveOccurred())
-						}()
-
-						return new(rfakes.FakeResource), nil
-					}
-				})
-
-				It("emits a build log event", func() {
-					Eventually(events.Sent).Should(ContainElement(event.Log{
-						Payload: "hello from the resource",
-						Origin: event.Origin{
-							Type: event.OriginTypeInput,
-							Name: "first-resource",
-						},
-					}))
 				})
 			})
 
@@ -338,25 +367,6 @@ var _ = Describe("Builder", func() {
 				})
 			})
 
-			Context("when the build is aborted", func() {
-				BeforeEach(func() {
-					resource1.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
-						// return abort error to simulate fetching being aborted;
-						// assert that the channel closed below
-						return nil, builds.Input{}, builds.Config{}, ErrAborted
-					}
-				})
-
-				It("aborts all resource activity", func() {
-					Ω(startErr).Should(Equal(ErrAborted))
-
-					close(abort)
-
-					_, _, resourceAbort := tracker.InitArgsForCall(0)
-					Ω(resourceAbort).Should(BeClosed())
-				})
-			})
-
 			Context("when creating the container fails", func() {
 				disaster := errors.New("oh no!")
 
@@ -371,6 +381,24 @@ var _ = Describe("Builder", func() {
 				It("emits an error event", func() {
 					Eventually(events.Sent).Should(ContainElement(event.Error{
 						Message: "failed to create container: oh no!",
+					}))
+				})
+			})
+
+			Context("when copying the source in to the container fails", func() {
+				disaster := errors.New("oh no!")
+
+				BeforeEach(func() {
+					wardenClient.Connection.StreamInReturns(disaster)
+				})
+
+				It("returns the error", func() {
+					Ω(startErr).Should(Equal(disaster))
+				})
+
+				It("emits an error event", func() {
+					Eventually(events.Sent).Should(ContainElement(event.Error{
+						Message: "failed to stream in resources: oh no!",
 					}))
 				})
 			})
@@ -390,10 +418,10 @@ var _ = Describe("Builder", func() {
 				It("notifies that the build is started, with updated inputs (version + metadata)", func() {
 					inputs := started.Build.Inputs
 
-					Ω(inputs[0].Version).Should(Equal(builds.Version{"key": "version-1"}))
+					Ω(inputs[0].Version).Should(Equal(builds.Version{"version": "1"}))
 					Ω(inputs[0].Metadata).Should(Equal([]builds.MetadataField{{Name: "key", Value: "meta-1"}}))
 
-					Ω(inputs[1].Version).Should(Equal(builds.Version{"key": "version-2"}))
+					Ω(inputs[1].Version).Should(Equal(builds.Version{"version": "2"}))
 					Ω(inputs[1].Metadata).Should(Equal([]builds.MetadataField{{Name: "key", Value: "meta-2"}}))
 				})
 
@@ -403,140 +431,6 @@ var _ = Describe("Builder", func() {
 					Ω(started.ProcessID).Should(Equal(uint32(42)))
 					Ω(started.Process).ShouldNot(BeNil())
 				})
-			})
-
-			Context("when an input provides build configuration", func() {
-				BeforeEach(func() {
-					resource2.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
-						sourceStream := bytes.NewBufferString("some-data-2")
-
-						input.Version = builds.Version{"key": "version-2"}
-						input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-2"}}
-
-						config := builds.Config{
-							Image: "build-config-image",
-
-							Params: map[string]string{
-								"FOO":         "build-config-foo",
-								"CONFIG_ONLY": "build-config-only",
-							},
-						}
-
-						return sourceStream, input, config, nil
-					}
-				})
-
-				It("returns merges the original config over them", func() {
-					Ω(started.Build.Config.Image).Should(Equal("some-rootfs"))
-					Ω(started.Build.Config.Params).Should(Equal(map[string]string{
-						"FOO":         "bar",
-						"BAZ":         "buzz",
-						"CONFIG_ONLY": "build-config-only",
-					}))
-				})
-
-				Context("with new input destinations", func() {
-					BeforeEach(func() {
-						resource2.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
-							sourceStream := bytes.NewBufferString("some-data-2")
-
-							input.Version = builds.Version{"key": "version-2"}
-							input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-2"}}
-
-							config := builds.Config{
-								Paths: map[string]string{
-									"first-resource":  "reconfigured-first/source/path",
-									"second-resource": "reconfigured-second/source/path",
-								},
-							}
-
-							return sourceStream, input, config, nil
-						}
-					})
-
-					It("streams them in using the new destinations", func() {
-						streamInCalls := wardenClient.Connection.StreamInCallCount()
-						Ω(streamInCalls).Should(Equal(2))
-
-						for i := 0; i < streamInCalls; i++ {
-							handle, dst, reader := wardenClient.Connection.StreamInArgsForCall(i)
-							Ω(handle).Should(Equal("some-handle"))
-
-							in, err := ioutil.ReadAll(reader)
-							Ω(err).ShouldNot(HaveOccurred())
-
-							switch string(in) {
-							case "some-data-1":
-								Ω(dst).Should(Equal("/tmp/build/src/reconfigured-first/source/path"))
-							case "some-data-2":
-								Ω(dst).Should(Equal("/tmp/build/src/reconfigured-second/source/path"))
-							default:
-								Fail("unknown stream destination: " + dst)
-							}
-						}
-					})
-				})
-			})
-		})
-
-		Context("when initializing an input resource fails", func() {
-			disaster := errors.New("oh no!")
-
-			BeforeEach(func() {
-				tracker.InitReturns(nil, disaster)
-			})
-
-			It("returns the error", func() {
-				Ω(startErr).Should(Equal(disaster))
-			})
-
-			It("emits an error event", func() {
-				Eventually(events.Sent).Should(ContainElement(event.Error{
-					Message: "failed to fetch inputs: oh no!",
-				}))
-			})
-		})
-
-		Context("when fetching the source fails", func() {
-			disaster := errors.New("oh no!")
-
-			BeforeEach(func() {
-				resource1.InReturns(nil, builds.Input{}, builds.Config{}, disaster)
-			})
-
-			It("returns the error", func() {
-				Ω(startErr).Should(Equal(disaster))
-			})
-
-			It("emits an error event", func() {
-				Eventually(events.Sent).Should(ContainElement(event.Error{
-					Message: "failed to fetch inputs: oh no!",
-				}))
-			})
-		})
-
-		Context("when copying the source in to the container fails", func() {
-			disaster := errors.New("oh no!")
-
-			BeforeEach(func() {
-				resource1.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
-					sourceStream := bytes.NewBufferString("some-data-1")
-					input.Version = builds.Version{"key": "version-1"}
-					input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-1"}}
-					return sourceStream, input, builds.Config{}, nil
-				}
-
-				wardenClient.Connection.StreamInReturns(disaster)
-			})
-
-			It("returns the error", func() {
-				Ω(startErr).Should(Equal(disaster))
-			})
-
-			It("emits an error event", func() {
-				Eventually(events.Sent).Should(ContainElement(event.Error{
-					Message: "failed to stream in resources: oh no!",
-				}))
 			})
 		})
 	})
@@ -1109,22 +1003,3 @@ var _ = Describe("Builder", func() {
 		})
 	})
 })
-
-type eventLog struct {
-	events  []event.Event
-	eventsL sync.RWMutex
-}
-
-func (l *eventLog) Add(e event.Event) {
-	l.eventsL.Lock()
-	l.events = append(l.events, e)
-	l.eventsL.Unlock()
-}
-
-func (l *eventLog) Sent() []event.Event {
-	l.eventsL.RLock()
-	events := make([]event.Event, len(l.events))
-	copy(events, l.events)
-	l.eventsL.RUnlock()
-	return events
-}

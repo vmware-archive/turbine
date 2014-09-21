@@ -13,6 +13,7 @@ import (
 	. "github.com/concourse/turbine/builder/outputs"
 	"github.com/concourse/turbine/event"
 	efakes "github.com/concourse/turbine/event/fakes"
+	"github.com/concourse/turbine/event/testlog"
 	"github.com/concourse/turbine/resource"
 	rfakes "github.com/concourse/turbine/resource/fakes"
 
@@ -30,7 +31,7 @@ var _ = Describe("Performer", func() {
 		container        warden.Container
 		outputsToPerform []builds.Output
 		emitter          *efakes.FakeEmitter
-		events           *eventLog
+		events           *testlog.EventLog
 		abort            chan struct{}
 
 		resource1 *rfakes.FakeResource
@@ -85,7 +86,7 @@ var _ = Describe("Performer", func() {
 
 		emitter = new(efakes.FakeEmitter)
 
-		events = &eventLog{}
+		events = &testlog.EventLog{}
 		emitter.EmitEventStub = events.Add
 
 		performer = NewParallelPerformer(tracker)
@@ -293,23 +294,3 @@ var _ = Describe("Performer", func() {
 		})
 	})
 })
-
-// TODO dedup this from builder
-type eventLog struct {
-	events  []event.Event
-	eventsL sync.RWMutex
-}
-
-func (l *eventLog) Add(e event.Event) {
-	l.eventsL.Lock()
-	l.events = append(l.events, e)
-	l.eventsL.Unlock()
-}
-
-func (l *eventLog) Sent() []event.Event {
-	l.eventsL.RLock()
-	events := make([]event.Event, len(l.events))
-	copy(events, l.events)
-	l.eventsL.RUnlock()
-	return events
-}
