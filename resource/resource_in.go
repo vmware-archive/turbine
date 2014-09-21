@@ -2,6 +2,7 @@ package resource
 
 import (
 	"archive/tar"
+	"fmt"
 	"io"
 	"path"
 
@@ -72,6 +73,10 @@ func (resource *resource) extractConfig(input builds.Input) (builds.Config, erro
 
 	_, err = reader.Next()
 	if err != nil {
+		if err == io.EOF {
+			return builds.Config{}, fmt.Errorf("could not find build config '%s'", input.ConfigPath)
+		}
+
 		return builds.Config{}, err
 	}
 
@@ -79,7 +84,7 @@ func (resource *resource) extractConfig(input builds.Input) (builds.Config, erro
 
 	err = candiedyaml.NewDecoder(reader).Decode(&buildConfig)
 	if err != nil {
-		return builds.Config{}, err
+		return builds.Config{}, fmt.Errorf("invalid build config '%s': %s", input.ConfigPath, err)
 	}
 
 	return buildConfig, nil
