@@ -263,6 +263,16 @@ var _ = Describe("Inputs", func() {
 				Ω(tracker.ReleaseCallCount()).Should(Equal(1))
 				Ω(tracker.ReleaseArgsForCall(0)).Should(Equal(resource1))
 			})
+
+			It("emits an error event", func() {
+				Eventually(events.Sent).Should(ContainElement(event.Error{
+					Message: "oh no!",
+					Origin: event.Origin{
+						Type: event.OriginTypeInput,
+						Name: "second-resource",
+					},
+				}))
+			})
 		})
 
 		Context("when fetching the source fails", func() {
@@ -280,6 +290,16 @@ var _ = Describe("Inputs", func() {
 				Ω(tracker.ReleaseCallCount()).Should(Equal(2))
 				Ω(tracker.ReleaseArgsForCall(0)).Should(Equal(resource1))
 				Ω(tracker.ReleaseArgsForCall(1)).Should(Equal(resource2))
+			})
+
+			It("emits an error event", func() {
+				Eventually(events.Sent).Should(ContainElement(event.Error{
+					Message: "oh no!",
+					Origin: event.Origin{
+						Type: event.OriginTypeInput,
+						Name: "first-resource",
+					},
+				}))
 			})
 		})
 	})

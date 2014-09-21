@@ -46,6 +46,7 @@ func (fetcher *parallelFetcher) Fetch(inputs []builds.Input, emitter event.Emitt
 
 			resource, err := fetcher.tracker.Init(input.Type, eventLog, abort)
 			if err != nil {
+				emitInputError(emitter, input, err)
 				errResults <- err
 				return
 			}
@@ -54,6 +55,7 @@ func (fetcher *parallelFetcher) Fetch(inputs []builds.Input, emitter event.Emitt
 
 			tarStream, computedInput, buildConfig, err := resource.In(input)
 			if err != nil {
+				emitInputError(emitter, input, err)
 				errResults <- err
 				return
 			}
@@ -96,4 +98,14 @@ func (fetcher *parallelFetcher) Fetch(inputs []builds.Input, emitter event.Emitt
 	}
 
 	return fetchedInputs, nil
+}
+
+func emitInputError(emitter event.Emitter, input builds.Input, err error) {
+	emitter.EmitEvent(event.Error{
+		Message: err.Error(),
+		Origin: event.Origin{
+			Type: event.OriginTypeInput,
+			Name: input.Name,
+		},
+	})
 }
