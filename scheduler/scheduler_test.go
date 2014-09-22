@@ -84,6 +84,57 @@ var _ = Describe("Scheduler", func() {
 	})
 
 	Describe("Start", func() {
+		var callbackServer *ghttp.Server
+
+		BeforeEach(func() {
+			callbackServer = ghttp.NewServer()
+			build.StatusCallback = callbackServer.URL() + "/abc"
+		})
+
+		AfterEach(func() {
+			callbackServer.Close()
+		})
+
+		handleBuild := func(build builds.Build) <-chan struct{} {
+			gotRequest := make(chan struct{})
+
+			callbackServer.AppendHandlers(
+				ghttp.CombineHandlers(
+					ghttp.VerifyRequest("PUT", "/abc"),
+					ghttp.VerifyJSONRepresenting(build),
+					ghttp.RespondWith(http.StatusOK, ""),
+					func(http.ResponseWriter, *http.Request) {
+						close(gotRequest)
+					},
+				),
+			)
+
+			return gotRequest
+		}
+
+		itRetries := func(index int, assertion func()) {
+			Context("and the callback URI fails", func() {
+				BeforeEach(func() {
+					handler := callbackServer.GetHandler(index)
+
+					callbackServer.SetHandler(index, func(w http.ResponseWriter, r *http.Request) {
+						callbackServer.HTTPTestServer.CloseClientConnections()
+					})
+
+					callbackServer.AppendHandlers(handler)
+				})
+
+				It("retries", func() {
+					// ignore completion callback
+					callbackServer.AllowUnhandledRequests = true
+
+					scheduler.Start(build)
+
+					assertion()
+				})
+			})
+		}
+
 		It("kicks off a builder", func() {
 			scheduler.Start(build)
 
@@ -94,268 +145,102 @@ var _ = Describe("Scheduler", func() {
 			Ω(startedEmitter).Should(Equal(emitter))
 		})
 
-		Context("when there is a callback registered", func() {
-			var callbackServer *ghttp.Server
+		Context("and the build starts", func() {
+			var running builder.RunningBuild
+			var gotStartedCallback <-chan struct{}
 
 			BeforeEach(func() {
-				callbackServer = ghttp.NewServer()
-				build.StatusCallback = callbackServer.URL() + "/abc"
+				running = builder.RunningBuild{
+					Build: build,
+				}
+
+				running.Build.Status = builds.StatusStarted
+
+				fakeBuilder.StartReturns(running, nil)
+
+				gotStartedCallback = handleBuild(running.Build)
 			})
 
-			handleBuild := func(build builds.Build) <-chan struct{} {
-				gotRequest := make(chan struct{})
+			It("reports the started build as started", func() {
+				// ignore completion callback
+				callbackServer.AllowUnhandledRequests = true
 
-				callbackServer.AppendHandlers(
-					ghttp.CombineHandlers(
-						ghttp.VerifyRequest("PUT", "/abc"),
-						ghttp.VerifyJSONRepresenting(build),
-						ghttp.RespondWith(http.StatusOK, ""),
-						func(http.ResponseWriter, *http.Request) {
-							close(gotRequest)
-						},
-					),
-				)
+				scheduler.Start(build)
 
-				return gotRequest
-			}
+				Eventually(gotStartedCallback).Should(BeClosed())
+			})
 
-			itRetries := func(index int, assertion func()) {
-				Context("and the callback URI fails", func() {
-					BeforeEach(func() {
-						handler := callbackServer.GetHandler(index)
+			It("emits a started status event", func() {
+				scheduler.Start(build)
 
-						callbackServer.SetHandler(index, func(w http.ResponseWriter, r *http.Request) {
-							callbackServer.HTTPTestServer.CloseClientConnections()
-						})
+				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
+					Status: builds.StatusStarted,
+				})))
+			})
 
-						callbackServer.AppendHandlers(handler)
-					})
+			itRetries(0, func() {
+				Eventually(gotStartedCallback, 3).Should(BeClosed())
+			})
 
-					It("retries", func() {
-						// ignore completion callback
-						callbackServer.AllowUnhandledRequests = true
-
-						scheduler.Start(build)
-
-						assertion()
-					})
-				})
-			}
-
-			Context("and the build starts", func() {
-				var running builder.RunningBuild
-				var gotStartedCallback <-chan struct{}
+			Context("when the build exits 0", func() {
+				var exited builder.ExitedBuild
 
 				BeforeEach(func() {
-					running = builder.RunningBuild{
+					exited = builder.ExitedBuild{
 						Build: build,
+
+						ExitStatus: 0,
 					}
 
-					running.Build.Status = builds.StatusStarted
-
-					fakeBuilder.StartReturns(running, nil)
-
-					gotStartedCallback = handleBuild(running.Build)
+					fakeBuilder.AttachReturns(exited, nil)
 				})
 
-				It("reports the started build as started", func() {
-					// ignore completion callback
-					callbackServer.AllowUnhandledRequests = true
-
+				It("finishes the build", func() {
 					scheduler.Start(build)
 
-					Eventually(gotStartedCallback).Should(BeClosed())
+					Eventually(fakeBuilder.FinishCallCount).Should(Equal(1))
+
+					completing, completingEmitter, _ := fakeBuilder.FinishArgsForCall(0)
+					Ω(completing).Should(Equal(exited))
+					Ω(completingEmitter).Should(Equal(emitter))
 				})
 
-				It("emits a started status event", func() {
-					scheduler.Start(build)
-
-					Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-						Status: builds.StatusStarted,
-					})))
-				})
-
-				itRetries(0, func() {
-					Eventually(gotStartedCallback, 3).Should(BeClosed())
-				})
-
-				Context("when the build exits 0", func() {
-					var exited builder.ExitedBuild
-
-					BeforeEach(func() {
-						exited = builder.ExitedBuild{
-							Build: build,
-
-							ExitStatus: 0,
-						}
-
-						fakeBuilder.AttachReturns(exited, nil)
-					})
-
-					It("finishes the build", func() {
-						scheduler.Start(build)
-
-						Eventually(fakeBuilder.FinishCallCount).Should(Equal(1))
-
-						completing, completingEmitter, _ := fakeBuilder.FinishArgsForCall(0)
-						Ω(completing).Should(Equal(exited))
-						Ω(completingEmitter).Should(Equal(emitter))
-					})
-
-					Context("and the build finishes", func() {
-						var gotRequest <-chan struct{}
-
-						BeforeEach(func() {
-							fakeBuilder.FinishReturns(running.Build, nil)
-
-							succeededBuild := exited.Build
-							succeededBuild.Status = builds.StatusSucceeded
-
-							gotRequest = handleBuild(succeededBuild)
-						})
-
-						It("reports the started build as succeeded", func() {
-							scheduler.Start(build)
-
-							Eventually(gotRequest).Should(BeClosed())
-						})
-
-						It("emits a succeeded status event", func() {
-							scheduler.Start(build)
-
-							Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-								Status: builds.StatusSucceeded,
-							})))
-						})
-
-						itRetries(1, func() {
-							Eventually(gotRequest, 3).Should(BeClosed())
-						})
-					})
-
-					Context("and the build fails to finish", func() {
-						var gotRequest <-chan struct{}
-
-						BeforeEach(func() {
-							fakeBuilder.FinishReturns(builds.Build{}, errors.New("oh no!"))
-
-							erroredBuild := running.Build
-							erroredBuild.Status = builds.StatusErrored
-
-							gotRequest = handleBuild(erroredBuild)
-						})
-
-						It("reports the started build as errored", func() {
-							scheduler.Start(build)
-
-							Eventually(gotRequest).Should(BeClosed())
-						})
-
-						It("emits an errored status event", func() {
-							scheduler.Start(build)
-
-							Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-								Status: builds.StatusErrored,
-							})))
-						})
-
-						itRetries(1, func() {
-							Eventually(gotRequest, 3).Should(BeClosed())
-						})
-					})
-				})
-
-				Context("when the build exited nonzero", func() {
-					var exited builder.ExitedBuild
-
-					BeforeEach(func() {
-						exited = builder.ExitedBuild{
-							Build: build,
-
-							ExitStatus: 2,
-						}
-
-						fakeBuilder.AttachReturns(exited, nil)
-					})
-
-					It("finishes the build", func() {
-						scheduler.Start(build)
-
-						Eventually(fakeBuilder.FinishCallCount).Should(Equal(1))
-
-						completing, completingEmitter, _ := fakeBuilder.FinishArgsForCall(0)
-						Ω(completing).Should(Equal(exited))
-						Ω(completingEmitter).Should(Equal(emitter))
-					})
-
-					Context("and the build finishes", func() {
-						var gotRequest <-chan struct{}
-
-						BeforeEach(func() {
-							fakeBuilder.FinishReturns(running.Build, nil)
-
-							failedBuild := exited.Build
-							failedBuild.Status = builds.StatusFailed
-
-							gotRequest = handleBuild(failedBuild)
-						})
-
-						It("reports the started build as fao;ed", func() {
-							scheduler.Start(build)
-
-							Eventually(gotRequest).Should(BeClosed())
-						})
-
-						It("emits a failed status event", func() {
-							scheduler.Start(build)
-
-							Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-								Status: builds.StatusFailed,
-							})))
-						})
-
-						itRetries(1, func() {
-							Eventually(gotRequest, 3).Should(BeClosed())
-						})
-					})
-
-					Context("and the build fails to finish", func() {
-						var gotRequest <-chan struct{}
-
-						BeforeEach(func() {
-							fakeBuilder.FinishReturns(builds.Build{}, errors.New("oh no!"))
-
-							erroredBuild := running.Build
-							erroredBuild.Status = builds.StatusErrored
-
-							gotRequest = handleBuild(erroredBuild)
-						})
-
-						It("reports the started build as errored", func() {
-							scheduler.Start(build)
-
-							Eventually(gotRequest).Should(BeClosed())
-						})
-
-						It("emits an errored status event", func() {
-							scheduler.Start(build)
-
-							Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-								Status: builds.StatusErrored,
-							})))
-						})
-
-						itRetries(1, func() {
-							Eventually(gotRequest, 3).Should(BeClosed())
-						})
-					})
-				})
-
-				Context("when building fails", func() {
+				Context("and the build finishes", func() {
 					var gotRequest <-chan struct{}
 
 					BeforeEach(func() {
-						fakeBuilder.AttachReturns(builder.ExitedBuild{}, errors.New("oh no!"))
+						fakeBuilder.FinishReturns(running.Build, nil)
+
+						succeededBuild := exited.Build
+						succeededBuild.Status = builds.StatusSucceeded
+
+						gotRequest = handleBuild(succeededBuild)
+					})
+
+					It("reports the started build as succeeded", func() {
+						scheduler.Start(build)
+
+						Eventually(gotRequest).Should(BeClosed())
+					})
+
+					It("emits a succeeded status event", func() {
+						scheduler.Start(build)
+
+						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
+							Status: builds.StatusSucceeded,
+						})))
+					})
+
+					itRetries(1, func() {
+						Eventually(gotRequest, 3).Should(BeClosed())
+					})
+				})
+
+				Context("and the build fails to finish", func() {
+					var gotRequest <-chan struct{}
+
+					BeforeEach(func() {
+						fakeBuilder.FinishReturns(builds.Build{}, errors.New("oh no!"))
 
 						erroredBuild := running.Build
 						erroredBuild.Status = builds.StatusErrored
@@ -363,7 +248,7 @@ var _ = Describe("Scheduler", func() {
 						gotRequest = handleBuild(erroredBuild)
 					})
 
-					It("reports the build as errored", func() {
+					It("reports the started build as errored", func() {
 						scheduler.Start(build)
 
 						Eventually(gotRequest).Should(BeClosed())
@@ -383,13 +268,99 @@ var _ = Describe("Scheduler", func() {
 				})
 			})
 
-			Context("and the build fails to start", func() {
+			Context("when the build exited nonzero", func() {
+				var exited builder.ExitedBuild
+
+				BeforeEach(func() {
+					exited = builder.ExitedBuild{
+						Build: build,
+
+						ExitStatus: 2,
+					}
+
+					fakeBuilder.AttachReturns(exited, nil)
+				})
+
+				It("finishes the build", func() {
+					scheduler.Start(build)
+
+					Eventually(fakeBuilder.FinishCallCount).Should(Equal(1))
+
+					completing, completingEmitter, _ := fakeBuilder.FinishArgsForCall(0)
+					Ω(completing).Should(Equal(exited))
+					Ω(completingEmitter).Should(Equal(emitter))
+				})
+
+				Context("and the build finishes", func() {
+					var gotRequest <-chan struct{}
+
+					BeforeEach(func() {
+						fakeBuilder.FinishReturns(running.Build, nil)
+
+						failedBuild := exited.Build
+						failedBuild.Status = builds.StatusFailed
+
+						gotRequest = handleBuild(failedBuild)
+					})
+
+					It("reports the started build as fao;ed", func() {
+						scheduler.Start(build)
+
+						Eventually(gotRequest).Should(BeClosed())
+					})
+
+					It("emits a failed status event", func() {
+						scheduler.Start(build)
+
+						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
+							Status: builds.StatusFailed,
+						})))
+					})
+
+					itRetries(1, func() {
+						Eventually(gotRequest, 3).Should(BeClosed())
+					})
+				})
+
+				Context("and the build fails to finish", func() {
+					var gotRequest <-chan struct{}
+
+					BeforeEach(func() {
+						fakeBuilder.FinishReturns(builds.Build{}, errors.New("oh no!"))
+
+						erroredBuild := running.Build
+						erroredBuild.Status = builds.StatusErrored
+
+						gotRequest = handleBuild(erroredBuild)
+					})
+
+					It("reports the started build as errored", func() {
+						scheduler.Start(build)
+
+						Eventually(gotRequest).Should(BeClosed())
+					})
+
+					It("emits an errored status event", func() {
+						scheduler.Start(build)
+
+						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
+							Status: builds.StatusErrored,
+						})))
+					})
+
+					itRetries(1, func() {
+						Eventually(gotRequest, 3).Should(BeClosed())
+					})
+				})
+			})
+
+			Context("when building fails", func() {
 				var gotRequest <-chan struct{}
 
 				BeforeEach(func() {
-					fakeBuilder.StartReturns(builder.RunningBuild{}, errors.New("oh no!"))
+					fakeBuilder.AttachReturns(builder.ExitedBuild{}, errors.New("oh no!"))
 
-					erroredBuild := build
+					erroredBuild := running.Build
 					erroredBuild.Status = builds.StatusErrored
 
 					gotRequest = handleBuild(erroredBuild)
@@ -409,9 +380,40 @@ var _ = Describe("Scheduler", func() {
 					})))
 				})
 
-				itRetries(0, func() {
+				itRetries(1, func() {
 					Eventually(gotRequest, 3).Should(BeClosed())
 				})
+			})
+		})
+
+		Context("and the build fails to start", func() {
+			var gotRequest <-chan struct{}
+
+			BeforeEach(func() {
+				fakeBuilder.StartReturns(builder.RunningBuild{}, errors.New("oh no!"))
+
+				erroredBuild := build
+				erroredBuild.Status = builds.StatusErrored
+
+				gotRequest = handleBuild(erroredBuild)
+			})
+
+			It("reports the build as errored", func() {
+				scheduler.Start(build)
+
+				Eventually(gotRequest).Should(BeClosed())
+			})
+
+			It("emits an errored status event", func() {
+				scheduler.Start(build)
+
+				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
+					Status: builds.StatusErrored,
+				})))
+			})
+
+			itRetries(0, func() {
+				Eventually(gotRequest, 3).Should(BeClosed())
 			})
 		})
 	})
