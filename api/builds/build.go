@@ -7,6 +7,7 @@ const (
 	StatusSucceeded Status = "succeeded"
 	StatusFailed    Status = "failed"
 	StatusErrored   Status = "errored"
+	StatusAborted   Status = "aborted"
 )
 
 type Build struct {

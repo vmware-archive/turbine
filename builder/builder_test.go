@@ -642,7 +642,7 @@ var _ = Describe("Builder", func() {
 
 			It("emits an error event", func() {
 				Eventually(events.Sent).Should(ContainElement(event.Error{
-					Message: "result unknown: build aborted",
+					Message: "running failed: build aborted",
 				}))
 			})
 		})

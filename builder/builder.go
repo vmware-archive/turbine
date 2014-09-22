@@ -152,7 +152,7 @@ func (builder *builder) Attach(running RunningBuild, emitter event.Emitter, abor
 
 	status, err := builder.waitForRunToEnd(running, abort)
 	if err != nil {
-		return ExitedBuild{}, builder.emitError(emitter, "result unknown", err)
+		return ExitedBuild{}, builder.emitError(emitter, "running failed", err)
 	}
 
 	return ExitedBuild{

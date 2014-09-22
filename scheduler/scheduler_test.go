@@ -524,7 +524,8 @@ var _ = Describe("Scheduler", func() {
 
 				fakeBuilder.StartStub = func(build builds.Build, emitter event.Emitter, abort <-chan struct{}) (builder.RunningBuild, error) {
 					gotAborting <- abort
-					select {}
+					<-abort
+					return builder.RunningBuild{}, errors.New("aborted")
 				}
 			})
 
@@ -537,6 +538,18 @@ var _ = Describe("Scheduler", func() {
 				scheduler.Abort(build.Guid)
 
 				Ω(abort).Should(BeClosed())
+			})
+
+			It("emits an aborted status event", func() {
+				scheduler.Start(build)
+
+				Eventually(gotAborting).Should(Receive())
+
+				scheduler.Abort(build.Guid)
+
+				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
+					Status: builds.StatusAborted,
+				})))
 			})
 		})
 
@@ -552,7 +565,8 @@ var _ = Describe("Scheduler", func() {
 
 				fakeBuilder.AttachStub = func(build builder.RunningBuild, emitter event.Emitter, abort <-chan struct{}) (builder.ExitedBuild, error) {
 					gotAborting <- abort
-					select {}
+					<-abort
+					return builder.ExitedBuild{}, errors.New("aborted")
 				}
 			})
 
@@ -565,6 +579,18 @@ var _ = Describe("Scheduler", func() {
 				scheduler.Abort(build.Guid)
 
 				Ω(abort).Should(BeClosed())
+			})
+
+			It("emits an aborted status event", func() {
+				scheduler.Start(build)
+
+				Eventually(gotAborting).Should(Receive())
+
+				scheduler.Abort(build.Guid)
+
+				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
+					Status: builds.StatusAborted,
+				})))
 			})
 		})
 
@@ -584,7 +610,8 @@ var _ = Describe("Scheduler", func() {
 
 				fakeBuilder.FinishStub = func(build builder.ExitedBuild, emitter event.Emitter, abort <-chan struct{}) (builds.Build, error) {
 					gotAborting <- abort
-					select {}
+					<-abort
+					return builds.Build{}, errors.New("aborted")
 				}
 			})
 
@@ -597,6 +624,18 @@ var _ = Describe("Scheduler", func() {
 				scheduler.Abort(build.Guid)
 
 				Ω(abort).Should(BeClosed())
+			})
+
+			It("emits an aborted status event", func() {
+				scheduler.Start(build)
+
+				Eventually(gotAborting).Should(Receive())
+
+				scheduler.Abort(build.Guid)
+
+				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
+					Status: builds.StatusAborted,
+				})))
 			})
 		})
 	})

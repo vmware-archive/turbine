@@ -95,7 +95,13 @@ func (scheduler *scheduler) Start(build builds.Build) {
 		if err != nil {
 			log.Error("errored", err)
 
-			build.Status = builds.StatusErrored
+			select {
+			case <-abort:
+				build.Status = builds.StatusAborted
+			default:
+				build.Status = builds.StatusErrored
+			}
+
 			scheduler.reportBuild(build, log, emitter)
 		} else {
 			log.Info("started")
@@ -173,7 +179,13 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, emitter event.E
 	case err := <-errored:
 		log.Error("errored", err)
 
-		running.Build.Status = builds.StatusErrored
+		select {
+		case <-abort:
+			running.Build.Status = builds.StatusAborted
+		default:
+			running.Build.Status = builds.StatusErrored
+		}
+
 		scheduler.reportBuild(running.Build, log, emitter)
 	case <-scheduler.draining:
 		return
@@ -193,7 +205,13 @@ func (scheduler *scheduler) finish(exited builder.ExitedBuild, emitter event.Emi
 	if err != nil {
 		log.Error("failed", err)
 
-		exited.Build.Status = builds.StatusErrored
+		select {
+		case <-abort:
+			exited.Build.Status = builds.StatusAborted
+		default:
+			exited.Build.Status = builds.StatusErrored
+		}
+
 		scheduler.reportBuild(exited.Build, log, emitter)
 	} else {
 		log.Info("finished")
