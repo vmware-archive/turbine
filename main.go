@@ -137,17 +137,12 @@ func main() {
 		logger.Fatal("failed-to-ping-warden", err)
 	}
 
-	group := grouper.RunGroup{
-		"api":         http_server.New(*listenAddr, handler),
-		"debug":       http_server.New(*debugListenAddr, http.DefaultServeMux),
-		"snapshotter": snapshotter.NewSnapshotter(logger.Session("snapshotter"), *snapshotPath, scheduler),
-		"drainer": ifrit.RunFunc(func(signals <-chan os.Signal, ready chan<- struct{}) error {
-			close(ready)
-			<-signals
-			close(drain)
-			return nil
-		}),
-	}
+	group := grouper.NewParallel(os.Interrupt, []grouper.Member{
+		{"api", http_server.New(*listenAddr, handler)},
+		{"debug", http_server.New(*debugListenAddr, http.DefaultServeMux)},
+		{"snapshotter", snapshotter.NewSnapshotter(logger.Session("snapshotter"), *snapshotPath, scheduler)},
+		{"drainer", &drainer{drain}},
+	})
 
 	running := ifrit.Envoke(sigmon.New(group))
 
@@ -162,4 +157,15 @@ func main() {
 		logger.Error("failed", err)
 		os.Exit(1)
 	}
+}
+
+type drainer struct {
+	drain chan<- struct{}
+}
+
+func (drainer *drainer) Run(signals <-chan os.Signal, ready chan<- struct{}) error {
+	close(ready)
+	<-signals
+	close(drainer.drain)
+	return nil
 }
