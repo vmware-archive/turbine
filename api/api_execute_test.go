@@ -75,6 +75,17 @@ var _ = Describe("POST /builds", func() {
 		})
 	})
 
+	Context("when the events url is malformed", func() {
+		BeforeEach(func() {
+			build.EventsCallback = "ß"
+			requestBody = buildPayload(build)
+		})
+
+		It("returns 400", func() {
+			Ω(response.StatusCode).Should(Equal(http.StatusBadRequest))
+		})
+	})
+
 	Context("when the payload is malformed JSON", func() {
 		BeforeEach(func() {
 			requestBody = "ß"

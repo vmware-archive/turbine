@@ -1,6 +1,9 @@
 package event
 
 import (
+	"encoding/base64"
+	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -20,8 +23,10 @@ func (NullEmitter) EmitEvent(Event) {}
 func (NullEmitter) Close()          {}
 
 type websocketEmitter struct {
-	logURL string
-	drain  <-chan struct{}
+	consumer string
+	auth     string
+
+	drain <-chan struct{}
 
 	dialer *websocket.Dialer
 
@@ -31,10 +36,26 @@ type websocketEmitter struct {
 	writeL *sync.Mutex
 }
 
-func NewWebSocketEmitter(logURL string, drain <-chan struct{}) Emitter {
+func NewWebSocketEmitter(consumer string, drain <-chan struct{}) Emitter {
+	consumerURL, err := url.Parse(consumer)
+	if err != nil {
+		// should not make it this far; API validates url
+		panic("invalid emitter consumer url: " + err.Error())
+	}
+
+	// strip basic auth from URL that we use
+	var auth string
+	if consumerURL.User != nil {
+		auth = basicAuth(consumerURL.User)
+	}
+
+	consumerURL.User = nil
+
 	return &websocketEmitter{
-		logURL: logURL,
-		drain:  drain,
+		consumer: consumerURL.String(),
+		auth:     auth,
+
+		drain: drain,
 
 		dialer: &websocket.Dialer{
 			// allow detection of failed writes
@@ -92,8 +113,13 @@ func (e *websocketEmitter) connect() bool {
 
 	var err error
 
+	headers := http.Header{}
+	if e.auth != "" {
+		headers.Set("Authorization", e.auth)
+	}
+
 	for {
-		e.conn, _, err = e.dialer.Dial(e.logURL, nil)
+		e.conn, _, err = e.dialer.Dial(e.consumer, headers)
 		if err == nil {
 			err = e.conn.WriteJSON(VersionMessage{
 				Version: VERSION,
@@ -120,4 +146,10 @@ func (e *websocketEmitter) close() {
 		e.conn = nil
 		conn.Close()
 	}
+}
+
+func basicAuth(user *url.Userinfo) string {
+	username := user.Username()
+	password, _ := user.Password()
+	return "Basic " + base64.StdEncoding.EncodeToString([]byte(username+":"+password))
 }

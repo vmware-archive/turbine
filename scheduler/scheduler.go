@@ -43,7 +43,7 @@ type scheduler struct {
 	mutex *sync.RWMutex
 }
 
-type EmitterFactory func(logsURL string, drain <-chan struct{}) event.Emitter
+type EmitterFactory func(consumer string, drain <-chan struct{}) event.Emitter
 
 func NewScheduler(
 	l lager.Logger,

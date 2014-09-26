@@ -109,5 +109,12 @@ func (handler *handler) validateBuild(build builds.Build) error {
 		}
 	}
 
+	if build.EventsCallback != "" {
+		_, err := url.ParseRequestURI(build.EventsCallback)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

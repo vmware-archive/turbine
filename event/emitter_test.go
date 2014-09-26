@@ -17,6 +17,7 @@ var _ = Describe("Emitting events", func() {
 		consumer *ghttp.Server
 
 		successfulHandler http.HandlerFunc
+		requestedHeaders  <-chan http.Header
 		consumedMessages  <-chan Message
 
 		triggerDrain chan<- struct{}
@@ -35,11 +36,14 @@ var _ = Describe("Emitting events", func() {
 	BeforeEach(func() {
 		consumer = ghttp.NewServer()
 
+		headers := make(chan http.Header, 1)
 		messages := make(chan Message)
 
 		consumer.AppendHandlers()
 
 		successfulHandler = func(w http.ResponseWriter, r *http.Request) {
+			headers <- r.Header
+
 			conn, err := upgrader.Upgrade(w, r, nil)
 			Ω(err).ShouldNot(HaveOccurred())
 
@@ -60,6 +64,7 @@ var _ = Describe("Emitting events", func() {
 			}
 		}
 
+		requestedHeaders = headers
 		consumedMessages = messages
 
 		consumerAddr := consumer.HTTPTestServer.Listener.Addr().String()
@@ -67,7 +72,7 @@ var _ = Describe("Emitting events", func() {
 		drain := make(chan struct{})
 		triggerDrain = drain
 
-		emitter = NewWebSocketEmitter("ws://"+consumerAddr, drain)
+		emitter = NewWebSocketEmitter("ws://username:password@"+consumerAddr, drain)
 
 		event = Log{
 			Payload: "sup",
@@ -78,17 +83,26 @@ var _ = Describe("Emitting events", func() {
 		}
 	})
 
+	JustBeforeEach(func() {
+		emitter.EmitEvent(event)
+	})
+
 	Context("when the consumer is working", func() {
 		BeforeEach(func() {
 			consumer.AppendHandlers(successfulHandler)
 		})
 
 		It("sends a log message to the consumer", func() {
-			emitter.EmitEvent(event)
-
 			Eventually(consumedMessages).Should(Receive(Equal(Message{
 				Event: event,
 			})))
+		})
+
+		It("requests with standard basic auth headers", func() {
+			headers := <-requestedHeaders
+
+			// username:password encoded
+			Ω(headers.Get("Authorization")).Should(Equal("Basic dXNlcm5hbWU6cGFzc3dvcmQ="))
 		})
 	})
 
@@ -113,8 +127,6 @@ var _ = Describe("Emitting events", func() {
 		})
 
 		It("retries", func() {
-			emitter.EmitEvent(event)
-
 			Eventually(consumerFailed).Should(BeClosed())
 
 			// retrying has a 1s delay
@@ -129,8 +141,6 @@ var _ = Describe("Emitting events", func() {
 			})
 
 			It("gives up", func() {
-				emitter.EmitEvent(event)
-
 				Eventually(consumerFailed).Should(BeClosed())
 				Consistently(consumedMessages, 2*time.Second).ShouldNot(Receive())
 			})
