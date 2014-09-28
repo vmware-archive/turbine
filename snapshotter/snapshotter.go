@@ -44,7 +44,7 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 	if err == nil {
 		defer snapshotFile.Close()
 
-		log.Info("restoring")
+		log.Info("snapshots-found")
 
 		var snapshots []BuildSnapshot
 		err := json.NewDecoder(snapshotFile).Decode(&snapshots)
@@ -52,6 +52,10 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 			log.Error("malformed-snapshot", err)
 		} else {
 			for _, snapshot := range snapshots {
+				log.Info("restoring", lager.Data{
+					"snapshot": snapshot,
+				})
+
 				go snapshotter.scheduler.Attach(builder.RunningBuild{
 					Build:           snapshot.Build,
 					ContainerHandle: snapshot.ContainerHandle,
@@ -60,6 +64,8 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 			}
 		}
 	}
+
+	log.Info("restored")
 
 	close(ready)
 
