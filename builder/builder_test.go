@@ -54,6 +54,8 @@ var _ = Describe("Builder", func() {
 		builder = NewBuilder(gardenClient, inputFetcher, outputPerformer)
 
 		build = builds.Build{
+			Guid: "some-build-guid",
+
 			EventsCallback: "some-events-callback",
 
 			Config: builds.Config{
@@ -70,6 +72,8 @@ var _ = Describe("Builder", func() {
 				},
 			},
 		}
+
+		gardenClient.Connection.CreateReturns("some-build-guid", nil)
 	})
 
 	Describe("Start", func() {
@@ -89,8 +93,6 @@ var _ = Describe("Builder", func() {
 					Type: "raw",
 				},
 			}
-
-			gardenClient.Connection.CreateReturns("some-handle", nil)
 
 			runningProcess := new(gfakes.FakeProcess)
 			runningProcess.IDReturns(42)
@@ -163,13 +165,19 @@ var _ = Describe("Builder", func() {
 				Ω(created.RootFSPath).Should(Equal("some-rootfs"))
 			})
 
+			It("creates a container with the build's guid as the handle", func() {
+				created := gardenClient.Connection.CreateArgsForCall(0)
+				Ω(created.Handle).ShouldNot(BeEmpty())
+				Ω(created.Handle).Should(Equal(build.Guid))
+			})
+
 			It("streams them in to the container", func() {
 				streamInCalls := gardenClient.Connection.StreamInCallCount()
 				Ω(streamInCalls).Should(Equal(2))
 
 				for i := 0; i < streamInCalls; i++ {
 					handle, dst, reader := gardenClient.Connection.StreamInArgsForCall(i)
-					Ω(handle).Should(Equal("some-handle"))
+					Ω(handle).Should(Equal("some-build-guid"))
 
 					in, err := ioutil.ReadAll(reader)
 					Ω(err).ShouldNot(HaveOccurred())
@@ -192,7 +200,7 @@ var _ = Describe("Builder", func() {
 
 			It("runs the build's script in the container", func() {
 				handle, spec, _ := gardenClient.Connection.RunArgsForCall(0)
-				Ω(handle).Should(Equal("some-handle"))
+				Ω(handle).Should(Equal("some-build-guid"))
 				Ω(spec.Path).Should(Equal("./bin/test"))
 				Ω(spec.Args).Should(Equal([]string{"arg1", "arg2"}))
 				Ω(spec.Env).Should(ConsistOf("FOO=bar", "BAZ=buzz"))
@@ -266,7 +274,7 @@ var _ = Describe("Builder", func() {
 
 						for i := 0; i < streamInCalls; i++ {
 							handle, dst, reader := gardenClient.Connection.StreamInArgsForCall(i)
-							Ω(handle).Should(Equal("some-handle"))
+							Ω(handle).Should(Equal("some-build-guid"))
 
 							in, err := ioutil.ReadAll(reader)
 							Ω(err).ShouldNot(HaveOccurred())
@@ -328,7 +336,7 @@ var _ = Describe("Builder", func() {
 
 				It("runs the build privileged", func() {
 					handle, spec, _ := gardenClient.Connection.RunArgsForCall(0)
-					Ω(handle).Should(Equal("some-handle"))
+					Ω(handle).Should(Equal("some-build-guid"))
 					Ω(spec.Privileged).Should(BeTrue())
 				})
 			})
@@ -429,7 +437,6 @@ var _ = Describe("Builder", func() {
 
 				It("returns the container, container handle, process ID, process stream, and logs", func() {
 					Ω(started.Container).ShouldNot(BeNil())
-					Ω(started.ContainerHandle).Should(Equal("some-handle"))
 					Ω(started.ProcessID).Should(Equal(uint32(42)))
 					Ω(started.Process).ShouldNot(BeNil())
 				})
@@ -446,7 +453,7 @@ var _ = Describe("Builder", func() {
 				Ω(streamInCalls).Should(Equal(1))
 
 				handle, dst, reader := gardenClient.Connection.StreamInArgsForCall(0)
-				Ω(handle).Should(Equal("some-handle"))
+				Ω(handle).Should(Equal("some-build-guid"))
 				Ω(dst).Should(Equal("/tmp/build/src"))
 
 				tarReader := tar.NewReader(reader)
@@ -470,20 +477,15 @@ var _ = Describe("Builder", func() {
 		})
 
 		BeforeEach(func() {
-			gardenClient.Connection.CreateReturns("the-attached-container", nil)
-
 			container, err := gardenClient.Create(garden_api.ContainerSpec{})
 			Ω(err).ShouldNot(HaveOccurred())
-
-			gardenClient.Connection.CreateReturns("", nil)
 
 			runningProcess := new(gfakes.FakeProcess)
 
 			runningBuild = RunningBuild{
 				Build: build,
 
-				ContainerHandle: container.Handle(),
-				Container:       container,
+				Container: container,
 
 				ProcessID: 42,
 				Process:   runningProcess,
@@ -499,14 +501,14 @@ var _ = Describe("Builder", func() {
 
 			Context("and the container can still be found", func() {
 				BeforeEach(func() {
-					gardenClient.Connection.ListReturns([]string{runningBuild.ContainerHandle}, nil)
+					gardenClient.Connection.ListReturns([]string{runningBuild.Build.Guid}, nil)
 				})
 
 				It("looks it up via garden and uses it for attaching", func() {
 					Ω(gardenClient.Connection.ListCallCount()).Should(Equal(1))
 
 					handle, pid, _ := gardenClient.Connection.AttachArgsForCall(0)
-					Ω(handle).Should(Equal("the-attached-container"))
+					Ω(handle).Should(Equal("some-build-guid"))
 					Ω(pid).Should(Equal(uint32(42)))
 				})
 			})
@@ -522,7 +524,7 @@ var _ = Describe("Builder", func() {
 
 				It("emits an error event", func() {
 					Eventually(events.Sent).Should(ContainElement(event.Error{
-						Message: "failed to lookup container: container not found: the-attached-container",
+						Message: "failed to lookup container: container not found: some-build-guid",
 					}))
 				})
 			})
@@ -542,14 +544,14 @@ var _ = Describe("Builder", func() {
 					Ω(gardenClient.Connection.AttachCallCount()).Should(Equal(1))
 
 					handle, pid, _ := gardenClient.Connection.AttachArgsForCall(0)
-					Ω(handle).Should(Equal("the-attached-container"))
+					Ω(handle).Should(Equal("some-build-guid"))
 					Ω(pid).Should(Equal(uint32(42)))
 				})
 
 				Context("and the build emits logs", func() {
 					BeforeEach(func() {
 						gardenClient.Connection.AttachStub = func(handle string, pid uint32, io garden_api.ProcessIO) (garden_api.Process, error) {
-							Ω(handle).Should(Equal("the-attached-container"))
+							Ω(handle).Should(Equal("some-build-guid"))
 							Ω(pid).Should(Equal(uint32(42)))
 							Ω(io.Stdout).ShouldNot(BeNil())
 							Ω(io.Stderr).ShouldNot(BeNil())
@@ -632,7 +634,7 @@ var _ = Describe("Builder", func() {
 				Eventually(gardenClient.Connection.StopCallCount).Should(Equal(1))
 
 				handle, kill := gardenClient.Connection.StopArgsForCall(0)
-				Ω(handle).Should(Equal("the-attached-container"))
+				Ω(handle).Should(Equal("some-build-guid"))
 				Ω(kill).Should(BeFalse())
 			})
 
@@ -662,7 +664,6 @@ var _ = Describe("Builder", func() {
 	})
 
 	Describe("Hijack", func() {
-		var runningBuild RunningBuild
 		var spec garden_api.ProcessSpec
 		var io garden_api.ProcessIO
 
@@ -670,15 +671,10 @@ var _ = Describe("Builder", func() {
 		var hijackErr error
 
 		JustBeforeEach(func() {
-			process, hijackErr = builder.Hijack(runningBuild, spec, io)
+			process, hijackErr = builder.Hijack("some-build-guid", spec, io)
 		})
 
 		BeforeEach(func() {
-			runningBuild = RunningBuild{
-				Build:           build,
-				ContainerHandle: "some-handle",
-			}
-
 			spec = garden_api.ProcessSpec{
 				Path: "some-path",
 				Args: []string{"some", "args"},
@@ -692,7 +688,7 @@ var _ = Describe("Builder", func() {
 
 		Context("when the container can be found", func() {
 			BeforeEach(func() {
-				gardenClient.Connection.ListReturns([]string{"some-handle"}, nil)
+				gardenClient.Connection.ListReturns([]string{"some-build-guid"}, nil)
 			})
 
 			Context("and running succeeds", func() {
@@ -711,7 +707,7 @@ var _ = Describe("Builder", func() {
 					Ω(gardenClient.Connection.ListCallCount()).Should(Equal(1))
 
 					ranHandle, ranSpec, ranIO := gardenClient.Connection.RunArgsForCall(0)
-					Ω(ranHandle).Should(Equal("some-handle"))
+					Ω(ranHandle).Should(Equal("some-build-guid"))
 					Ω(ranSpec).Should(Equal(spec))
 					Ω(ranIO).Should(Equal(io))
 				})
@@ -818,12 +814,8 @@ var _ = Describe("Builder", func() {
 				onFailureOutput,
 			}
 
-			gardenClient.Connection.CreateReturns("the-attached-container", nil)
-
 			container, err := gardenClient.Create(garden_api.ContainerSpec{})
 			Ω(err).ShouldNot(HaveOccurred())
-
-			gardenClient.Connection.CreateReturns("", nil)
 
 			exitedBuild = ExitedBuild{
 				Build: build,

@@ -8,7 +8,7 @@ import (
 	"path"
 	"time"
 
-	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	gapi "github.com/cloudfoundry-incubator/garden/api"
 
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder/inputs"
@@ -29,8 +29,8 @@ type Builder interface {
 	// this will be called again after turbine restarts
 	Attach(RunningBuild, event.Emitter, <-chan struct{}) (ExitedBuild, error)
 
-	// execute an arbitrary process in a running build
-	Hijack(RunningBuild, garden_api.ProcessSpec, garden_api.ProcessIO) (garden_api.Process, error)
+	// execute an arbitrary process in a running container
+	Hijack(string, gapi.ProcessSpec, gapi.ProcessIO) (gapi.Process, error)
 
 	// process an exited build's outputs
 	Finish(ExitedBuild, event.Emitter, <-chan struct{}) (builds.Build, error)
@@ -39,30 +39,28 @@ type Builder interface {
 type RunningBuild struct {
 	Build builds.Build
 
-	ContainerHandle string
-	Container       garden_api.Container
+	Container gapi.Container
 
 	ProcessID uint32
-	Process   garden_api.Process
+	Process   gapi.Process
 }
 
 type ExitedBuild struct {
 	Build builds.Build
 
-	ContainerHandle string
-	Container       garden_api.Container
+	Container gapi.Container
 
 	ExitStatus int
 }
 
 type builder struct {
-	gardenClient    garden_api.Client
+	gardenClient    gapi.Client
 	inputFetcher    inputs.Fetcher
 	outputPerformer outputs.Performer
 }
 
 func NewBuilder(
-	gardenClient garden_api.Client,
+	gardenClient gapi.Client,
 	inputFetcher inputs.Fetcher,
 	outputPerformer outputs.Performer,
 ) Builder {
@@ -93,7 +91,7 @@ func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <
 		BuildConfig: build.Config,
 	})
 
-	container, err := builder.createBuildContainer(build.Config)
+	container, err := builder.createBuildContainer(build.Guid, build.Config)
 	if err != nil {
 		return RunningBuild{}, builder.emitError(emitter, "failed to create container", err)
 	}
@@ -120,8 +118,7 @@ func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <
 	return RunningBuild{
 		Build: build,
 
-		ContainerHandle: container.Handle(),
-		Container:       container,
+		Container: container,
 
 		ProcessID: process.ID(),
 		Process:   process,
@@ -130,7 +127,7 @@ func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <
 
 func (builder *builder) Attach(running RunningBuild, emitter event.Emitter, abort <-chan struct{}) (ExitedBuild, error) {
 	if running.Container == nil {
-		container, err := builder.gardenClient.Lookup(running.ContainerHandle)
+		container, err := builder.gardenClient.Lookup(running.Build.Guid)
 		if err != nil {
 			return ExitedBuild{}, builder.emitError(emitter, "failed to lookup container", err)
 		}
@@ -179,8 +176,8 @@ func (builder *builder) Finish(exited ExitedBuild, emitter event.Emitter, abort 
 	return exited.Build, nil
 }
 
-func (builder *builder) Hijack(running RunningBuild, spec garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error) {
-	container, err := builder.gardenClient.Lookup(running.ContainerHandle)
+func (builder *builder) Hijack(guid string, spec gapi.ProcessSpec, io gapi.ProcessIO) (gapi.Process, error) {
+	container, err := builder.gardenClient.Lookup(guid)
 	if err != nil {
 		return nil, err
 	}
@@ -197,15 +194,17 @@ func (builder *builder) emitError(emitter event.Emitter, message string, err err
 }
 
 func (builder *builder) createBuildContainer(
+	buildGuid string,
 	buildConfig builds.Config,
-) (garden_api.Container, error) {
-	return builder.gardenClient.Create(garden_api.ContainerSpec{
+) (gapi.Container, error) {
+	return builder.gardenClient.Create(gapi.ContainerSpec{
+		Handle:     buildGuid,
 		RootFSPath: buildConfig.Image,
 	})
 }
 
 func (builder *builder) streamInResources(
-	container garden_api.Container,
+	container gapi.Container,
 	fetchedInputs []inputs.FetchedInput,
 	paths map[string]string,
 ) error {
@@ -240,23 +239,23 @@ func (builder *builder) streamInResources(
 }
 
 func (builder *builder) runBuild(
-	container garden_api.Container,
-	processIO garden_api.ProcessIO,
+	container gapi.Container,
+	processIO gapi.ProcessIO,
 	privileged bool,
 	buildConfig builds.Config,
-) (garden_api.Process, error) {
+) (gapi.Process, error) {
 	env := []string{}
 	for n, v := range buildConfig.Params {
 		env = append(env, n+"="+v)
 	}
 
-	return container.Run(garden_api.ProcessSpec{
+	return container.Run(gapi.ProcessSpec{
 		Path: buildConfig.Run.Path,
 		Args: buildConfig.Run.Args,
 		Env:  env,
 		Dir:  resource.ResourcesDir,
 
-		TTY: &garden_api.TTYSpec{},
+		TTY: &gapi.TTYSpec{},
 
 		Privileged: privileged,
 	}, processIO)
@@ -300,7 +299,7 @@ func (builder *builder) waitForRunToEnd(
 }
 
 func (builder *builder) performOutputs(
-	container garden_api.Container,
+	container gapi.Container,
 	build ExitedBuild,
 	emitter event.Emitter,
 	abort <-chan struct{},
@@ -323,8 +322,8 @@ func (builder *builder) performOutputs(
 	return append(implicitOutputs, performedOutputs...), nil
 }
 
-func emitterProcessIO(emitter event.Emitter) garden_api.ProcessIO {
-	return garden_api.ProcessIO{
+func emitterProcessIO(emitter event.Emitter) gapi.ProcessIO {
+	return gapi.ProcessIO{
 		Stdout: logwriter.NewWriter(emitter, event.Origin{
 			Type: event.OriginTypeRun,
 			Name: "stdout",

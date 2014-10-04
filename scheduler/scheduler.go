@@ -3,14 +3,13 @@ package scheduler
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"sync"
 	"time"
 
-	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	gapi "github.com/cloudfoundry-incubator/garden/api"
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder"
 	"github.com/concourse/turbine/event"
@@ -21,7 +20,7 @@ type Scheduler interface {
 	Start(builds.Build)
 	Attach(builder.RunningBuild)
 	Abort(guid string)
-	Hijack(guid string, process garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error)
+	Hijack(guid string, process gapi.ProcessSpec, io gapi.ProcessIO) (gapi.Process, error)
 
 	Drain() []builder.RunningBuild
 }
@@ -134,16 +133,8 @@ func (scheduler *scheduler) Abort(guid string) {
 	close(abort)
 }
 
-func (scheduler *scheduler) Hijack(guid string, spec garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error) {
-	scheduler.mutex.Lock()
-	running, found := scheduler.running[guid]
-	scheduler.mutex.Unlock()
-
-	if !found {
-		return nil, errors.New("unknown build")
-	}
-
-	return scheduler.builder.Hijack(running, spec, io)
+func (scheduler *scheduler) Hijack(guid string, spec gapi.ProcessSpec, io gapi.ProcessIO) (gapi.Process, error) {
+	return scheduler.builder.Hijack(guid, spec, io)
 }
 
 func (scheduler *scheduler) attach(running builder.RunningBuild, emitter event.Emitter) {

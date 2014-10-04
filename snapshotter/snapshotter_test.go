@@ -32,8 +32,7 @@ var _ = Describe("Snapshotter", func() {
 					},
 				},
 			},
-			ContainerHandle: "some-handle",
-			ProcessID:       123,
+			ProcessID: 123,
 		},
 		{
 			Build: builds.Build{
@@ -43,8 +42,7 @@ var _ = Describe("Snapshotter", func() {
 					},
 				},
 			},
-			ContainerHandle: "some-other-handle",
-			ProcessID:       124,
+			ProcessID: 124,
 		},
 	}
 
@@ -57,8 +55,7 @@ var _ = Describe("Snapshotter", func() {
 					},
 				},
 			},
-			ContainerHandle: "some-handle",
-			ProcessID:       123,
+			ProcessID: 123,
 		},
 		{
 			Build: builds.Build{
@@ -68,8 +65,7 @@ var _ = Describe("Snapshotter", func() {
 					},
 				},
 			},
-			ContainerHandle: "some-other-handle",
-			ProcessID:       124,
+			ProcessID: 124,
 		},
 	}
 

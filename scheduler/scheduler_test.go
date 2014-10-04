@@ -419,100 +419,55 @@ var _ = Describe("Scheduler", func() {
 	})
 
 	Describe("Hijack", func() {
-		Context("when the build is not running", func() {
+		Context("when the builder fails to hijack", func() {
+			disaster := errors.New("oh no!")
+
+			BeforeEach(func() {
+				fakeBuilder.HijackReturns(nil, disaster)
+			})
+
 			It("returns an error", func() {
-				_, err := scheduler.Hijack("bogus-guid", garden_api.ProcessSpec{}, garden_api.ProcessIO{})
-				Ω(err).Should(HaveOccurred())
+				_, err := scheduler.Hijack("some-guid", garden_api.ProcessSpec{}, garden_api.ProcessIO{})
+				Ω(err).Should(Equal(disaster))
 			})
 		})
 
-		Context("when the build is running", func() {
-			var attaching chan struct{}
-			var running builder.RunningBuild
-
+		Context("when the builder successfully hijacks", func() {
 			BeforeEach(func() {
-				attaching = make(chan struct{})
+				fakeProcess := new(gfakes.FakeProcess)
+				fakeProcess.WaitReturns(42, nil)
 
-				build.Status = builds.StatusStarted
-
-				running = builder.RunningBuild{
-					Build:           build,
-					ContainerHandle: "some-handle",
-					ProcessID:       42,
-				}
-
-				fakeBuilder.StartStub = func(builds.Build, event.Emitter, <-chan struct{}) (builder.RunningBuild, error) {
-					return running, nil
-				}
-
-				fakeBuilder.AttachStub = func(build builder.RunningBuild, emitter event.Emitter, abort <-chan struct{}) (builder.ExitedBuild, error) {
-					close(attaching)
-					select {}
-				}
+				fakeBuilder.HijackReturns(fakeProcess, nil)
 			})
 
-			Context("when hijacking succeeds", func() {
-				BeforeEach(func() {
-					fakeProcess := new(gfakes.FakeProcess)
-					fakeProcess.WaitReturns(42, nil)
-
-					fakeBuilder.HijackReturns(fakeProcess, nil)
-				})
-
-				It("hijacks via the builder", func() {
-					scheduler.Start(build)
-
-					Eventually(attaching).Should(BeClosed())
-
-					spec := garden_api.ProcessSpec{
-						Path: "process-path",
-						Args: []string{"process", "args"},
-						TTY: &garden_api.TTYSpec{
-							WindowSize: &garden_api.WindowSize{
-								Columns: 123,
-								Rows:    456,
-							},
+			It("hijacks via the builder", func() {
+				spec := garden_api.ProcessSpec{
+					Path: "process-path",
+					Args: []string{"process", "args"},
+					TTY: &garden_api.TTYSpec{
+						WindowSize: &garden_api.WindowSize{
+							Columns: 123,
+							Rows:    456,
 						},
-					}
+					},
+				}
 
-					io := garden_api.ProcessIO{
-						Stdin:  new(bytes.Buffer),
-						Stdout: new(bytes.Buffer),
-					}
+				io := garden_api.ProcessIO{
+					Stdin:  new(bytes.Buffer),
+					Stdout: new(bytes.Buffer),
+				}
 
-					process, err := scheduler.Hijack(running.Build.Guid, spec, io)
-					Ω(err).ShouldNot(HaveOccurred())
+				process, err := scheduler.Hijack("some-guid", spec, io)
+				Ω(err).ShouldNot(HaveOccurred())
 
-					Ω(fakeBuilder.HijackCallCount()).Should(Equal(1))
+				Ω(fakeBuilder.HijackCallCount()).Should(Equal(1))
 
-					build, spec, io := fakeBuilder.HijackArgsForCall(0)
-					Ω(build).Should(Equal(running))
-					Ω(spec).Should(Equal(spec))
-					Ω(io).Should(Equal(io))
+				guid, spec, io := fakeBuilder.HijackArgsForCall(0)
+				Ω(guid).Should(Equal("some-guid"))
+				Ω(spec).Should(Equal(spec))
+				Ω(io).Should(Equal(io))
 
-					Ω(process.Wait()).Should(Equal(42))
-				})
-			})
-
-			Context("when hijacking fails", func() {
-				disaster := errors.New("oh no!")
-
-				BeforeEach(func() {
-					fakeBuilder.HijackReturns(nil, disaster)
-				})
-
-				It("returns the error", func() {
-					scheduler.Start(build)
-
-					Eventually(attaching).Should(BeClosed())
-
-					spec := garden_api.ProcessSpec{}
-
-					io := garden_api.ProcessIO{}
-
-					_, err := scheduler.Hijack(running.Build.Guid, spec, io)
-					Ω(err).Should(Equal(disaster))
-				})
+				Ω(process.Wait()).Should(Equal(42))
 			})
 		})
 	})

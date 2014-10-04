@@ -4,7 +4,7 @@ package fakes
 import (
 	"sync"
 
-	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	gapi "github.com/cloudfoundry-incubator/garden/api"
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder"
 	"github.com/concourse/turbine/event"
@@ -33,15 +33,15 @@ type FakeBuilder struct {
 		result1 builder.ExitedBuild
 		result2 error
 	}
-	HijackStub        func(builder.RunningBuild, garden_api.ProcessSpec, garden_api.ProcessIO) (garden_api.Process, error)
+	HijackStub        func(string, gapi.ProcessSpec, gapi.ProcessIO) (gapi.Process, error)
 	hijackMutex       sync.RWMutex
 	hijackArgsForCall []struct {
-		arg1 builder.RunningBuild
-		arg2 garden_api.ProcessSpec
-		arg3 garden_api.ProcessIO
+		arg1 string
+		arg2 gapi.ProcessSpec
+		arg3 gapi.ProcessIO
 	}
 	hijackReturns struct {
-		result1 garden_api.Process
+		result1 gapi.Process
 		result2 error
 	}
 	FinishStub        func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (builds.Build, error)
@@ -127,12 +127,12 @@ func (fake *FakeBuilder) AttachReturns(result1 builder.ExitedBuild, result2 erro
 	}{result1, result2}
 }
 
-func (fake *FakeBuilder) Hijack(arg1 builder.RunningBuild, arg2 garden_api.ProcessSpec, arg3 garden_api.ProcessIO) (garden_api.Process, error) {
+func (fake *FakeBuilder) Hijack(arg1 string, arg2 gapi.ProcessSpec, arg3 gapi.ProcessIO) (gapi.Process, error) {
 	fake.hijackMutex.Lock()
 	fake.hijackArgsForCall = append(fake.hijackArgsForCall, struct {
-		arg1 builder.RunningBuild
-		arg2 garden_api.ProcessSpec
-		arg3 garden_api.ProcessIO
+		arg1 string
+		arg2 gapi.ProcessSpec
+		arg3 gapi.ProcessIO
 	}{arg1, arg2, arg3})
 	fake.hijackMutex.Unlock()
 	if fake.HijackStub != nil {
@@ -148,16 +148,16 @@ func (fake *FakeBuilder) HijackCallCount() int {
 	return len(fake.hijackArgsForCall)
 }
 
-func (fake *FakeBuilder) HijackArgsForCall(i int) (builder.RunningBuild, garden_api.ProcessSpec, garden_api.ProcessIO) {
+func (fake *FakeBuilder) HijackArgsForCall(i int) (string, gapi.ProcessSpec, gapi.ProcessIO) {
 	fake.hijackMutex.RLock()
 	defer fake.hijackMutex.RUnlock()
 	return fake.hijackArgsForCall[i].arg1, fake.hijackArgsForCall[i].arg2, fake.hijackArgsForCall[i].arg3
 }
 
-func (fake *FakeBuilder) HijackReturns(result1 garden_api.Process, result2 error) {
+func (fake *FakeBuilder) HijackReturns(result1 gapi.Process, result2 error) {
 	fake.HijackStub = nil
 	fake.hijackReturns = struct {
-		result1 garden_api.Process
+		result1 gapi.Process
 		result2 error
 	}{result1, result2}
 }

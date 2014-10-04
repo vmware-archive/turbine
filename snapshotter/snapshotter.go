@@ -21,9 +21,8 @@ type Snapshotter struct {
 }
 
 type BuildSnapshot struct {
-	Build           builds.Build `json:"build"`
-	ContainerHandle string       `json:"handle"`
-	ProcessID       uint32       `json:"process_id"`
+	Build     builds.Build `json:"build"`
+	ProcessID uint32       `json:"process_id"`
 }
 
 func NewSnapshotter(logger lager.Logger, snapshotPath string, scheduler scheduler.Scheduler) *Snapshotter {
@@ -57,9 +56,8 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 				})
 
 				go snapshotter.scheduler.Attach(builder.RunningBuild{
-					Build:           snapshot.Build,
-					ContainerHandle: snapshot.ContainerHandle,
-					ProcessID:       snapshot.ProcessID,
+					Build:     snapshot.Build,
+					ProcessID: snapshot.ProcessID,
 				})
 			}
 		}
@@ -84,9 +82,8 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 	var snapshots []BuildSnapshot
 	for _, running := range running {
 		snapshots = append(snapshots, BuildSnapshot{
-			Build:           running.Build,
-			ContainerHandle: running.ContainerHandle,
-			ProcessID:       running.ProcessID,
+			Build:     running.Build,
+			ProcessID: running.ProcessID,
 		})
 	}
 
