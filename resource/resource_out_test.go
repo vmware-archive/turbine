@@ -6,8 +6,8 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/cloudfoundry-incubator/garden/warden"
-	wfakes "github.com/cloudfoundry-incubator/garden/warden/fakes"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	gfakes "github.com/cloudfoundry-incubator/garden/api/fakes"
 	"github.com/concourse/turbine/api/builds"
 
 	. "github.com/onsi/ginkgo"
@@ -24,7 +24,7 @@ var _ = Describe("Resource Out", func() {
 		outScriptExitStatus int
 		runOutError         error
 
-		outScriptProcess *wfakes.FakeProcess
+		outScriptProcess *gfakes.FakeProcess
 
 		outOutput builds.Output
 		outErr    error
@@ -44,14 +44,14 @@ var _ = Describe("Resource Out", func() {
 		outScriptExitStatus = 0
 		runOutError = nil
 
-		outScriptProcess = new(wfakes.FakeProcess)
+		outScriptProcess = new(gfakes.FakeProcess)
 		outScriptProcess.WaitStub = func() (int, error) {
 			return outScriptExitStatus, nil
 		}
 	})
 
 	JustBeforeEach(func() {
-		wardenClient.Connection.RunStub = func(handle string, spec warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error) {
+		gardenClient.Connection.RunStub = func(handle string, spec garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error) {
 			if runOutError != nil {
 				return nil, runOutError
 			}
@@ -71,7 +71,7 @@ var _ = Describe("Resource Out", func() {
 	It("runs /opt/resource/out <source path> with the request on stdin", func() {
 		Ω(outErr).ShouldNot(HaveOccurred())
 
-		handle, spec, io := wardenClient.Connection.RunArgsForCall(0)
+		handle, spec, io := gardenClient.Connection.RunArgsForCall(0)
 		Ω(handle).Should(Equal("some-handle"))
 		Ω(spec.Path).Should(Equal("/opt/resource/out"))
 		Ω(spec.Args).Should(Equal([]string{"/tmp/build/src"}))
@@ -93,7 +93,7 @@ var _ = Describe("Resource Out", func() {
 		BeforeEach(func() {
 			streamedIn = gbytes.NewBuffer()
 
-			wardenClient.Connection.StreamInStub = func(handle string, destination string, source io.Reader) error {
+			gardenClient.Connection.StreamInStub = func(handle string, destination string, source io.Reader) error {
 				Ω(handle).Should(Equal("some-handle"))
 
 				if destination == "/tmp/build/src" {
@@ -151,7 +151,7 @@ var _ = Describe("Resource Out", func() {
 		disaster := errors.New("oh no!")
 
 		BeforeEach(func() {
-			wardenClient.Connection.StreamInReturns(disaster)
+			gardenClient.Connection.StreamInReturns(disaster)
 		})
 
 		It("returns the error", func() {
@@ -203,9 +203,9 @@ var _ = Describe("Resource Out", func() {
 		})
 
 		It("stops the container", func() {
-			Eventually(wardenClient.Connection.StopCallCount).Should(Equal(1))
+			Eventually(gardenClient.Connection.StopCallCount).Should(Equal(1))
 
-			handle, kill := wardenClient.Connection.StopArgsForCall(0)
+			handle, kill := gardenClient.Connection.StopArgsForCall(0)
 			Ω(handle).Should(Equal("some-handle"))
 			Ω(kill).Should(BeFalse())
 

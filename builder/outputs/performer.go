@@ -1,7 +1,7 @@
 package outputs
 
 import (
-	"github.com/cloudfoundry-incubator/garden/warden"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/event"
 	"github.com/concourse/turbine/logwriter"
@@ -9,7 +9,7 @@ import (
 )
 
 type Performer interface {
-	PerformOutputs(warden.Container, []builds.Output, event.Emitter, <-chan struct{}) ([]builds.Output, error)
+	PerformOutputs(garden_api.Container, []builds.Output, event.Emitter, <-chan struct{}) ([]builds.Output, error)
 }
 
 func NewParallelPerformer(tracker resource.Tracker) Performer {
@@ -21,7 +21,7 @@ type parallelPerformer struct {
 }
 
 func (p parallelPerformer) PerformOutputs(
-	container warden.Container,
+	container garden_api.Container,
 	outputs []builds.Output,
 	emitter event.Emitter,
 	abort <-chan struct{},

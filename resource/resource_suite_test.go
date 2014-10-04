@@ -3,8 +3,8 @@ package resource_test
 import (
 	"testing"
 
-	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
-	"github.com/cloudfoundry-incubator/garden/warden"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	"github.com/cloudfoundry-incubator/garden/client/fake_api_client"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	wardenClient *fake_warden_client.FakeClient
+	gardenClient *fake_api_client.FakeClient
 
 	logs  *gbytes.Buffer
 	abort chan struct{}
@@ -22,11 +22,11 @@ var (
 )
 
 var _ = BeforeEach(func() {
-	wardenClient = fake_warden_client.New()
+	gardenClient = fake_api_client.New()
 
-	wardenClient.Connection.CreateReturns("some-handle", nil)
+	gardenClient.Connection.CreateReturns("some-handle", nil)
 
-	container, err := wardenClient.Create(warden.ContainerSpec{})
+	container, err := gardenClient.Create(garden_api.ContainerSpec{})
 	Ω(err).ShouldNot(HaveOccurred())
 
 	logs = gbytes.NewBuffer()

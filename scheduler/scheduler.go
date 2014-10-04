@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudfoundry-incubator/garden/warden"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder"
 	"github.com/concourse/turbine/event"
@@ -21,7 +21,7 @@ type Scheduler interface {
 	Start(builds.Build)
 	Attach(builder.RunningBuild)
 	Abort(guid string)
-	Hijack(guid string, process warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error)
+	Hijack(guid string, process garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error)
 
 	Drain() []builder.RunningBuild
 }
@@ -134,7 +134,7 @@ func (scheduler *scheduler) Abort(guid string) {
 	close(abort)
 }
 
-func (scheduler *scheduler) Hijack(guid string, spec warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error) {
+func (scheduler *scheduler) Hijack(guid string, spec garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error) {
 	scheduler.mutex.Lock()
 	running, found := scheduler.running[guid]
 	scheduler.mutex.Unlock()

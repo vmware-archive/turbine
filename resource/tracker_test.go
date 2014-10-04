@@ -3,8 +3,8 @@ package resource_test
 import (
 	"errors"
 
-	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
-	"github.com/cloudfoundry-incubator/garden/warden"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	"github.com/cloudfoundry-incubator/garden/client/fake_api_client"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -15,7 +15,7 @@ import (
 var _ = Describe("Tracker", func() {
 	var (
 		resourceTypes config.ResourceTypes
-		wardenClient  *fake_warden_client.FakeClient
+		gardenClient  *fake_api_client.FakeClient
 
 		tracker Tracker
 	)
@@ -26,11 +26,11 @@ var _ = Describe("Tracker", func() {
 			{Name: "type2", Image: "image2"},
 		}
 
-		wardenClient = fake_warden_client.New()
+		gardenClient = fake_api_client.New()
 
-		wardenClient.Connection.CreateReturns("some-handle", nil)
+		gardenClient.Connection.CreateReturns("some-handle", nil)
 
-		tracker = NewTracker(resourceTypes, wardenClient)
+		tracker = NewTracker(resourceTypes, gardenClient)
 	})
 
 	Describe("Init", func() {
@@ -55,7 +55,7 @@ var _ = Describe("Tracker", func() {
 		})
 
 		It("creates a container with the resource type's image", func() {
-			Ω(wardenClient.Connection.CreateArgsForCall(0)).Should(Equal(warden.ContainerSpec{
+			Ω(gardenClient.Connection.CreateArgsForCall(0)).Should(Equal(garden_api.ContainerSpec{
 				RootFSPath: "image1",
 			}))
 		})
@@ -64,7 +64,7 @@ var _ = Describe("Tracker", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
-				wardenClient.Connection.CreateReturns("", disaster)
+				gardenClient.Connection.CreateReturns("", disaster)
 			})
 
 			It("returns the error and no resource", func() {
@@ -107,15 +107,15 @@ var _ = Describe("Tracker", func() {
 		})
 
 		It("destroys the container associated with the resource", func() {
-			Ω(wardenClient.Connection.DestroyCallCount()).Should(Equal(1))
-			Ω(wardenClient.Connection.DestroyArgsForCall(0)).Should(Equal("some-handle"))
+			Ω(gardenClient.Connection.DestroyCallCount()).Should(Equal(1))
+			Ω(gardenClient.Connection.DestroyArgsForCall(0)).Should(Equal("some-handle"))
 		})
 
 		Context("when destroying the container fails", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
-				wardenClient.Connection.DestroyReturns(disaster)
+				gardenClient.Connection.DestroyReturns(disaster)
 			})
 
 			It("returns the error", func() {
@@ -133,7 +133,7 @@ var _ = Describe("Tracker", func() {
 			})
 
 			It("destroys no containers", func() {
-				Ω(wardenClient.Connection.DestroyCallCount()).Should(BeZero())
+				Ω(gardenClient.Connection.DestroyCallCount()).Should(BeZero())
 			})
 		})
 	})

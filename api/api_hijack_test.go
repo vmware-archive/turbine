@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 
-	"github.com/cloudfoundry-incubator/garden/warden"
-	wfakes "github.com/cloudfoundry-incubator/garden/warden/fakes"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	gfakes "github.com/cloudfoundry-incubator/garden/api/fakes"
 	"github.com/concourse/turbine/api/hijack"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -28,7 +28,7 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 	BeforeEach(func() {
 		var err error
 
-		payload, err = json.Marshal(warden.ProcessSpec{
+		payload, err = json.Marshal(garden_api.ProcessSpec{
 			Path: "bash",
 			Args: []string{"-l"},
 		})
@@ -59,10 +59,10 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 	})
 
 	Context("when hijacking succeeds", func() {
-		var process *wfakes.FakeProcess
+		var process *gfakes.FakeProcess
 
 		BeforeEach(func() {
-			process = new(wfakes.FakeProcess)
+			process = new(gfakes.FakeProcess)
 
 			scheduler.HijackReturns(process, nil)
 		})
@@ -72,7 +72,7 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 
 			guid, spec, _ := scheduler.HijackArgsForCall(0)
 			Ω(guid).Should(Equal("some-build-guid"))
-			Ω(spec).Should(Equal(warden.ProcessSpec{
+			Ω(spec).Should(Equal(garden_api.ProcessSpec{
 				Path: "bash",
 				Args: []string{"-l"},
 			}))
@@ -84,7 +84,7 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 
 		Context("when the process prints stdout and stderr", func() {
 			BeforeEach(func() {
-				scheduler.HijackStub = func(guid string, spec warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error) {
+				scheduler.HijackStub = func(guid string, spec garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error) {
 					Ω(io.Stdout).ShouldNot(BeZero())
 					Ω(io.Stderr).ShouldNot(BeZero())
 
@@ -94,7 +94,7 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 					_, err = fmt.Fprintf(io.Stderr, "hello client err\n")
 					Ω(err).ShouldNot(HaveOccurred())
 
-					return new(wfakes.FakeProcess), nil
+					return new(gfakes.FakeProcess), nil
 				}
 			})
 
@@ -140,8 +140,8 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 			})
 
 			It("forwards tty spec paylods to the process", func() {
-				ttySpec := &warden.TTYSpec{
-					WindowSize: &warden.WindowSize{
+				ttySpec := &garden_api.TTYSpec{
+					WindowSize: &garden_api.WindowSize{
 						Columns: 80,
 						Rows:    24,
 					},

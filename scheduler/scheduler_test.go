@@ -11,8 +11,8 @@ import (
 	"github.com/onsi/gomega/ghttp"
 	"github.com/pivotal-golang/lager/lagertest"
 
-	"github.com/cloudfoundry-incubator/garden/warden"
-	wfakes "github.com/cloudfoundry-incubator/garden/warden/fakes"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	gfakes "github.com/cloudfoundry-incubator/garden/api/fakes"
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder"
 	bfakes "github.com/concourse/turbine/builder/fakes"
@@ -421,7 +421,7 @@ var _ = Describe("Scheduler", func() {
 	Describe("Hijack", func() {
 		Context("when the build is not running", func() {
 			It("returns an error", func() {
-				_, err := scheduler.Hijack("bogus-guid", warden.ProcessSpec{}, warden.ProcessIO{})
+				_, err := scheduler.Hijack("bogus-guid", garden_api.ProcessSpec{}, garden_api.ProcessIO{})
 				Ω(err).Should(HaveOccurred())
 			})
 		})
@@ -453,7 +453,7 @@ var _ = Describe("Scheduler", func() {
 
 			Context("when hijacking succeeds", func() {
 				BeforeEach(func() {
-					fakeProcess := new(wfakes.FakeProcess)
+					fakeProcess := new(gfakes.FakeProcess)
 					fakeProcess.WaitReturns(42, nil)
 
 					fakeBuilder.HijackReturns(fakeProcess, nil)
@@ -464,18 +464,18 @@ var _ = Describe("Scheduler", func() {
 
 					Eventually(attaching).Should(BeClosed())
 
-					spec := warden.ProcessSpec{
+					spec := garden_api.ProcessSpec{
 						Path: "process-path",
 						Args: []string{"process", "args"},
-						TTY: &warden.TTYSpec{
-							WindowSize: &warden.WindowSize{
+						TTY: &garden_api.TTYSpec{
+							WindowSize: &garden_api.WindowSize{
 								Columns: 123,
 								Rows:    456,
 							},
 						},
 					}
 
-					io := warden.ProcessIO{
+					io := garden_api.ProcessIO{
 						Stdin:  new(bytes.Buffer),
 						Stdout: new(bytes.Buffer),
 					}
@@ -506,9 +506,9 @@ var _ = Describe("Scheduler", func() {
 
 					Eventually(attaching).Should(BeClosed())
 
-					spec := warden.ProcessSpec{}
+					spec := garden_api.ProcessSpec{}
 
-					io := warden.ProcessIO{}
+					io := garden_api.ProcessIO{}
 
 					_, err := scheduler.Hijack(running.Build.Guid, spec, io)
 					Ω(err).Should(Equal(disaster))

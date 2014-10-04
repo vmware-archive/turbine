@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/cloudfoundry-incubator/garden/warden"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
 )
 
 var ErrAborted = errors.New("script aborted")
@@ -40,11 +40,11 @@ func (resource *resource) runScript(path string, args []string, input interface{
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 
-	process, err := resource.container.Run(warden.ProcessSpec{
+	process, err := resource.container.Run(garden_api.ProcessSpec{
 		Path:       path,
 		Args:       args,
 		Privileged: true,
-	}, warden.ProcessIO{
+	}, garden_api.ProcessIO{
 		Stdin:  bytes.NewBuffer(request),
 		Stderr: io.MultiWriter(resource.logs, stderr),
 		Stdout: stdout,

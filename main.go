@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	WardenClient "github.com/cloudfoundry-incubator/garden/client"
-	WardenConnection "github.com/cloudfoundry-incubator/garden/client/connection"
+	GardenClient "github.com/cloudfoundry-incubator/garden/client"
+	GardenConnection "github.com/cloudfoundry-incubator/garden/client/connection"
 	"github.com/pivotal-golang/lager"
 	"github.com/tedsuo/ifrit"
 	"github.com/tedsuo/ifrit/grouper"
@@ -82,7 +82,7 @@ var snapshotPath = flag.String(
 func main() {
 	flag.Parse()
 
-	wardenClient := WardenClient.New(WardenConnection.New(
+	gardenClient := GardenClient.New(GardenConnection.New(
 		*gardenNetwork,
 		*gardenAddr,
 	))
@@ -104,10 +104,10 @@ func main() {
 		})
 	}
 
-	resourceTracker := resource.NewTracker(resourceTypesConfig, wardenClient)
+	resourceTracker := resource.NewTracker(resourceTypesConfig, gardenClient)
 
 	builder := builder.NewBuilder(
-		wardenClient,
+		gardenClient,
 		inputs.NewParallelFetcher(resourceTracker),
 		outputs.NewParallelPerformer(resourceTracker),
 	)
@@ -125,7 +125,7 @@ func main() {
 
 	var pingErr error
 	for i := 0; i < 10; i++ {
-		pingErr = wardenClient.Ping()
+		pingErr = gardenClient.Ping()
 		if pingErr == nil {
 			break
 		}
@@ -134,7 +134,7 @@ func main() {
 	}
 
 	if pingErr != nil {
-		logger.Fatal("failed-to-ping-warden", err)
+		logger.Fatal("failed-to-ping-garden", err)
 	}
 
 	group := grouper.NewParallel(os.Interrupt, []grouper.Member{

@@ -2,7 +2,7 @@
 package fakes
 
 import (
-	"github.com/cloudfoundry-incubator/garden/warden"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder"
 	"github.com/concourse/turbine/scheduler"
@@ -26,21 +26,21 @@ type FakeScheduler struct {
 	abortArgsForCall []struct {
 		guid string
 	}
-	HijackStub        func(guid string, process warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error)
+	HijackStub        func(guid string, process garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error)
 	hijackMutex       sync.RWMutex
 	hijackArgsForCall []struct {
 		guid    string
-		process warden.ProcessSpec
-		io      warden.ProcessIO
+		process garden_api.ProcessSpec
+		io      garden_api.ProcessIO
 	}
 	hijackReturns struct {
-		result1 warden.Process
+		result1 garden_api.Process
 		result2 error
 	}
 	DrainStub        func() []builder.RunningBuild
 	drainMutex       sync.RWMutex
 	drainArgsForCall []struct{}
-	drainReturns struct {
+	drainReturns     struct {
 		result1 []builder.RunningBuild
 	}
 }
@@ -114,13 +114,13 @@ func (fake *FakeScheduler) AbortArgsForCall(i int) string {
 	return fake.abortArgsForCall[i].guid
 }
 
-func (fake *FakeScheduler) Hijack(guid string, process warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error) {
+func (fake *FakeScheduler) Hijack(guid string, process garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error) {
 	fake.hijackMutex.Lock()
 	defer fake.hijackMutex.Unlock()
 	fake.hijackArgsForCall = append(fake.hijackArgsForCall, struct {
 		guid    string
-		process warden.ProcessSpec
-		io      warden.ProcessIO
+		process garden_api.ProcessSpec
+		io      garden_api.ProcessIO
 	}{guid, process, io})
 	if fake.HijackStub != nil {
 		return fake.HijackStub(guid, process, io)
@@ -135,16 +135,16 @@ func (fake *FakeScheduler) HijackCallCount() int {
 	return len(fake.hijackArgsForCall)
 }
 
-func (fake *FakeScheduler) HijackArgsForCall(i int) (string, warden.ProcessSpec, warden.ProcessIO) {
+func (fake *FakeScheduler) HijackArgsForCall(i int) (string, garden_api.ProcessSpec, garden_api.ProcessIO) {
 	fake.hijackMutex.RLock()
 	defer fake.hijackMutex.RUnlock()
 	return fake.hijackArgsForCall[i].guid, fake.hijackArgsForCall[i].process, fake.hijackArgsForCall[i].io
 }
 
-func (fake *FakeScheduler) HijackReturns(result1 warden.Process, result2 error) {
+func (fake *FakeScheduler) HijackReturns(result1 garden_api.Process, result2 error) {
 	fake.HijackStub = nil
 	fake.hijackReturns = struct {
-		result1 warden.Process
+		result1 garden_api.Process
 		result2 error
 	}{result1, result2}
 }

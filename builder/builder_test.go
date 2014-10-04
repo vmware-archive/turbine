@@ -9,9 +9,9 @@ import (
 	"io/ioutil"
 	"time"
 
-	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
-	"github.com/cloudfoundry-incubator/garden/warden"
-	wfakes "github.com/cloudfoundry-incubator/garden/warden/fakes"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	gfakes "github.com/cloudfoundry-incubator/garden/api/fakes"
+	"github.com/cloudfoundry-incubator/garden/client/fake_api_client"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -28,7 +28,7 @@ import (
 
 var _ = Describe("Builder", func() {
 	var (
-		wardenClient    *fake_warden_client.FakeClient
+		gardenClient    *fake_api_client.FakeClient
 		inputFetcher    *ifakes.FakeFetcher
 		outputPerformer *ofakes.FakePerformer
 
@@ -41,7 +41,7 @@ var _ = Describe("Builder", func() {
 	)
 
 	BeforeEach(func() {
-		wardenClient = fake_warden_client.New()
+		gardenClient = fake_api_client.New()
 
 		emitter = new(efakes.FakeEmitter)
 
@@ -51,7 +51,7 @@ var _ = Describe("Builder", func() {
 		inputFetcher = new(ifakes.FakeFetcher)
 		outputPerformer = new(ofakes.FakePerformer)
 
-		builder = NewBuilder(wardenClient, inputFetcher, outputPerformer)
+		builder = NewBuilder(gardenClient, inputFetcher, outputPerformer)
 
 		build = builds.Build{
 			EventsCallback: "some-events-callback",
@@ -90,12 +90,12 @@ var _ = Describe("Builder", func() {
 				},
 			}
 
-			wardenClient.Connection.CreateReturns("some-handle", nil)
+			gardenClient.Connection.CreateReturns("some-handle", nil)
 
-			runningProcess := new(wfakes.FakeProcess)
+			runningProcess := new(gfakes.FakeProcess)
 			runningProcess.IDReturns(42)
 
-			wardenClient.Connection.RunReturns(runningProcess, nil)
+			gardenClient.Connection.RunReturns(runningProcess, nil)
 		})
 
 		var abort chan struct{}
@@ -159,16 +159,16 @@ var _ = Describe("Builder", func() {
 			})
 
 			It("creates a container with the specified image", func() {
-				created := wardenClient.Connection.CreateArgsForCall(0)
+				created := gardenClient.Connection.CreateArgsForCall(0)
 				Ω(created.RootFSPath).Should(Equal("some-rootfs"))
 			})
 
 			It("streams them in to the container", func() {
-				streamInCalls := wardenClient.Connection.StreamInCallCount()
+				streamInCalls := gardenClient.Connection.StreamInCallCount()
 				Ω(streamInCalls).Should(Equal(2))
 
 				for i := 0; i < streamInCalls; i++ {
-					handle, dst, reader := wardenClient.Connection.StreamInArgsForCall(i)
+					handle, dst, reader := gardenClient.Connection.StreamInArgsForCall(i)
 					Ω(handle).Should(Equal("some-handle"))
 
 					in, err := ioutil.ReadAll(reader)
@@ -191,13 +191,13 @@ var _ = Describe("Builder", func() {
 			})
 
 			It("runs the build's script in the container", func() {
-				handle, spec, _ := wardenClient.Connection.RunArgsForCall(0)
+				handle, spec, _ := gardenClient.Connection.RunArgsForCall(0)
 				Ω(handle).Should(Equal("some-handle"))
 				Ω(spec.Path).Should(Equal("./bin/test"))
 				Ω(spec.Args).Should(Equal([]string{"arg1", "arg2"}))
 				Ω(spec.Env).Should(ConsistOf("FOO=bar", "BAZ=buzz"))
 				Ω(spec.Dir).Should(Equal("/tmp/build/src"))
-				Ω(spec.TTY).Should(Equal(&warden.TTYSpec{}))
+				Ω(spec.TTY).Should(Equal(&garden_api.TTYSpec{}))
 				Ω(spec.Privileged).Should(BeFalse())
 			})
 
@@ -261,11 +261,11 @@ var _ = Describe("Builder", func() {
 					})
 
 					It("streams them in using the new destinations", func() {
-						streamInCalls := wardenClient.Connection.StreamInCallCount()
+						streamInCalls := gardenClient.Connection.StreamInCallCount()
 						Ω(streamInCalls).Should(Equal(2))
 
 						for i := 0; i < streamInCalls; i++ {
-							handle, dst, reader := wardenClient.Connection.StreamInArgsForCall(i)
+							handle, dst, reader := gardenClient.Connection.StreamInArgsForCall(i)
 							Ω(handle).Should(Equal("some-handle"))
 
 							in, err := ioutil.ReadAll(reader)
@@ -307,7 +307,7 @@ var _ = Describe("Builder", func() {
 				disaster := errors.New("oh no!")
 
 				BeforeEach(func() {
-					wardenClient.Connection.RunReturns(nil, disaster)
+					gardenClient.Connection.RunReturns(nil, disaster)
 				})
 
 				It("returns the error", func() {
@@ -327,7 +327,7 @@ var _ = Describe("Builder", func() {
 				})
 
 				It("runs the build privileged", func() {
-					handle, spec, _ := wardenClient.Connection.RunArgsForCall(0)
+					handle, spec, _ := gardenClient.Connection.RunArgsForCall(0)
 					Ω(handle).Should(Equal("some-handle"))
 					Ω(spec.Privileged).Should(BeTrue())
 				})
@@ -335,7 +335,7 @@ var _ = Describe("Builder", func() {
 
 			Context("when the build emits logs", func() {
 				BeforeEach(func() {
-					wardenClient.Connection.RunStub = func(handle string, spec warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error) {
+					gardenClient.Connection.RunStub = func(handle string, spec garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error) {
 						go func() {
 							defer GinkgoRecover()
 
@@ -346,7 +346,7 @@ var _ = Describe("Builder", func() {
 							Ω(err).ShouldNot(HaveOccurred())
 						}()
 
-						return new(wfakes.FakeProcess), nil
+						return new(gfakes.FakeProcess), nil
 					}
 				})
 
@@ -373,7 +373,7 @@ var _ = Describe("Builder", func() {
 				disaster := errors.New("oh no!")
 
 				BeforeEach(func() {
-					wardenClient.Connection.CreateReturns("", disaster)
+					gardenClient.Connection.CreateReturns("", disaster)
 				})
 
 				It("returns the error", func() {
@@ -391,7 +391,7 @@ var _ = Describe("Builder", func() {
 				disaster := errors.New("oh no!")
 
 				BeforeEach(func() {
-					wardenClient.Connection.StreamInReturns(disaster)
+					gardenClient.Connection.StreamInReturns(disaster)
 				})
 
 				It("returns the error", func() {
@@ -407,14 +407,14 @@ var _ = Describe("Builder", func() {
 
 			Describe("after the build starts", func() {
 				BeforeEach(func() {
-					process := new(wfakes.FakeProcess)
+					process := new(gfakes.FakeProcess)
 					process.IDReturns(42)
 					process.WaitStub = func() (int, error) {
 						panic("TODO")
 						select {}
 					}
 
-					wardenClient.Connection.RunReturns(process, nil)
+					gardenClient.Connection.RunReturns(process, nil)
 				})
 
 				It("notifies that the build is started, with updated inputs (version + metadata)", func() {
@@ -442,10 +442,10 @@ var _ = Describe("Builder", func() {
 			})
 
 			It("streams an empty tarball in to /tmp/build/src", func() {
-				streamInCalls := wardenClient.Connection.StreamInCallCount()
+				streamInCalls := gardenClient.Connection.StreamInCallCount()
 				Ω(streamInCalls).Should(Equal(1))
 
-				handle, dst, reader := wardenClient.Connection.StreamInArgsForCall(0)
+				handle, dst, reader := gardenClient.Connection.StreamInArgsForCall(0)
 				Ω(handle).Should(Equal("some-handle"))
 				Ω(dst).Should(Equal("/tmp/build/src"))
 
@@ -470,14 +470,14 @@ var _ = Describe("Builder", func() {
 		})
 
 		BeforeEach(func() {
-			wardenClient.Connection.CreateReturns("the-attached-container", nil)
+			gardenClient.Connection.CreateReturns("the-attached-container", nil)
 
-			container, err := wardenClient.Create(warden.ContainerSpec{})
+			container, err := gardenClient.Create(garden_api.ContainerSpec{})
 			Ω(err).ShouldNot(HaveOccurred())
 
-			wardenClient.Connection.CreateReturns("", nil)
+			gardenClient.Connection.CreateReturns("", nil)
 
-			runningProcess := new(wfakes.FakeProcess)
+			runningProcess := new(gfakes.FakeProcess)
 
 			runningBuild = RunningBuild{
 				Build: build,
@@ -494,18 +494,18 @@ var _ = Describe("Builder", func() {
 			BeforeEach(func() {
 				runningBuild.Container = nil
 				runningBuild.Process = nil
-				wardenClient.Connection.AttachReturns(new(wfakes.FakeProcess), nil)
+				gardenClient.Connection.AttachReturns(new(gfakes.FakeProcess), nil)
 			})
 
 			Context("and the container can still be found", func() {
 				BeforeEach(func() {
-					wardenClient.Connection.ListReturns([]string{runningBuild.ContainerHandle}, nil)
+					gardenClient.Connection.ListReturns([]string{runningBuild.ContainerHandle}, nil)
 				})
 
-				It("looks it up via warden and uses it for attaching", func() {
-					Ω(wardenClient.Connection.ListCallCount()).Should(Equal(1))
+				It("looks it up via garden and uses it for attaching", func() {
+					Ω(gardenClient.Connection.ListCallCount()).Should(Equal(1))
 
-					handle, pid, _ := wardenClient.Connection.AttachArgsForCall(0)
+					handle, pid, _ := gardenClient.Connection.AttachArgsForCall(0)
 					Ω(handle).Should(Equal("the-attached-container"))
 					Ω(pid).Should(Equal(uint32(42)))
 				})
@@ -513,7 +513,7 @@ var _ = Describe("Builder", func() {
 
 			Context("and the lookup fails", func() {
 				BeforeEach(func() {
-					wardenClient.Connection.ListReturns([]string{}, nil)
+					gardenClient.Connection.ListReturns([]string{}, nil)
 				})
 
 				It("returns an error", func() {
@@ -535,20 +535,20 @@ var _ = Describe("Builder", func() {
 
 			Context("and attaching succeeds", func() {
 				BeforeEach(func() {
-					wardenClient.Connection.AttachReturns(new(wfakes.FakeProcess), nil)
+					gardenClient.Connection.AttachReturns(new(gfakes.FakeProcess), nil)
 				})
 
 				It("attaches to the build's process", func() {
-					Ω(wardenClient.Connection.AttachCallCount()).Should(Equal(1))
+					Ω(gardenClient.Connection.AttachCallCount()).Should(Equal(1))
 
-					handle, pid, _ := wardenClient.Connection.AttachArgsForCall(0)
+					handle, pid, _ := gardenClient.Connection.AttachArgsForCall(0)
 					Ω(handle).Should(Equal("the-attached-container"))
 					Ω(pid).Should(Equal(uint32(42)))
 				})
 
 				Context("and the build emits logs", func() {
 					BeforeEach(func() {
-						wardenClient.Connection.AttachStub = func(handle string, pid uint32, io warden.ProcessIO) (warden.Process, error) {
+						gardenClient.Connection.AttachStub = func(handle string, pid uint32, io garden_api.ProcessIO) (garden_api.Process, error) {
 							Ω(handle).Should(Equal("the-attached-container"))
 							Ω(pid).Should(Equal(uint32(42)))
 							Ω(io.Stdout).ShouldNot(BeNil())
@@ -560,7 +560,7 @@ var _ = Describe("Builder", func() {
 							_, err = fmt.Fprintf(io.Stderr, "stderr\n")
 							Ω(err).ShouldNot(HaveOccurred())
 
-							return new(wfakes.FakeProcess), nil
+							return new(gfakes.FakeProcess), nil
 						}
 					})
 
@@ -588,7 +588,7 @@ var _ = Describe("Builder", func() {
 				disaster := errors.New("oh no!")
 
 				BeforeEach(func() {
-					wardenClient.Connection.AttachReturns(nil, disaster)
+					gardenClient.Connection.AttachReturns(nil, disaster)
 				})
 
 				It("returns the error", func() {
@@ -613,14 +613,14 @@ var _ = Describe("Builder", func() {
 					close(abort)
 				}()
 
-				process := new(wfakes.FakeProcess)
+				process := new(gfakes.FakeProcess)
 				process.WaitStub = func() (int, error) {
 					close(waiting)
 					<-stopping
 					return 0, nil
 				}
 
-				wardenClient.Connection.StopStub = func(string, bool) error {
+				gardenClient.Connection.StopStub = func(string, bool) error {
 					close(stopping)
 					return nil
 				}
@@ -629,9 +629,9 @@ var _ = Describe("Builder", func() {
 			})
 
 			It("stops the container", func() {
-				Eventually(wardenClient.Connection.StopCallCount).Should(Equal(1))
+				Eventually(gardenClient.Connection.StopCallCount).Should(Equal(1))
 
-				handle, kill := wardenClient.Connection.StopArgsForCall(0)
+				handle, kill := gardenClient.Connection.StopArgsForCall(0)
 				Ω(handle).Should(Equal("the-attached-container"))
 				Ω(kill).Should(BeFalse())
 			})
@@ -649,7 +649,7 @@ var _ = Describe("Builder", func() {
 
 		Context("when the build's script exits", func() {
 			BeforeEach(func() {
-				process := new(wfakes.FakeProcess)
+				process := new(gfakes.FakeProcess)
 				process.WaitReturns(2, nil)
 
 				runningBuild.Process = process
@@ -663,10 +663,10 @@ var _ = Describe("Builder", func() {
 
 	Describe("Hijack", func() {
 		var runningBuild RunningBuild
-		var spec warden.ProcessSpec
-		var io warden.ProcessIO
+		var spec garden_api.ProcessSpec
+		var io garden_api.ProcessIO
 
-		var process warden.Process
+		var process garden_api.Process
 		var hijackErr error
 
 		JustBeforeEach(func() {
@@ -679,12 +679,12 @@ var _ = Describe("Builder", func() {
 				ContainerHandle: "some-handle",
 			}
 
-			spec = warden.ProcessSpec{
+			spec = garden_api.ProcessSpec{
 				Path: "some-path",
 				Args: []string{"some", "args"},
 			}
 
-			io = warden.ProcessIO{
+			io = garden_api.ProcessIO{
 				Stdin:  new(bytes.Buffer),
 				Stdout: new(bytes.Buffer),
 			}
@@ -692,25 +692,25 @@ var _ = Describe("Builder", func() {
 
 		Context("when the container can be found", func() {
 			BeforeEach(func() {
-				wardenClient.Connection.ListReturns([]string{"some-handle"}, nil)
+				gardenClient.Connection.ListReturns([]string{"some-handle"}, nil)
 			})
 
 			Context("and running succeeds", func() {
-				var fakeProcess *wfakes.FakeProcess
+				var fakeProcess *gfakes.FakeProcess
 
 				BeforeEach(func() {
-					fakeProcess = new(wfakes.FakeProcess)
+					fakeProcess = new(gfakes.FakeProcess)
 					fakeProcess.WaitReturns(42, nil)
 
-					wardenClient.Connection.RunReturns(fakeProcess, nil)
+					gardenClient.Connection.RunReturns(fakeProcess, nil)
 				})
 
-				It("looks it up via warden and uses it for running", func() {
+				It("looks it up via garden and uses it for running", func() {
 					Ω(hijackErr).ShouldNot(HaveOccurred())
 
-					Ω(wardenClient.Connection.ListCallCount()).Should(Equal(1))
+					Ω(gardenClient.Connection.ListCallCount()).Should(Equal(1))
 
-					ranHandle, ranSpec, ranIO := wardenClient.Connection.RunArgsForCall(0)
+					ranHandle, ranSpec, ranIO := gardenClient.Connection.RunArgsForCall(0)
 					Ω(ranHandle).Should(Equal("some-handle"))
 					Ω(ranSpec).Should(Equal(spec))
 					Ω(ranIO).Should(Equal(io))
@@ -725,7 +725,7 @@ var _ = Describe("Builder", func() {
 				disaster := errors.New("oh no!")
 
 				BeforeEach(func() {
-					wardenClient.Connection.RunReturns(nil, disaster)
+					gardenClient.Connection.RunReturns(nil, disaster)
 				})
 
 				It("returns the error", func() {
@@ -736,7 +736,7 @@ var _ = Describe("Builder", func() {
 
 		Context("when the lookup fails", func() {
 			BeforeEach(func() {
-				wardenClient.Connection.ListReturns([]string{}, nil)
+				gardenClient.Connection.ListReturns([]string{}, nil)
 			})
 
 			It("returns an error", func() {
@@ -818,12 +818,12 @@ var _ = Describe("Builder", func() {
 				onFailureOutput,
 			}
 
-			wardenClient.Connection.CreateReturns("the-attached-container", nil)
+			gardenClient.Connection.CreateReturns("the-attached-container", nil)
 
-			container, err := wardenClient.Create(warden.ContainerSpec{})
+			container, err := gardenClient.Create(garden_api.ContainerSpec{})
 			Ω(err).ShouldNot(HaveOccurred())
 
-			wardenClient.Connection.CreateReturns("", nil)
+			gardenClient.Connection.CreateReturns("", nil)
 
 			exitedBuild = ExitedBuild{
 				Build: build,

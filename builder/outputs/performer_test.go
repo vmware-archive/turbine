@@ -7,8 +7,8 @@ import (
 	"io/ioutil"
 	"sync"
 
-	"github.com/cloudfoundry-incubator/garden/client/fake_warden_client"
-	"github.com/cloudfoundry-incubator/garden/warden"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	"github.com/cloudfoundry-incubator/garden/client/fake_api_client"
 	"github.com/concourse/turbine/api/builds"
 	. "github.com/concourse/turbine/builder/outputs"
 	"github.com/concourse/turbine/event"
@@ -23,12 +23,12 @@ import (
 
 var _ = Describe("Performer", func() {
 	var (
-		wardenClient *fake_warden_client.FakeClient
+		gardenClient *fake_api_client.FakeClient
 
 		tracker   *rfakes.FakeTracker
 		performer Performer
 
-		container        warden.Container
+		container        garden_api.Container
 		outputsToPerform []builds.Output
 		emitter          *efakes.FakeEmitter
 		events           *testlog.EventLog
@@ -44,11 +44,11 @@ var _ = Describe("Performer", func() {
 	BeforeEach(func() {
 		var err error
 
-		wardenClient = fake_warden_client.New()
+		gardenClient = fake_api_client.New()
 
-		wardenClient.Connection.CreateReturns("the-performing-container", nil)
+		gardenClient.Connection.CreateReturns("the-performing-container", nil)
 
-		container, err = wardenClient.Create(warden.ContainerSpec{})
+		container, err = gardenClient.Create(garden_api.ContainerSpec{})
 		Ω(err).ShouldNot(HaveOccurred())
 
 		resource1 = new(rfakes.FakeResource)
@@ -105,7 +105,7 @@ var _ = Describe("Performer", func() {
 
 	Context("when streaming out succeeds", func() {
 		BeforeEach(func() {
-			wardenClient.Connection.StreamOutStub = func(handle string, srcPath string) (io.ReadCloser, error) {
+			gardenClient.Connection.StreamOutStub = func(handle string, srcPath string) (io.ReadCloser, error) {
 				return ioutil.NopCloser(bytes.NewBufferString("streamed-out")), nil
 			}
 		})
@@ -320,7 +320,7 @@ var _ = Describe("Performer", func() {
 		disaster := errors.New("oh no!")
 
 		BeforeEach(func() {
-			wardenClient.Connection.StreamOutReturns(nil, disaster)
+			gardenClient.Connection.StreamOutReturns(nil, disaster)
 		})
 
 		It("returns the error", func() {

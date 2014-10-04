@@ -7,8 +7,8 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/cloudfoundry-incubator/garden/warden"
-	wfakes "github.com/cloudfoundry-incubator/garden/warden/fakes"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	gfakes "github.com/cloudfoundry-incubator/garden/api/fakes"
 	"github.com/concourse/turbine/api/builds"
 
 	. "github.com/onsi/ginkgo"
@@ -24,7 +24,7 @@ var _ = Describe("Resource In", func() {
 		inScriptExitStatus int
 		runInError         error
 
-		inScriptProcess *wfakes.FakeProcess
+		inScriptProcess *gfakes.FakeProcess
 
 		inStream io.Reader
 		inConfig builds.Config
@@ -46,14 +46,14 @@ var _ = Describe("Resource In", func() {
 		inScriptExitStatus = 0
 		runInError = nil
 
-		inScriptProcess = new(wfakes.FakeProcess)
+		inScriptProcess = new(gfakes.FakeProcess)
 		inScriptProcess.WaitStub = func() (int, error) {
 			return inScriptExitStatus, nil
 		}
 	})
 
 	JustBeforeEach(func() {
-		wardenClient.Connection.RunStub = func(handle string, spec warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error) {
+		gardenClient.Connection.RunStub = func(handle string, spec garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error) {
 			if runInError != nil {
 				return nil, runInError
 			}
@@ -73,7 +73,7 @@ var _ = Describe("Resource In", func() {
 	It("runs /opt/resource/in <destination> with the request on stdin", func() {
 		Ω(inErr).ShouldNot(HaveOccurred())
 
-		handle, spec, io := wardenClient.Connection.RunArgsForCall(0)
+		handle, spec, io := gardenClient.Connection.RunArgsForCall(0)
 		Ω(handle).Should(Equal("some-handle"))
 		Ω(spec.Path).Should(Equal("/opt/resource/in"))
 		Ω(spec.Args).Should(Equal([]string{"/tmp/build/src/some-name"}))
@@ -126,7 +126,7 @@ var _ = Describe("Resource In", func() {
 
 	Context("when streaming out succeeds", func() {
 		BeforeEach(func() {
-			wardenClient.Connection.StreamOutStub = func(handle string, source string) (io.ReadCloser, error) {
+			gardenClient.Connection.StreamOutStub = func(handle string, source string) (io.ReadCloser, error) {
 				Ω(handle).Should(Equal("some-handle"))
 
 				streamOut := new(bytes.Buffer)
@@ -153,7 +153,7 @@ var _ = Describe("Resource In", func() {
 
 		Context("and the config path exists", func() {
 			BeforeEach(func() {
-				wardenClient.Connection.StreamOutStub = func(handle string, src string) (io.ReadCloser, error) {
+				gardenClient.Connection.StreamOutStub = func(handle string, src string) (io.ReadCloser, error) {
 					Ω(handle).Should(Equal("some-handle"))
 
 					buf := new(bytes.Buffer)
@@ -182,7 +182,7 @@ var _ = Describe("Resource In", func() {
 
 			Context("but the output is invalid", func() {
 				BeforeEach(func() {
-					wardenClient.Connection.StreamOutStub = func(handle string, src string) (io.ReadCloser, error) {
+					gardenClient.Connection.StreamOutStub = func(handle string, src string) (io.ReadCloser, error) {
 						Ω(handle).Should(Equal("some-handle"))
 
 						buf := new(bytes.Buffer)
@@ -215,7 +215,7 @@ var _ = Describe("Resource In", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
-				wardenClient.Connection.StreamOutReturns(nil, disaster)
+				gardenClient.Connection.StreamOutReturns(nil, disaster)
 			})
 
 			It("returns the error", func() {
@@ -225,7 +225,7 @@ var _ = Describe("Resource In", func() {
 
 		Context("when the config path does not exist", func() {
 			BeforeEach(func() {
-				wardenClient.Connection.StreamOutStub = func(string, string) (io.ReadCloser, error) {
+				gardenClient.Connection.StreamOutStub = func(string, string) (io.ReadCloser, error) {
 					return ioutil.NopCloser(new(bytes.Buffer)), nil
 				}
 			})
@@ -267,7 +267,7 @@ var _ = Describe("Resource In", func() {
 		disaster := errors.New("oh no!")
 
 		BeforeEach(func() {
-			wardenClient.Connection.StreamOutReturns(nil, disaster)
+			gardenClient.Connection.StreamOutReturns(nil, disaster)
 		})
 
 		It("returns the error", func() {
@@ -292,9 +292,9 @@ var _ = Describe("Resource In", func() {
 		})
 
 		It("stops the container", func() {
-			Eventually(wardenClient.Connection.StopCallCount).Should(Equal(1))
+			Eventually(gardenClient.Connection.StopCallCount).Should(Equal(1))
 
-			handle, kill := wardenClient.Connection.StopArgsForCall(0)
+			handle, kill := gardenClient.Connection.StopArgsForCall(0)
 			Ω(handle).Should(Equal("some-handle"))
 			Ω(kill).Should(BeFalse())
 

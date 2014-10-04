@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/cloudfoundry-incubator/garden/warden"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
 	"github.com/concourse/turbine/scheduler"
 	"github.com/pivotal-golang/lager"
 )
@@ -20,7 +20,7 @@ type handler struct {
 
 type ProcessPayload struct {
 	Stdin   []byte
-	TTYSpec *warden.TTYSpec
+	TTYSpec *garden_api.TTYSpec
 }
 
 func NewHandler(logger lager.Logger, scheduler scheduler.Scheduler) http.Handler {
@@ -38,7 +38,7 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"guid": guid,
 	})
 
-	var spec warden.ProcessSpec
+	var spec garden_api.ProcessSpec
 	err := json.NewDecoder(r.Body).Decode(&spec)
 	if err != nil {
 		log.Error("malformed-request", err)
@@ -61,7 +61,7 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	inR, inW := io.Pipe()
 
-	process, err := handler.scheduler.Hijack(guid, spec, warden.ProcessIO{
+	process, err := handler.scheduler.Hijack(guid, spec, garden_api.ProcessIO{
 		Stdin:  inR,
 		Stdout: conn,
 		Stderr: conn,

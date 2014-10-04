@@ -4,8 +4,8 @@ import (
 	"errors"
 	"io/ioutil"
 
-	"github.com/cloudfoundry-incubator/garden/warden"
-	wfakes "github.com/cloudfoundry-incubator/garden/warden/fakes"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	gfakes "github.com/cloudfoundry-incubator/garden/api/fakes"
 	"github.com/concourse/turbine/api/builds"
 
 	. "github.com/onsi/ginkgo"
@@ -21,7 +21,7 @@ var _ = Describe("Resource Check", func() {
 		checkScriptExitStatus int
 		runCheckError         error
 
-		checkScriptProcess *wfakes.FakeProcess
+		checkScriptProcess *gfakes.FakeProcess
 
 		checkResult []builds.Version
 		checkErr    error
@@ -39,7 +39,7 @@ var _ = Describe("Resource Check", func() {
 		checkScriptExitStatus = 0
 		runCheckError = nil
 
-		checkScriptProcess = new(wfakes.FakeProcess)
+		checkScriptProcess = new(gfakes.FakeProcess)
 		checkScriptProcess.WaitStub = func() (int, error) {
 			return checkScriptExitStatus, nil
 		}
@@ -49,7 +49,7 @@ var _ = Describe("Resource Check", func() {
 	})
 
 	JustBeforeEach(func() {
-		wardenClient.Connection.RunStub = func(handle string, spec warden.ProcessSpec, io warden.ProcessIO) (warden.Process, error) {
+		gardenClient.Connection.RunStub = func(handle string, spec garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error) {
 			if runCheckError != nil {
 				return nil, runCheckError
 			}
@@ -69,7 +69,7 @@ var _ = Describe("Resource Check", func() {
 	It("runs /opt/resource/check the request on stdin", func() {
 		Ω(checkErr).ShouldNot(HaveOccurred())
 
-		handle, spec, io := wardenClient.Connection.RunArgsForCall(0)
+		handle, spec, io := gardenClient.Connection.RunArgsForCall(0)
 		Ω(handle).Should(Equal("some-handle"))
 		Ω(spec.Path).Should(Equal("/opt/resource/check"))
 		Ω(spec.Args).Should(BeEmpty())

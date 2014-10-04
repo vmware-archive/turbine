@@ -4,17 +4,17 @@ package fakes
 import (
 	"sync"
 
-	"github.com/cloudfoundry-incubator/garden/warden"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
 	"github.com/concourse/turbine/api/builds"
 	"github.com/concourse/turbine/builder/outputs"
 	"github.com/concourse/turbine/event"
 )
 
 type FakePerformer struct {
-	PerformOutputsStub        func(warden.Container, []builds.Output, event.Emitter, <-chan struct{}) ([]builds.Output, error)
+	PerformOutputsStub        func(garden_api.Container, []builds.Output, event.Emitter, <-chan struct{}) ([]builds.Output, error)
 	performOutputsMutex       sync.RWMutex
 	performOutputsArgsForCall []struct {
-		arg1 warden.Container
+		arg1 garden_api.Container
 		arg2 []builds.Output
 		arg3 event.Emitter
 		arg4 <-chan struct{}
@@ -25,10 +25,10 @@ type FakePerformer struct {
 	}
 }
 
-func (fake *FakePerformer) PerformOutputs(arg1 warden.Container, arg2 []builds.Output, arg3 event.Emitter, arg4 <-chan struct{}) ([]builds.Output, error) {
+func (fake *FakePerformer) PerformOutputs(arg1 garden_api.Container, arg2 []builds.Output, arg3 event.Emitter, arg4 <-chan struct{}) ([]builds.Output, error) {
 	fake.performOutputsMutex.Lock()
 	fake.performOutputsArgsForCall = append(fake.performOutputsArgsForCall, struct {
-		arg1 warden.Container
+		arg1 garden_api.Container
 		arg2 []builds.Output
 		arg3 event.Emitter
 		arg4 <-chan struct{}
@@ -47,7 +47,7 @@ func (fake *FakePerformer) PerformOutputsCallCount() int {
 	return len(fake.performOutputsArgsForCall)
 }
 
-func (fake *FakePerformer) PerformOutputsArgsForCall(i int) (warden.Container, []builds.Output, event.Emitter, <-chan struct{}) {
+func (fake *FakePerformer) PerformOutputsArgsForCall(i int) (garden_api.Container, []builds.Output, event.Emitter, <-chan struct{}) {
 	fake.performOutputsMutex.RLock()
 	defer fake.performOutputsMutex.RUnlock()
 	return fake.performOutputsArgsForCall[i].arg1, fake.performOutputsArgsForCall[i].arg2, fake.performOutputsArgsForCall[i].arg3, fake.performOutputsArgsForCall[i].arg4

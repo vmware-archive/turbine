@@ -5,7 +5,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/cloudfoundry-incubator/garden/warden"
+	garden_api "github.com/cloudfoundry-incubator/garden/api"
 	"github.com/concourse/turbine/config"
 )
 
@@ -16,20 +16,20 @@ type Tracker interface {
 
 type tracker struct {
 	resourceTypes config.ResourceTypes
-	wardenClient  warden.Client
+	gardenClient  garden_api.Client
 
-	containers  map[Resource]warden.Container
+	containers  map[Resource]garden_api.Container
 	containersL *sync.Mutex
 }
 
 var ErrUnknownResourceType = errors.New("unknown resource type")
 
-func NewTracker(resourceTypes config.ResourceTypes, wardenClient warden.Client) Tracker {
+func NewTracker(resourceTypes config.ResourceTypes, gardenClient garden_api.Client) Tracker {
 	return &tracker{
 		resourceTypes: resourceTypes,
-		wardenClient:  wardenClient,
+		gardenClient:  gardenClient,
 
-		containers:  make(map[Resource]warden.Container),
+		containers:  make(map[Resource]garden_api.Container),
 		containersL: new(sync.Mutex),
 	}
 }
@@ -40,7 +40,7 @@ func (tracker *tracker) Init(typ string, logs io.Writer, abort <-chan struct{}) 
 		return nil, ErrUnknownResourceType
 	}
 
-	container, err := tracker.wardenClient.Create(warden.ContainerSpec{
+	container, err := tracker.gardenClient.Create(garden_api.ContainerSpec{
 		RootFSPath: resourceType.Image,
 	})
 	if err != nil {
@@ -66,5 +66,5 @@ func (tracker *tracker) Release(resource Resource) error {
 		return nil
 	}
 
-	return tracker.wardenClient.Destroy(container.Handle())
+	return tracker.gardenClient.Destroy(container.Handle())
 }
