@@ -63,9 +63,9 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 				})
 			}
 		}
-	}
 
-	log.Info("restored")
+		log.Info("restored")
+	}
 
 	close(ready)
 
