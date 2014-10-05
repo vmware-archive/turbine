@@ -20,6 +20,14 @@ import (
 
 var ErrAborted = errors.New("build aborted")
 
+type UnsatisfiedInputError struct {
+	InputName string
+}
+
+func (err UnsatisfiedInputError) Error() string {
+	return fmt.Sprintf("unsatisfied input: %s", err.InputName)
+}
+
 type Builder interface {
 	// begin execution of a build, fetching all inputs and spawning the process
 	Start(builds.Build, event.Emitter, <-chan struct{}) (RunningBuild, error)
@@ -96,7 +104,7 @@ func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <
 		return RunningBuild{}, builder.emitError(emitter, "failed to create container", err)
 	}
 
-	err = builder.streamInResources(container, fetchedInputs, build.Config.Paths)
+	err = builder.streamInResources(container, fetchedInputs, build.Config.Inputs)
 	if err != nil {
 		return RunningBuild{}, builder.emitError(emitter, "failed to stream in resources", err)
 	}
@@ -206,33 +214,56 @@ func (builder *builder) createBuildContainer(
 func (builder *builder) streamInResources(
 	container gapi.Container,
 	fetchedInputs []inputs.FetchedInput,
-	paths map[string]string,
+	configuredInputs []builds.InputConfig,
 ) error {
 	if len(fetchedInputs) == 0 {
-		// ensure sources dir exists by streaming an empty tarball in to it
-		emptyTar := new(bytes.Buffer)
+		// ensure sources dir exists even if there are no inputs
+		return builder.makeEmptySources(container)
+	}
 
-		err := tar.NewWriter(emptyTar).Close()
+	inputLocations := make(map[string]inputs.FetchedInput, len(fetchedInputs))
+	for _, fetched := range fetchedInputs {
+		// input location defaults to its name
+		inputLocations[fetched.Input.Name] = fetched
+	}
+
+	// check and reconfigure explicitly configured inputs
+	for _, input := range configuredInputs {
+		fetched, found := inputLocations[input.Name]
+		if !found {
+			return UnsatisfiedInputError{input.Name}
+		}
+
+		if input.Path != "" {
+			delete(inputLocations, input.Name)
+			inputLocations[input.Path] = fetched
+		}
+	}
+
+	// stream in all inputs
+	for destination, fetched := range inputLocations {
+		resourceDest := path.Join(resource.ResourcesDir, destination)
+
+		err := container.StreamIn(resourceDest, fetched.Stream)
 		if err != nil {
 			return err
 		}
+	}
 
-		err = container.StreamIn(resource.ResourcesDir, emptyTar)
-		if err != nil {
-			return err
-		}
-	} else {
-		for _, input := range fetchedInputs {
-			destination, found := paths[input.Input.Name]
-			if !found {
-				destination = input.Input.Name
-			}
+	return nil
+}
 
-			err := container.StreamIn(path.Join(resource.ResourcesDir, destination), input.Stream)
-			if err != nil {
-				return err
-			}
-		}
+func (builder *builder) makeEmptySources(container gapi.Container) error {
+	emptyTar := new(bytes.Buffer)
+
+	err := tar.NewWriter(emptyTar).Close()
+	if err != nil {
+		return err
+	}
+
+	err = container.StreamIn(resource.ResourcesDir, emptyTar)
+	if err != nil {
+		return err
 	}
 
 	return nil

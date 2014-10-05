@@ -258,12 +258,17 @@ var _ = Describe("Builder", func() {
 					}))
 				})
 
-				Context("with new input destinations", func() {
+				Context("which specifies explicit inputs", func() {
 					BeforeEach(func() {
 						fetchedInputs[0].Config = builds.Config{
-							Paths: map[string]string{
-								"first-resource":  "reconfigured-first/source/path",
-								"second-resource": "reconfigured-second/source/path",
+							Inputs: []builds.InputConfig{
+								{
+									Name: "first-resource",
+									Path: "first/source/path",
+								},
+								{
+									Name: "second-resource",
+								},
 							},
 						}
 					})
@@ -281,13 +286,25 @@ var _ = Describe("Builder", func() {
 
 							switch string(in) {
 							case "some-data-1":
-								Ω(dst).Should(Equal("/tmp/build/src/reconfigured-first/source/path"))
+								Ω(dst).Should(Equal("/tmp/build/src/first/source/path"))
 							case "some-data-2":
-								Ω(dst).Should(Equal("/tmp/build/src/reconfigured-second/source/path"))
+								Ω(dst).Should(Equal("/tmp/build/src/second-resource"))
 							default:
 								Fail("unknown stream destination: " + dst)
 							}
 						}
+					})
+
+					Context("and some are missing in the build", func() {
+						BeforeEach(func() {
+							fetchedInputs[0].Config.Inputs = []builds.InputConfig{
+								{Name: "some-bogus-input"},
+							}
+						})
+
+						It("returns an error", func() {
+							Ω(startErr).Should(Equal(UnsatisfiedInputError{"some-bogus-input"}))
+						})
 					})
 				})
 			})

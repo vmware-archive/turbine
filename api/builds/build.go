@@ -33,12 +33,17 @@ type Config struct {
 	Image  string            `json:"image"   yaml:"image"`
 	Params map[string]string `json:"params"  yaml:"params"`
 	Run    RunConfig         `json:"run"     yaml:"run"`
-	Paths  map[string]string `json:"paths"   yaml:"paths"`
+	Inputs []InputConfig     `json:"inputs"  yaml:"inputs"`
 }
 
 type RunConfig struct {
 	Path string   `json:"path" yaml:"path"`
 	Args []string `json:"args" yaml:"args"`
+}
+
+type InputConfig struct {
+	Name string `json:"name" yaml:"name"`
+	Path string `json:"path" yaml:"path"`
 }
 
 type Input struct {
