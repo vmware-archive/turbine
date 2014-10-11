@@ -441,7 +441,7 @@ var _ = Describe("Scheduler", func() {
 
 			BeforeEach(func() {
 				startTime = time.Now()
-				endTime = startTime.Add(10 * time.Second)
+				endTime = startTime
 
 				clock.CurrentTimeReturns(startTime)
 

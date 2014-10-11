@@ -95,14 +95,12 @@ func (scheduler *scheduler) Start(build builds.Build) {
 		emitter := scheduler.createEmitter(build.EventsCallback, scheduler.draining)
 		defer emitter.Close()
 
-		startTime := scheduler.clock.CurrentTime().Unix()
-
 		running, err := scheduler.builder.Start(build, emitter, abort)
 		if err != nil {
 			log.Error("errored", err)
 
-			build.StartTime = startTime
-			build.EndTime = scheduler.clock.CurrentTime().Unix()
+			build.StartTime = scheduler.clock.CurrentTime().Unix()
+			build.EndTime = build.StartTime
 
 			select {
 			case <-abort:
@@ -115,7 +113,7 @@ func (scheduler *scheduler) Start(build builds.Build) {
 		} else {
 			log.Info("started")
 
-			running.Build.StartTime = startTime
+			running.Build.StartTime = scheduler.clock.CurrentTime().Unix()
 			running.Build.Status = builds.StatusStarted
 			scheduler.reportBuild(running.Build, log, emitter, running.Build.StartTime)
 
