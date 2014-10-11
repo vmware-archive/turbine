@@ -112,7 +112,7 @@ func main() {
 		outputs.NewParallelPerformer(resourceTracker),
 	)
 
-	scheduler := scheduler.NewScheduler(logger.Session("scheduler"), builder, event.NewWebSocketEmitter)
+	scheduler := scheduler.NewScheduler(logger.Session("scheduler"), builder, event.NewWebSocketEmitter, scheduler.NewClock())
 
 	generator := rata.NewRequestGenerator("http://"+*peerAddr, routes.Routes)
 
