@@ -32,6 +32,8 @@ type scheduler struct {
 
 	createEmitter EmitterFactory
 
+	clock Clock
+
 	httpClient *http.Client
 
 	inFlight *sync.WaitGroup
@@ -48,6 +50,7 @@ func NewScheduler(
 	l lager.Logger,
 	b builder.Builder,
 	createEmitter EmitterFactory,
+	clock Clock,
 ) Scheduler {
 	return &scheduler{
 		logger: l,
@@ -55,6 +58,8 @@ func NewScheduler(
 		builder: b,
 
 		createEmitter: createEmitter,
+
+		clock: clock,
 
 		httpClient: &http.Client{
 			Transport: &http.Transport{
@@ -90,9 +95,14 @@ func (scheduler *scheduler) Start(build builds.Build) {
 		emitter := scheduler.createEmitter(build.EventsCallback, scheduler.draining)
 		defer emitter.Close()
 
+		startTime := scheduler.clock.CurrentTime().Unix()
+
 		running, err := scheduler.builder.Start(build, emitter, abort)
 		if err != nil {
 			log.Error("errored", err)
+
+			build.StartTime = startTime
+			build.EndTime = scheduler.clock.CurrentTime().Unix()
 
 			select {
 			case <-abort:
@@ -101,12 +111,13 @@ func (scheduler *scheduler) Start(build builds.Build) {
 				build.Status = builds.StatusErrored
 			}
 
-			scheduler.reportBuild(build, log, emitter)
+			scheduler.reportBuild(build, log, emitter, build.EndTime)
 		} else {
 			log.Info("started")
 
+			running.Build.StartTime = startTime
 			running.Build.Status = builds.StatusStarted
-			scheduler.reportBuild(running.Build, log, emitter)
+			scheduler.reportBuild(running.Build, log, emitter, running.Build.StartTime)
 
 			scheduler.attach(running, emitter)
 		}
@@ -170,6 +181,8 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, emitter event.E
 	case err := <-errored:
 		log.Error("errored", err)
 
+		running.Build.EndTime = scheduler.clock.CurrentTime().Unix()
+
 		select {
 		case <-abort:
 			running.Build.Status = builds.StatusAborted
@@ -177,7 +190,7 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, emitter event.E
 			running.Build.Status = builds.StatusErrored
 		}
 
-		scheduler.reportBuild(running.Build, log, emitter)
+		scheduler.reportBuild(running.Build, log, emitter, running.Build.EndTime)
 	case <-scheduler.draining:
 		return
 	}
@@ -196,6 +209,8 @@ func (scheduler *scheduler) finish(exited builder.ExitedBuild, emitter event.Emi
 	if err != nil {
 		log.Error("failed", err)
 
+		exited.Build.EndTime = scheduler.clock.CurrentTime().Unix()
+
 		select {
 		case <-abort:
 			exited.Build.Status = builds.StatusAborted
@@ -203,9 +218,11 @@ func (scheduler *scheduler) finish(exited builder.ExitedBuild, emitter event.Emi
 			exited.Build.Status = builds.StatusErrored
 		}
 
-		scheduler.reportBuild(exited.Build, log, emitter)
+		scheduler.reportBuild(exited.Build, log, emitter, exited.Build.EndTime)
 	} else {
 		log.Info("finished")
+
+		finished.EndTime = scheduler.clock.CurrentTime().Unix()
 
 		if exited.ExitStatus == 0 {
 			finished.Status = builds.StatusSucceeded
@@ -213,7 +230,7 @@ func (scheduler *scheduler) finish(exited builder.ExitedBuild, emitter event.Emi
 			finished.Status = builds.StatusFailed
 		}
 
-		scheduler.reportBuild(finished, log, emitter)
+		scheduler.reportBuild(finished, log, emitter, finished.EndTime)
 	}
 }
 
@@ -262,9 +279,15 @@ func (scheduler *scheduler) unregisterAbortChannel(guid string) {
 	delete(scheduler.aborting, guid)
 }
 
-func (scheduler *scheduler) reportBuild(build builds.Build, logger lager.Logger, emitter event.Emitter) {
+func (scheduler *scheduler) reportBuild(
+	build builds.Build,
+	logger lager.Logger,
+	emitter event.Emitter,
+	statusTime int64,
+) {
 	emitter.EmitEvent(event.Status{
 		Status: build.Status,
+		Time:   statusTime,
 	})
 
 	if build.StatusCallback == "" {

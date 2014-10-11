@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -19,15 +20,20 @@ import (
 	"github.com/concourse/turbine/event"
 	efakes "github.com/concourse/turbine/event/fakes"
 	. "github.com/concourse/turbine/scheduler"
+	"github.com/concourse/turbine/scheduler/fakes"
 )
 
 var _ = Describe("Scheduler", func() {
-	var fakeBuilder *bfakes.FakeBuilder
-	var emitter *efakes.FakeEmitter
-	var emittedEvents <-chan event.Event
-	var scheduler Scheduler
+	var (
+		fakeBuilder   *bfakes.FakeBuilder
+		emitter       *efakes.FakeEmitter
+		emittedEvents <-chan event.Event
+		clock         *fakes.FakeClock
 
-	var build builds.Build
+		scheduler Scheduler
+
+		build builds.Build
+	)
 
 	BeforeEach(func() {
 		fakeBuilder = new(bfakes.FakeBuilder)
@@ -61,7 +67,10 @@ var _ = Describe("Scheduler", func() {
 			return emitter
 		}
 
-		scheduler = NewScheduler(lagertest.NewTestLogger("test"), fakeBuilder, createEmitter)
+		clock = new(fakes.FakeClock)
+
+		logger := lagertest.NewTestLogger("test")
+		scheduler = NewScheduler(logger, fakeBuilder, createEmitter, clock)
 
 		build = builds.Build{
 			Guid: "abc",
@@ -149,12 +158,23 @@ var _ = Describe("Scheduler", func() {
 			var running builder.RunningBuild
 			var gotStartedCallback <-chan struct{}
 
+			var (
+				startTime time.Time
+				endTime   time.Time
+			)
+
 			BeforeEach(func() {
+				startTime = time.Now()
+				endTime = startTime.Add(10 * time.Second)
+
+				clock.CurrentTimeReturns(startTime)
+
 				running = builder.RunningBuild{
 					Build: build,
 				}
 
 				running.Build.Status = builds.StatusStarted
+				running.Build.StartTime = startTime.Unix()
 
 				fakeBuilder.StartReturns(running, nil)
 
@@ -175,6 +195,7 @@ var _ = Describe("Scheduler", func() {
 
 				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 					Status: builds.StatusStarted,
+					Time:   startTime.Unix(),
 				})))
 			})
 
@@ -187,7 +208,7 @@ var _ = Describe("Scheduler", func() {
 
 				BeforeEach(func() {
 					exited = builder.ExitedBuild{
-						Build: build,
+						Build: running.Build,
 
 						ExitStatus: 0,
 					}
@@ -209,10 +230,15 @@ var _ = Describe("Scheduler", func() {
 					var gotRequest <-chan struct{}
 
 					BeforeEach(func() {
-						fakeBuilder.FinishReturns(running.Build, nil)
+						fakeBuilder.FinishStub = func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (builds.Build, error) {
+							clock.CurrentTimeReturns(endTime)
+							return exited.Build, nil
+						}
 
 						succeededBuild := exited.Build
 						succeededBuild.Status = builds.StatusSucceeded
+						succeededBuild.StartTime = startTime.Unix()
+						succeededBuild.EndTime = endTime.Unix()
 
 						gotRequest = handleBuild(succeededBuild)
 					})
@@ -228,6 +254,7 @@ var _ = Describe("Scheduler", func() {
 
 						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 							Status: builds.StatusSucceeded,
+							Time:   endTime.Unix(),
 						})))
 					})
 
@@ -240,10 +267,15 @@ var _ = Describe("Scheduler", func() {
 					var gotRequest <-chan struct{}
 
 					BeforeEach(func() {
-						fakeBuilder.FinishReturns(builds.Build{}, errors.New("oh no!"))
+						fakeBuilder.FinishStub = func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (builds.Build, error) {
+							clock.CurrentTimeReturns(endTime)
+							return builds.Build{}, errors.New("oh no!")
+						}
 
-						erroredBuild := running.Build
+						erroredBuild := exited.Build
 						erroredBuild.Status = builds.StatusErrored
+						erroredBuild.StartTime = startTime.Unix()
+						erroredBuild.EndTime = endTime.Unix()
 
 						gotRequest = handleBuild(erroredBuild)
 					})
@@ -259,6 +291,7 @@ var _ = Describe("Scheduler", func() {
 
 						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 							Status: builds.StatusErrored,
+							Time:   endTime.Unix(),
 						})))
 					})
 
@@ -273,7 +306,7 @@ var _ = Describe("Scheduler", func() {
 
 				BeforeEach(func() {
 					exited = builder.ExitedBuild{
-						Build: build,
+						Build: running.Build,
 
 						ExitStatus: 2,
 					}
@@ -295,15 +328,19 @@ var _ = Describe("Scheduler", func() {
 					var gotRequest <-chan struct{}
 
 					BeforeEach(func() {
-						fakeBuilder.FinishReturns(running.Build, nil)
+						fakeBuilder.FinishStub = func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (builds.Build, error) {
+							clock.CurrentTimeReturns(endTime)
+							return exited.Build, nil
+						}
 
 						failedBuild := exited.Build
 						failedBuild.Status = builds.StatusFailed
+						failedBuild.EndTime = endTime.Unix()
 
 						gotRequest = handleBuild(failedBuild)
 					})
 
-					It("reports the started build as fao;ed", func() {
+					It("reports the started build as failed", func() {
 						scheduler.Start(build)
 
 						Eventually(gotRequest).Should(BeClosed())
@@ -314,6 +351,7 @@ var _ = Describe("Scheduler", func() {
 
 						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 							Status: builds.StatusFailed,
+							Time:   endTime.Unix(),
 						})))
 					})
 
@@ -326,10 +364,14 @@ var _ = Describe("Scheduler", func() {
 					var gotRequest <-chan struct{}
 
 					BeforeEach(func() {
-						fakeBuilder.FinishReturns(builds.Build{}, errors.New("oh no!"))
+						fakeBuilder.FinishStub = func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (builds.Build, error) {
+							clock.CurrentTimeReturns(endTime)
+							return exited.Build, errors.New("oh no!")
+						}
 
-						erroredBuild := running.Build
+						erroredBuild := exited.Build
 						erroredBuild.Status = builds.StatusErrored
+						erroredBuild.EndTime = endTime.Unix()
 
 						gotRequest = handleBuild(erroredBuild)
 					})
@@ -345,6 +387,7 @@ var _ = Describe("Scheduler", func() {
 
 						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 							Status: builds.StatusErrored,
+							Time:   endTime.Unix(),
 						})))
 					})
 
@@ -358,10 +401,14 @@ var _ = Describe("Scheduler", func() {
 				var gotRequest <-chan struct{}
 
 				BeforeEach(func() {
-					fakeBuilder.AttachReturns(builder.ExitedBuild{}, errors.New("oh no!"))
+					fakeBuilder.AttachStub = func(builder.RunningBuild, event.Emitter, <-chan struct{}) (builder.ExitedBuild, error) {
+						clock.CurrentTimeReturns(endTime)
+						return builder.ExitedBuild{}, errors.New("oh no!")
+					}
 
 					erroredBuild := running.Build
 					erroredBuild.Status = builds.StatusErrored
+					erroredBuild.EndTime = endTime.Unix()
 
 					gotRequest = handleBuild(erroredBuild)
 				})
@@ -377,6 +424,7 @@ var _ = Describe("Scheduler", func() {
 
 					Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 						Status: builds.StatusErrored,
+						Time:   endTime.Unix(),
 					})))
 				})
 
@@ -387,13 +435,25 @@ var _ = Describe("Scheduler", func() {
 		})
 
 		Context("and the build fails to start", func() {
+			var startTime time.Time
+			var endTime time.Time
 			var gotRequest <-chan struct{}
 
 			BeforeEach(func() {
-				fakeBuilder.StartReturns(builder.RunningBuild{}, errors.New("oh no!"))
+				startTime = time.Now()
+				endTime = startTime.Add(10 * time.Second)
+
+				clock.CurrentTimeReturns(startTime)
+
+				fakeBuilder.StartStub = func(builds.Build, event.Emitter, <-chan struct{}) (builder.RunningBuild, error) {
+					clock.CurrentTimeReturns(endTime)
+					return builder.RunningBuild{}, errors.New("oh no!")
+				}
 
 				erroredBuild := build
 				erroredBuild.Status = builds.StatusErrored
+				erroredBuild.StartTime = startTime.Unix()
+				erroredBuild.EndTime = endTime.Unix()
 
 				gotRequest = handleBuild(erroredBuild)
 			})
@@ -409,6 +469,7 @@ var _ = Describe("Scheduler", func() {
 
 				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 					Status: builds.StatusErrored,
+					Time:   endTime.Unix(),
 				})))
 			})
 
@@ -473,6 +534,13 @@ var _ = Describe("Scheduler", func() {
 	})
 
 	Describe("Abort", func() {
+		var currentTime time.Time
+
+		BeforeEach(func() {
+			currentTime = time.Now()
+			clock.CurrentTimeReturns(currentTime)
+		})
+
 		Context("when starting a build", func() {
 			var gotAborting chan (<-chan struct{})
 
@@ -506,6 +574,7 @@ var _ = Describe("Scheduler", func() {
 
 				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 					Status: builds.StatusAborted,
+					Time:   currentTime.Unix(),
 				})))
 			})
 		})
@@ -547,6 +616,7 @@ var _ = Describe("Scheduler", func() {
 
 				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 					Status: builds.StatusAborted,
+					Time:   currentTime.Unix(),
 				})))
 			})
 		})
@@ -592,6 +662,7 @@ var _ = Describe("Scheduler", func() {
 
 				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 					Status: builds.StatusAborted,
+					Time:   currentTime.Unix(),
 				})))
 			})
 		})
@@ -603,9 +674,13 @@ var _ = Describe("Scheduler", func() {
 				Guid: "starting",
 			}
 
+			var startTime time.Time
 			var running chan builder.RunningBuild
 
 			BeforeEach(func() {
+				startTime = time.Now()
+				clock.CurrentTimeReturns(startTime)
+
 				running = make(chan builder.RunningBuild)
 
 				fakeBuilder.StartStub = func(build builds.Build, emitter event.Emitter, abort <-chan struct{}) (builder.RunningBuild, error) {
@@ -628,6 +703,7 @@ var _ = Describe("Scheduler", func() {
 
 				startedBuild := startingBuild
 				startedBuild.Status = builds.StatusStarted
+				startedBuild.StartTime = startTime.Unix()
 				runningBuild := builder.RunningBuild{Build: startedBuild}
 
 				drained := make(chan []builder.RunningBuild)

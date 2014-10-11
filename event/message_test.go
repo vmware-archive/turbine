@@ -45,6 +45,7 @@ var _ = Describe("Encoding & Decoding messages", func() {
 		BeforeEach(func() {
 			event = Status{
 				Status: builds.StatusSucceeded,
+				Time:   time.Now().Unix(),
 			}
 		})
 

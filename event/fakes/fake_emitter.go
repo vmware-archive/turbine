@@ -2,8 +2,8 @@
 package fakes
 
 import (
-	"sync"
 	"github.com/concourse/turbine/event"
+	"sync"
 )
 
 type FakeEmitter struct {

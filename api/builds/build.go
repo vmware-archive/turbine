@@ -27,6 +27,9 @@ type Build struct {
 	HijackURL string `json:"hijack_url"`
 
 	Status Status `json:"status"`
+
+	StartTime int64 `json:"start_time"`
+	EndTime   int64 `json:"end_time"`
 }
 
 type Config struct {
