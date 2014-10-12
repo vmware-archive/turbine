@@ -237,6 +237,39 @@ var _ = Describe("Builder", func() {
 				}
 			})
 
+			Context("when the build has not configured a container image", func() {
+				BeforeEach(func() {
+					build.Config.Image = ""
+				})
+
+				It("returns an error", func() {
+					Ω(startErr).Should(Equal(ErrNoImageSpecified))
+				})
+
+				It("errors", func() {
+					Eventually(events.Sent).Should(ContainElement(event.Error{
+						Message: "failed to create container: no image specified",
+					}))
+				})
+
+				Context("but an input configured an image", func() {
+					BeforeEach(func() {
+						fetchedInputs[0].Config = builds.Config{
+							Image: "build-config-image",
+						}
+					})
+
+					It("successfully starts", func() {
+						Ω(startErr).ShouldNot(HaveOccurred())
+					})
+
+					It("successfully creates the container", func() {
+						created := gardenClient.Connection.CreateArgsForCall(0)
+						Ω(created.RootFSPath).Should(Equal("build-config-image"))
+					})
+				})
+			})
+
 			Context("when an input provides build configuration", func() {
 				BeforeEach(func() {
 					fetchedInputs[0].Config = builds.Config{

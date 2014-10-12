@@ -19,6 +19,7 @@ import (
 )
 
 var ErrAborted = errors.New("build aborted")
+var ErrNoImageSpecified = errors.New("no image specified")
 
 type UnsatisfiedInputError struct {
 	InputName string
@@ -205,6 +206,10 @@ func (builder *builder) createBuildContainer(
 	buildGuid string,
 	buildConfig builds.Config,
 ) (gapi.Container, error) {
+	if buildConfig.Image == "" {
+		return nil, ErrNoImageSpecified
+	}
+
 	return builder.gardenClient.Create(gapi.ContainerSpec{
 		Handle:     buildGuid,
 		RootFSPath: buildConfig.Image,
