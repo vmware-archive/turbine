@@ -2,7 +2,6 @@ package scheduler_test
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -18,17 +17,14 @@ import (
 	"github.com/concourse/turbine/builder"
 	bfakes "github.com/concourse/turbine/builder/fakes"
 	"github.com/concourse/turbine/event"
-	efakes "github.com/concourse/turbine/event/fakes"
 	. "github.com/concourse/turbine/scheduler"
 	"github.com/concourse/turbine/scheduler/fakes"
 )
 
 var _ = Describe("Scheduler", func() {
 	var (
-		fakeBuilder   *bfakes.FakeBuilder
-		emitter       *efakes.FakeEmitter
-		emittedEvents <-chan event.Event
-		clock         *fakes.FakeClock
+		fakeBuilder *bfakes.FakeBuilder
+		clock       *fakes.FakeClock
 
 		scheduler Scheduler
 
@@ -37,40 +33,10 @@ var _ = Describe("Scheduler", func() {
 
 	BeforeEach(func() {
 		fakeBuilder = new(bfakes.FakeBuilder)
-
-		emitter = new(efakes.FakeEmitter)
-
-		events := make(chan event.Event, 100)
-		emittedEvents = events
-
-		emitter.EmitEventStub = func(e event.Event) {
-			payload, err := json.Marshal(event.Message{e})
-			Ω(err).ShouldNot(HaveOccurred())
-
-			var duped event.Message
-			err = json.Unmarshal(payload, &duped)
-			Ω(err).ShouldNot(HaveOccurred())
-
-			events <- duped.Event
-		}
-
-		createEmitter := func(logsURL string, draining <-chan struct{}) event.Emitter {
-			defer GinkgoRecover()
-
-			if logsURL == "" {
-				return event.NullEmitter{}
-			}
-
-			Ω(logsURL).Should(Equal("some-events-callback"))
-			Ω(draining).ShouldNot(BeNil())
-
-			return emitter
-		}
-
 		clock = new(fakes.FakeClock)
 
 		logger := lagertest.NewTestLogger("test")
-		scheduler = NewScheduler(logger, fakeBuilder, createEmitter, clock)
+		scheduler = NewScheduler(logger, fakeBuilder, clock)
 
 		build = builds.Build{
 			Guid: "abc",
@@ -87,8 +53,6 @@ var _ = Describe("Scheduler", func() {
 					"FIZZ": "buzz",
 				},
 			},
-
-			EventsCallback: "some-events-callback",
 		}
 	})
 
@@ -149,9 +113,8 @@ var _ = Describe("Scheduler", func() {
 
 			Eventually(fakeBuilder.StartCallCount).Should(Equal(1))
 
-			startedBuild, startedEmitter, _ := fakeBuilder.StartArgsForCall(0)
+			startedBuild, _, _ := fakeBuilder.StartArgsForCall(0)
 			Ω(startedBuild).Should(Equal(build))
-			Ω(startedEmitter).Should(Equal(emitter))
 		})
 
 		Context("and the build starts", func() {
@@ -193,6 +156,11 @@ var _ = Describe("Scheduler", func() {
 			It("emits a started status event", func() {
 				scheduler.Start(build)
 
+				emittedEvents, stop, err := scheduler.Subscribe(build.Guid, 0)
+				Ω(err).ShouldNot(HaveOccurred())
+
+				defer close(stop)
+
 				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 					Status: builds.StatusStarted,
 					Time:   startTime.Unix(),
@@ -221,9 +189,8 @@ var _ = Describe("Scheduler", func() {
 
 					Eventually(fakeBuilder.FinishCallCount).Should(Equal(1))
 
-					completing, completingEmitter, _ := fakeBuilder.FinishArgsForCall(0)
+					completing, _, _ := fakeBuilder.FinishArgsForCall(0)
 					Ω(completing).Should(Equal(exited))
-					Ω(completingEmitter).Should(Equal(emitter))
 				})
 
 				Context("and the build finishes", func() {
@@ -251,6 +218,11 @@ var _ = Describe("Scheduler", func() {
 
 					It("emits a succeeded status event", func() {
 						scheduler.Start(build)
+
+						emittedEvents, stop, err := scheduler.Subscribe(build.Guid, 0)
+						Ω(err).ShouldNot(HaveOccurred())
+
+						defer close(stop)
 
 						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 							Status: builds.StatusSucceeded,
@@ -289,6 +261,11 @@ var _ = Describe("Scheduler", func() {
 					It("emits an errored status event", func() {
 						scheduler.Start(build)
 
+						emittedEvents, stop, err := scheduler.Subscribe(build.Guid, 0)
+						Ω(err).ShouldNot(HaveOccurred())
+
+						defer close(stop)
+
 						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 							Status: builds.StatusErrored,
 							Time:   endTime.Unix(),
@@ -319,9 +296,8 @@ var _ = Describe("Scheduler", func() {
 
 					Eventually(fakeBuilder.FinishCallCount).Should(Equal(1))
 
-					completing, completingEmitter, _ := fakeBuilder.FinishArgsForCall(0)
+					completing, _, _ := fakeBuilder.FinishArgsForCall(0)
 					Ω(completing).Should(Equal(exited))
-					Ω(completingEmitter).Should(Equal(emitter))
 				})
 
 				Context("and the build finishes", func() {
@@ -348,6 +324,11 @@ var _ = Describe("Scheduler", func() {
 
 					It("emits a failed status event", func() {
 						scheduler.Start(build)
+
+						emittedEvents, stop, err := scheduler.Subscribe(build.Guid, 0)
+						Ω(err).ShouldNot(HaveOccurred())
+
+						defer close(stop)
 
 						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 							Status: builds.StatusFailed,
@@ -385,6 +366,11 @@ var _ = Describe("Scheduler", func() {
 					It("emits an errored status event", func() {
 						scheduler.Start(build)
 
+						emittedEvents, stop, err := scheduler.Subscribe(build.Guid, 0)
+						Ω(err).ShouldNot(HaveOccurred())
+
+						defer close(stop)
+
 						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 							Status: builds.StatusErrored,
 							Time:   endTime.Unix(),
@@ -421,6 +407,11 @@ var _ = Describe("Scheduler", func() {
 
 				It("emits an errored status event", func() {
 					scheduler.Start(build)
+
+					emittedEvents, stop, err := scheduler.Subscribe(build.Guid, 0)
+					Ω(err).ShouldNot(HaveOccurred())
+
+					defer close(stop)
 
 					Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 						Status: builds.StatusErrored,
@@ -466,6 +457,11 @@ var _ = Describe("Scheduler", func() {
 
 			It("emits an errored status event", func() {
 				scheduler.Start(build)
+
+				emittedEvents, stop, err := scheduler.Subscribe(build.Guid, 0)
+				Ω(err).ShouldNot(HaveOccurred())
+
+				defer close(stop)
 
 				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 					Status: builds.StatusErrored,
@@ -572,6 +568,11 @@ var _ = Describe("Scheduler", func() {
 
 				scheduler.Abort(build.Guid)
 
+				emittedEvents, stop, err := scheduler.Subscribe(build.Guid, 0)
+				Ω(err).ShouldNot(HaveOccurred())
+
+				defer close(stop)
+
 				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 					Status: builds.StatusAborted,
 					Time:   currentTime.Unix(),
@@ -613,6 +614,11 @@ var _ = Describe("Scheduler", func() {
 				Eventually(gotAborting).Should(Receive())
 
 				scheduler.Abort(build.Guid)
+
+				emittedEvents, stop, err := scheduler.Subscribe(build.Guid, 0)
+				Ω(err).ShouldNot(HaveOccurred())
+
+				defer close(stop)
 
 				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 					Status: builds.StatusAborted,
@@ -659,6 +665,11 @@ var _ = Describe("Scheduler", func() {
 				Eventually(gotAborting).Should(Receive())
 
 				scheduler.Abort(build.Guid)
+
+				emittedEvents, stop, err := scheduler.Subscribe(build.Guid, 0)
+				Ω(err).ShouldNot(HaveOccurred())
+
+				defer close(stop)
 
 				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
 					Status: builds.StatusAborted,
@@ -811,6 +822,70 @@ var _ = Describe("Scheduler", func() {
 		Context("when no builds are being scheduled", func() {
 			It("returns an empty slice", func() {
 				Ω(scheduler.Drain()).Should(BeEmpty())
+			})
+		})
+	})
+
+	Describe("Subscribe", func() {
+		var (
+			emittedEvents <-chan event.Event
+			stop          chan<- struct{}
+			subscribeErr  error
+		)
+
+		JustBeforeEach(func() {
+			emittedEvents, stop, subscribeErr = scheduler.Subscribe(build.Guid, 0)
+		})
+
+		Context("with an unknown build", func() {
+			It("returns an error", func() {
+				Ω(subscribeErr).Should(HaveOccurred())
+			})
+		})
+
+		Context("with a started build", func() {
+			var (
+				buildEmitter <-chan event.Emitter
+				finishBuild  chan<- struct{}
+			)
+
+			BeforeEach(func() {
+				e := make(chan event.Emitter, 1)
+				f := make(chan struct{})
+
+				buildEmitter = e
+				finishBuild = f
+
+				fakeBuilder.AttachStub = func(running builder.RunningBuild, emitter event.Emitter, abort <-chan struct{}) (builder.ExitedBuild, error) {
+					e <- emitter
+					<-f
+					return builder.ExitedBuild{
+						Build: running.Build,
+					}, nil
+				}
+
+				scheduler.Start(build)
+			})
+
+			AfterEach(func() {
+				close(finishBuild)
+			})
+
+			It("does not error", func() {
+				Ω(subscribeErr).ShouldNot(HaveOccurred())
+			})
+
+			It("returns its event stream, and a channel to close the subscription", func() {
+				var emitter event.Emitter
+				Eventually(buildEmitter).Should(Receive(&emitter))
+
+				emitter.EmitEvent(event.Start{Time: 1})
+				Eventually(emittedEvents).Should(Receive(Equal(event.Start{Time: 1})))
+
+				close(stop)
+
+				emitter.EmitEvent(event.Start{Time: 2})
+				Consistently(emittedEvents).ShouldNot(Receive())
 			})
 		})
 	})

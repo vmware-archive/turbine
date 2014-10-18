@@ -3,6 +3,7 @@ package scheduler
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -21,6 +22,7 @@ type Scheduler interface {
 	Attach(builder.RunningBuild)
 	Abort(guid string)
 	Hijack(guid string, process gapi.ProcessSpec, io gapi.ProcessIO) (gapi.Process, error)
+	Subscribe(guid string, from uint) (<-chan event.Event, chan<- struct{}, error)
 
 	Drain() []builder.RunningBuild
 }
@@ -30,34 +32,28 @@ type scheduler struct {
 
 	builder builder.Builder
 
-	createEmitter EmitterFactory
-
 	clock Clock
 
 	httpClient *http.Client
 
-	inFlight *sync.WaitGroup
-	draining chan struct{}
-	running  map[string]builder.RunningBuild
-	aborting map[string]chan struct{}
+	inFlight  *sync.WaitGroup
+	draining  chan struct{}
+	running   map[string]builder.RunningBuild
+	eventHubs map[string]*event.Hub
+	aborting  map[string]chan struct{}
 
 	mutex *sync.RWMutex
 }
 
-type EmitterFactory func(consumer string, drain <-chan struct{}) event.Emitter
-
 func NewScheduler(
 	l lager.Logger,
 	b builder.Builder,
-	createEmitter EmitterFactory,
 	clock Clock,
 ) Scheduler {
 	return &scheduler{
 		logger: l,
 
 		builder: b,
-
-		createEmitter: createEmitter,
 
 		clock: clock,
 
@@ -67,10 +63,11 @@ func NewScheduler(
 			},
 		},
 
-		inFlight: new(sync.WaitGroup),
-		draining: make(chan struct{}),
-		running:  make(map[string]builder.RunningBuild),
-		aborting: make(map[string]chan struct{}),
+		inFlight:  new(sync.WaitGroup),
+		draining:  make(chan struct{}),
+		running:   make(map[string]builder.RunningBuild),
+		eventHubs: make(map[string]*event.Hub),
+		aborting:  make(map[string]chan struct{}),
 
 		mutex: new(sync.RWMutex),
 	}
@@ -90,9 +87,12 @@ func (scheduler *scheduler) Start(build builds.Build) {
 	})
 
 	abort := scheduler.abortChannel(build.Guid)
+	emitter := scheduler.eventHub(build.Guid)
 
 	go func() {
-		emitter := scheduler.createEmitter(build.EventsCallback, scheduler.draining)
+		defer scheduler.inFlight.Done()
+		defer scheduler.unregisterAbortChannel(build.Guid)
+		defer scheduler.unregisterEventHub(build.Guid)
 		defer emitter.Close()
 
 		running, err := scheduler.builder.Start(build, emitter, abort)
@@ -119,14 +119,13 @@ func (scheduler *scheduler) Start(build builds.Build) {
 
 			scheduler.attach(running, emitter)
 		}
-
-		scheduler.unregisterAbortChannel(build.Guid)
-		scheduler.inFlight.Done()
 	}()
 }
 
 func (scheduler *scheduler) Attach(running builder.RunningBuild) {
-	emitter := scheduler.createEmitter(running.Build.EventsCallback, scheduler.draining)
+	emitter := scheduler.eventHub(running.Build.Guid)
+	defer scheduler.unregisterEventHub(running.Build.Guid)
+
 	scheduler.attach(running, emitter)
 }
 
@@ -144,6 +143,23 @@ func (scheduler *scheduler) Abort(guid string) {
 
 func (scheduler *scheduler) Hijack(guid string, spec gapi.ProcessSpec, io gapi.ProcessIO) (gapi.Process, error) {
 	return scheduler.builder.Hijack(guid, spec, io)
+}
+
+func (scheduler *scheduler) Subscribe(guid string, from uint) (<-chan event.Event, chan<- struct{}, error) {
+	scheduler.mutex.RLock()
+	hub, found := scheduler.eventHubs[guid]
+	scheduler.mutex.RUnlock()
+
+	if !found {
+		return nil, nil, fmt.Errorf("unknown build: %s", guid)
+	}
+
+	events := make(chan event.Event)
+	stop := make(chan struct{})
+
+	go hub.Subscribe(from, events, stop)
+
+	return events, stop, nil
 }
 
 func (scheduler *scheduler) attach(running builder.RunningBuild, emitter event.Emitter) {
@@ -257,6 +273,22 @@ func (scheduler *scheduler) removeRunning(running builder.RunningBuild) {
 	scheduler.mutex.Unlock()
 }
 
+func (scheduler *scheduler) eventHub(guid string) *event.Hub {
+	hub := event.NewHub()
+
+	scheduler.mutex.Lock()
+	scheduler.eventHubs[guid] = hub
+	scheduler.mutex.Unlock()
+
+	return hub
+}
+
+func (scheduler *scheduler) unregisterEventHub(guid string) {
+	scheduler.mutex.Lock()
+	delete(scheduler.eventHubs, guid)
+	scheduler.mutex.Unlock()
+}
+
 func (scheduler *scheduler) abortChannel(guid string) chan struct{} {
 	scheduler.mutex.Lock()
 	defer scheduler.mutex.Unlock()
@@ -272,9 +304,8 @@ func (scheduler *scheduler) abortChannel(guid string) chan struct{} {
 
 func (scheduler *scheduler) unregisterAbortChannel(guid string) {
 	scheduler.mutex.Lock()
-	defer scheduler.mutex.Unlock()
-
 	delete(scheduler.aborting, guid)
+	scheduler.mutex.Unlock()
 }
 
 func (scheduler *scheduler) reportBuild(

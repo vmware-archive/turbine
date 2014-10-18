@@ -22,7 +22,6 @@ import (
 	"github.com/concourse/turbine/builder/inputs"
 	"github.com/concourse/turbine/builder/outputs"
 	"github.com/concourse/turbine/config"
-	"github.com/concourse/turbine/event"
 	"github.com/concourse/turbine/resource"
 	"github.com/concourse/turbine/routes"
 	"github.com/concourse/turbine/scheduler"
@@ -112,7 +111,7 @@ func main() {
 		outputs.NewParallelPerformer(resourceTracker),
 	)
 
-	scheduler := scheduler.NewScheduler(logger.Session("scheduler"), builder, event.NewWebSocketEmitter, scheduler.NewClock())
+	scheduler := scheduler.NewScheduler(logger.Session("scheduler"), builder, scheduler.NewClock())
 
 	generator := rata.NewRequestGenerator("http://"+*peerAddr, routes.Routes)
 
