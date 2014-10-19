@@ -196,7 +196,7 @@ var _ = Describe("GET /builds/:guid/events", func() {
 		})
 
 		It("returns 500", func() {
-			Ω(response.StatusCode).Should(Equal(http.StatusInternalServerError))
+			Ω(response.StatusCode).Should(Equal(http.StatusNotFound))
 		})
 	})
 })

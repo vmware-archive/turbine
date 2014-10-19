@@ -36,7 +36,7 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	events, stop, err := handler.scheduler.Subscribe(guid, idx)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
