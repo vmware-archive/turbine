@@ -33,20 +33,20 @@ type Build struct {
 }
 
 type Config struct {
-	Image  string            `json:"image"   yaml:"image"`
-	Params map[string]string `json:"params"  yaml:"params"`
-	Run    RunConfig         `json:"run"     yaml:"run"`
-	Inputs []InputConfig     `json:"inputs"  yaml:"inputs"`
+	Image  string            `json:"image,omitempty"   yaml:"image"`
+	Params map[string]string `json:"params,omitempty"  yaml:"params"`
+	Run    RunConfig         `json:"run,omitempty"     yaml:"run"`
+	Inputs []InputConfig     `json:"inputs,omitempty"  yaml:"inputs"`
 }
 
 type RunConfig struct {
 	Path string   `json:"path" yaml:"path"`
-	Args []string `json:"args" yaml:"args"`
+	Args []string `json:"args,omitempty" yaml:"args"`
 }
 
 type InputConfig struct {
 	Name string `json:"name" yaml:"name"`
-	Path string `json:"path" yaml:"path"`
+	Path string `json:"path,omitempty" yaml:"path"`
 }
 
 type Input struct {
@@ -58,7 +58,7 @@ type Input struct {
 	Version Version `json:"version,omitempty"`
 
 	// e.g. git url, branch, private_key
-	Source Source `json:"source"`
+	Source Source `json:"source,omitempty"`
 
 	// arbitrary config for input
 	Params Params `json:"params,omitempty"`
@@ -82,13 +82,13 @@ type Output struct {
 	Type string `json:"type"`
 
 	// e.g. [success, failure]
-	On OutputConditions `json:"on"`
+	On OutputConditions `json:"on,omitempty"`
 
 	// e.g. sha
-	Version Version `json:"version"`
+	Version Version `json:"version,omitempty"`
 
 	// e.g. git url, branch, private_key
-	Source Source `json:"source"`
+	Source Source `json:"source,omitempty"`
 
 	// arbitrary config for output
 	Params Params `json:"params,omitempty"`
