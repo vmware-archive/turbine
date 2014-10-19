@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/concourse/turbine/event"
 	"github.com/concourse/turbine/scheduler"
 	"github.com/vito/go-sse/sse"
 )
@@ -34,7 +33,7 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	events, stop, err := handler.scheduler.Subscribe(guid, idx)
+	events, versions, stop, err := handler.scheduler.Subscribe(guid, idx)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -54,33 +53,49 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 
 	for {
+		if events == nil && versions == nil {
+			break
+		}
+
+		sseEvent := sse.Event{
+			ID: fmt.Sprintf("%d", idx),
+		}
+
 		select {
 		case e, ok := <-events:
 			if !ok {
-				return
+				events = nil
+				continue
 			}
 
-			data, err := json.Marshal(event.Message{e})
+			data, err := json.Marshal(e)
 			if err != nil {
 				return
 			}
 
-			sseEvent := sse.Event{
-				ID:   fmt.Sprintf("%d", idx),
-				Data: data,
+			sseEvent.Name = string(e.EventType())
+			sseEvent.Data = data
+
+		case v, ok := <-versions:
+			if !ok {
+				versions = nil
+				continue
 			}
 
-			err = sseEvent.Write(w)
-			if err != nil {
-				return
-			}
-
-			flusher.Flush()
-
-			idx++
+			sseEvent.Name = "version"
+			sseEvent.Data = []byte(v)
 
 		case <-closed:
 			return
 		}
+
+		err = sseEvent.Write(w)
+		if err != nil {
+			return
+		}
+
+		flusher.Flush()
+
+		idx++
 	}
 }

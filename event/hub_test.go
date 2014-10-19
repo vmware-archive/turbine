@@ -29,42 +29,50 @@ var _ = Describe("Hub", func() {
 		subscribers.Wait()
 	})
 
-	subscribe := func(from uint, dest chan<- Event) {
+	subscribe := func(from uint, events chan<- Event, versions chan<- Version) {
 		subscribers.Add(1)
 		go func() {
 			defer subscribers.Done()
-			hub.Subscribe(from, dest, stopSubscribers)
+			hub.Subscribe(from, events, versions, stopSubscribers)
 		}()
 	}
 
-	Context("when an event is emitted", func() {
+	Context("when a version and event are emitted", func() {
 		JustBeforeEach(func() {
+			hub.EmitVersion("1.0")
 			hub.EmitEvent(Start{Time: 123})
 		})
 
 		Describe("a late subscriber", func() {
 			It("receives the event", func() {
-				dest := make(chan Event, 1)
+				events := make(chan Event)
+				versions := make(chan Version)
 
-				subscribe(0, dest)
+				subscribe(0, events, versions)
 
-				Eventually(dest).Should(Receive(Equal(Start{Time: 123})))
+				Eventually(versions).Should(Receive(Equal(Version("1.0"))))
+				Eventually(events).Should(Receive(Equal(Start{Time: 123})))
 			})
 		})
 
 		Context("with a subscriber already listening", func() {
 			var (
-				receivedEvents <-chan Event
+				receivedEvents   <-chan Event
+				receivedVersions <-chan Version
 			)
 
 			BeforeEach(func() {
 				events := make(chan Event)
-				subscribe(0, events)
+				versions := make(chan Version)
+
+				subscribe(0, events, versions)
 
 				receivedEvents = events
+				receivedVersions = versions
 			})
 
 			It("emits the event to the active subscriber", func() {
+				Eventually(receivedVersions).Should(Receive(Equal(Version("1.0"))))
 				Eventually(receivedEvents).Should(Receive(Equal(Start{Time: 123})))
 			})
 		})
@@ -73,6 +81,8 @@ var _ = Describe("Hub", func() {
 	Describe("subscribing", func() {
 		Context("starting from a previous index", func() {
 			BeforeEach(func() {
+				hub.EmitVersion("1.0")
+
 				for i := 0; i < 10; i++ {
 					hub.EmitEvent(Start{Time: int64(i)})
 				}
@@ -80,8 +90,11 @@ var _ = Describe("Hub", func() {
 
 			It("replays the event history", func() {
 				events := make(chan Event)
-				subscribe(5, events)
+				versions := make(chan Version)
 
+				subscribe(6, events, versions)
+
+				Consistently(versions).ShouldNot(Receive())
 				Ω(<-events).Should(Equal(Start{Time: 5}))
 				Ω(<-events).Should(Equal(Start{Time: 6}))
 				Ω(<-events).Should(Equal(Start{Time: 7}))
@@ -92,8 +105,11 @@ var _ = Describe("Hub", func() {
 			Context("when another event is emitted", func() {
 				It("consumes the event after the existing ones", func() {
 					events := make(chan Event)
-					subscribe(5, events)
+					versions := make(chan Version)
 
+					subscribe(6, events, versions)
+
+					Consistently(versions).ShouldNot(Receive())
 					Ω(<-events).Should(Equal(Start{Time: 5}))
 					Ω(<-events).Should(Equal(Start{Time: 6}))
 					Ω(<-events).Should(Equal(Start{Time: 7}))
@@ -108,11 +124,14 @@ var _ = Describe("Hub", func() {
 		})
 
 		Context("when the given index is out of bounds", func() {
-			It("closes the destination", func() {
-				dest := make(chan Event)
-				subscribe(1, dest)
+			It("closes the event and version destinations", func() {
+				events := make(chan Event)
+				versions := make(chan Version)
 
-				Eventually(dest).Should(BeClosed())
+				subscribe(1, events, versions)
+
+				Eventually(events).Should(BeClosed())
+				Eventually(versions).Should(BeClosed())
 			})
 		})
 	})
@@ -131,7 +150,9 @@ var _ = Describe("Hub", func() {
 
 			It("dispatches the previous events before closing the subscription", func() {
 				events := make(chan Event)
-				subscribe(2, events)
+				versions := make(chan Version)
+
+				subscribe(2, events, versions)
 
 				Ω(<-events).Should(Equal(Start{Time: 3}))
 
@@ -141,21 +162,26 @@ var _ = Describe("Hub", func() {
 
 			Context("and someone subscribed", func() {
 				var (
-					receivedEvents <-chan Event
+					receivedEvents   <-chan Event
+					receivedVersions <-chan Version
 				)
 
 				BeforeEach(func() {
 					events := make(chan Event)
-					subscribe(0, events)
+					versions := make(chan Version)
+
+					subscribe(0, events, versions)
 
 					receivedEvents = events
+					receivedVersions = versions
 				})
 
-				It("dispatches the events before closing the subscriber", func() {
+				It("dispatches the events before closing the subscribers", func() {
 					Ω(<-receivedEvents).Should(Equal(Start{Time: 1}))
 					Ω(<-receivedEvents).Should(Equal(Start{Time: 2}))
 					Ω(<-receivedEvents).Should(Equal(Start{Time: 3}))
 					Eventually(receivedEvents).Should(BeClosed())
+					Eventually(receivedVersions).Should(BeClosed())
 				})
 			})
 		})

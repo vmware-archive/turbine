@@ -22,7 +22,7 @@ type Scheduler interface {
 	Attach(builder.RunningBuild)
 	Abort(guid string)
 	Hijack(guid string, process gapi.ProcessSpec, io gapi.ProcessIO) (gapi.Process, error)
-	Subscribe(guid string, from uint) (<-chan event.Event, chan<- struct{}, error)
+	Subscribe(guid string, from uint) (<-chan event.Event, <-chan event.Version, chan<- struct{}, error)
 
 	Drain() []builder.RunningBuild
 }
@@ -89,6 +89,8 @@ func (scheduler *scheduler) Start(build builds.Build) {
 	abort := scheduler.abortChannel(build.Guid)
 	emitter := scheduler.eventHub(build.Guid)
 
+	emitter.EmitVersion(event.CURRENT_VERSION)
+
 	go func() {
 		defer scheduler.inFlight.Done()
 		defer scheduler.unregisterAbortChannel(build.Guid)
@@ -126,6 +128,8 @@ func (scheduler *scheduler) Attach(running builder.RunningBuild) {
 	emitter := scheduler.eventHub(running.Build.Guid)
 	defer scheduler.unregisterEventHub(running.Build.Guid)
 
+	emitter.EmitVersion(event.CURRENT_VERSION)
+
 	scheduler.attach(running, emitter)
 }
 
@@ -145,21 +149,22 @@ func (scheduler *scheduler) Hijack(guid string, spec gapi.ProcessSpec, io gapi.P
 	return scheduler.builder.Hijack(guid, spec, io)
 }
 
-func (scheduler *scheduler) Subscribe(guid string, from uint) (<-chan event.Event, chan<- struct{}, error) {
+func (scheduler *scheduler) Subscribe(guid string, from uint) (<-chan event.Event, <-chan event.Version, chan<- struct{}, error) {
 	scheduler.mutex.RLock()
 	hub, found := scheduler.eventHubs[guid]
 	scheduler.mutex.RUnlock()
 
 	if !found {
-		return nil, nil, fmt.Errorf("unknown build: %s", guid)
+		return nil, nil, nil, fmt.Errorf("unknown build: %s", guid)
 	}
 
 	events := make(chan event.Event)
+	versions := make(chan event.Version)
 	stop := make(chan struct{})
 
-	go hub.Subscribe(from, events, stop)
+	go hub.Subscribe(from, events, versions, stop)
 
-	return events, stop, nil
+	return events, versions, stop, nil
 }
 
 func (scheduler *scheduler) attach(running builder.RunningBuild, emitter event.Emitter) {
@@ -274,10 +279,12 @@ func (scheduler *scheduler) removeRunning(running builder.RunningBuild) {
 }
 
 func (scheduler *scheduler) eventHub(guid string) *event.Hub {
-	hub := event.NewHub()
-
 	scheduler.mutex.Lock()
-	scheduler.eventHubs[guid] = hub
+	hub, found := scheduler.eventHubs[guid]
+	if !found {
+		hub = event.NewHub()
+		scheduler.eventHubs[guid] = hub
+	}
 	scheduler.mutex.Unlock()
 
 	return hub

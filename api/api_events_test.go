@@ -15,12 +15,22 @@ import (
 
 var _ = Describe("GET /builds/:guid/events", func() {
 	var (
+		events   chan event.Event
+		versions chan event.Version
+		stop     chan struct{}
+
 		request  *http.Request
 		response *http.Response
 	)
 
 	BeforeEach(func() {
 		var err error
+
+		events = make(chan event.Event, 10)
+		versions = make(chan event.Version, 10)
+		stop = make(chan struct{})
+
+		scheduler.SubscribeReturns(events, versions, stop, nil)
 
 		request, err = http.NewRequest("GET", server.URL+"/builds/some-build-guid/events", nil)
 		Ω(err).ShouldNot(HaveOccurred())
@@ -76,19 +86,7 @@ var _ = Describe("GET /builds/:guid/events", func() {
 	})
 
 	Describe("event emitting", func() {
-		var (
-			events chan event.Event
-			stop   chan struct{}
-		)
-
-		BeforeEach(func() {
-			events = make(chan event.Event, 10)
-			stop = make(chan struct{})
-
-			scheduler.SubscribeReturns(events, stop, nil)
-		})
-
-		It("emits them", func() {
+		It("emits events from the subscription as server-sent events", func() {
 			reader := sse.NewReader(response.Body)
 
 			events <- event.Start{Time: 1}
@@ -97,12 +95,13 @@ var _ = Describe("GET /builds/:guid/events", func() {
 			Ω(err).ShouldNot(HaveOccurred())
 
 			Ω(ev.ID).Should(Equal("0"))
+			Ω(ev.Name).Should(Equal(string(event.EventTypeStart)))
 
-			var message event.Message
+			var message event.Start
 			err = json.Unmarshal(ev.Data, &message)
 			Ω(err).ShouldNot(HaveOccurred())
 
-			Ω(message.Event).Should(Equal(event.Start{Time: 1}))
+			Ω(message).Should(Equal(event.Start{Time: 1}))
 
 			events <- event.Start{Time: 2}
 
@@ -110,16 +109,45 @@ var _ = Describe("GET /builds/:guid/events", func() {
 			Ω(err).ShouldNot(HaveOccurred())
 
 			Ω(ev.ID).Should(Equal("1"))
+			Ω(ev.Name).Should(Equal(string(event.EventTypeStart)))
 
 			err = json.Unmarshal(ev.Data, &message)
 			Ω(err).ShouldNot(HaveOccurred())
 
-			Ω(message.Event).Should(Equal(event.Start{Time: 2}))
+			Ω(message).Should(Equal(event.Start{Time: 2}))
+		})
+
+		It("emits versions as version events", func() {
+			reader := sse.NewReader(response.Body)
+
+			versions <- event.Version("1.0")
+
+			ev, err := reader.Next()
+			Ω(err).ShouldNot(HaveOccurred())
+
+			Ω(ev.ID).Should(Equal("0"))
+			Ω(ev.Name).Should(Equal("version"))
+			Ω(string(ev.Data)).Should(Equal("1.0"))
+
+			events <- event.Start{Time: 1}
+
+			ev, err = reader.Next()
+			Ω(err).ShouldNot(HaveOccurred())
+
+			Ω(ev.ID).Should(Equal("1"))
+			Ω(ev.Name).Should(Equal(string(event.EventTypeStart)))
+
+			var message event.Start
+			err = json.Unmarshal(ev.Data, &message)
+			Ω(err).ShouldNot(HaveOccurred())
+
+			Ω(message).Should(Equal(event.Start{Time: 1}))
 		})
 
 		Context("when the event stream finishes", func() {
 			BeforeEach(func() {
 				close(events)
+				close(versions)
 			})
 
 			It("closes the response", func() {
@@ -156,12 +184,13 @@ var _ = Describe("GET /builds/:guid/events", func() {
 					Ω(err).ShouldNot(HaveOccurred())
 
 					Ω(ev.ID).Should(Equal(fmt.Sprintf("%d", i)))
+					Ω(ev.Name).Should(Equal(string(event.EventTypeStart)))
 
-					var message event.Message
+					var message event.Start
 					err = json.Unmarshal(ev.Data, &message)
 					Ω(err).ShouldNot(HaveOccurred())
 
-					Ω(message.Event).Should(Equal(event.Start{Time: 1 + int64(i)}))
+					Ω(message).Should(Equal(event.Start{Time: 1 + int64(i)}))
 				}
 			})
 
@@ -178,12 +207,13 @@ var _ = Describe("GET /builds/:guid/events", func() {
 						Ω(err).ShouldNot(HaveOccurred())
 
 						Ω(ev.ID).Should(Equal(fmt.Sprintf("%d", 42+i)))
+						Ω(ev.Name).Should(Equal(string(event.EventTypeStart)))
 
-						var message event.Message
+						var message event.Start
 						err = json.Unmarshal(ev.Data, &message)
 						Ω(err).ShouldNot(HaveOccurred())
 
-						Ω(message.Event).Should(Equal(event.Start{Time: 1 + int64(i)}))
+						Ω(message).Should(Equal(event.Start{Time: 1 + int64(i)}))
 					}
 				})
 			})
@@ -192,7 +222,7 @@ var _ = Describe("GET /builds/:guid/events", func() {
 
 	Context("when subscribing fails", func() {
 		BeforeEach(func() {
-			scheduler.SubscribeReturns(nil, nil, errors.New("oh no!"))
+			scheduler.SubscribeReturns(nil, nil, nil, errors.New("oh no!"))
 		})
 
 		It("returns 500", func() {

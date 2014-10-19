@@ -10,7 +10,8 @@ type Hub struct {
 }
 
 type eventOccurrence struct {
-	event Event
+	event   Event
+	version Version
 
 	occurred chan struct{}
 }
@@ -27,23 +28,11 @@ func NewHub() *Hub {
 }
 
 func (h *Hub) EmitEvent(event Event) {
-	h.lock.Lock()
-	defer h.lock.Unlock()
+	h.emit(event, "")
+}
 
-	if h.closed {
-		return
-	}
-
-	occ := h.events[len(h.events)-1]
-	occ.event = event
-
-	nextOcc := &eventOccurrence{
-		occurred: make(chan struct{}),
-	}
-
-	h.events = append(h.events, nextOcc)
-
-	close(occ.occurred)
+func (h *Hub) EmitVersion(version Version) {
+	h.emit(nil, version)
 }
 
 func (h *Hub) Close() {
@@ -60,14 +49,16 @@ func (h *Hub) Close() {
 	close(occ.occurred)
 }
 
-func (h *Hub) Subscribe(from uint, dest chan<- Event, stop <-chan struct{}) {
+func (h *Hub) Subscribe(from uint, events chan<- Event, versions chan<- Version, stop <-chan struct{}) {
 	for i := from; ; i++ {
 		h.lock.RLock()
 
 		if uint(len(h.events)) <= i {
 			// out of bounds
-			close(dest)
 			h.lock.RUnlock()
+
+			close(events)
+			close(versions)
 			return
 		}
 
@@ -80,16 +71,44 @@ func (h *Hub) Subscribe(from uint, dest chan<- Event, stop <-chan struct{}) {
 			return
 		}
 
-		if occ.event == nil {
+		if occ.version != "" {
+			select {
+			case versions <- occ.version:
+			case <-stop:
+				return
+			}
+		} else if occ.event != nil {
+			select {
+			case events <- occ.event:
+			case <-stop:
+				return
+			}
+		} else {
 			// reached end of stream
-			close(dest)
-			return
-		}
-
-		select {
-		case dest <- occ.event:
-		case <-stop:
+			close(events)
+			close(versions)
 			return
 		}
 	}
+}
+
+func (h *Hub) emit(event Event, version Version) {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	if h.closed {
+		return
+	}
+
+	occ := h.events[len(h.events)-1]
+	occ.event = event
+	occ.version = version
+
+	nextOcc := &eventOccurrence{
+		occurred: make(chan struct{}),
+	}
+
+	h.events = append(h.events, nextOcc)
+
+	close(occ.occurred)
 }

@@ -38,7 +38,7 @@ type FakeScheduler struct {
 		result1 gapi.Process
 		result2 error
 	}
-	SubscribeStub        func(guid string, from uint) (<-chan event.Event, chan<- struct{}, error)
+	SubscribeStub        func(guid string, from uint) (<-chan event.Event, <-chan event.Version, chan<- struct{}, error)
 	subscribeMutex       sync.RWMutex
 	subscribeArgsForCall []struct {
 		guid string
@@ -46,13 +46,14 @@ type FakeScheduler struct {
 	}
 	subscribeReturns struct {
 		result1 <-chan event.Event
-		result2 chan<- struct{}
-		result3 error
+		result2 <-chan event.Version
+		result3 chan<- struct{}
+		result4 error
 	}
 	DrainStub        func() []builder.RunningBuild
 	drainMutex       sync.RWMutex
 	drainArgsForCall []struct{}
-	drainReturns     struct {
+	drainReturns struct {
 		result1 []builder.RunningBuild
 	}
 }
@@ -161,7 +162,7 @@ func (fake *FakeScheduler) HijackReturns(result1 gapi.Process, result2 error) {
 	}{result1, result2}
 }
 
-func (fake *FakeScheduler) Subscribe(guid string, from uint) (<-chan event.Event, chan<- struct{}, error) {
+func (fake *FakeScheduler) Subscribe(guid string, from uint) (<-chan event.Event, <-chan event.Version, chan<- struct{}, error) {
 	fake.subscribeMutex.Lock()
 	fake.subscribeArgsForCall = append(fake.subscribeArgsForCall, struct {
 		guid string
@@ -171,7 +172,7 @@ func (fake *FakeScheduler) Subscribe(guid string, from uint) (<-chan event.Event
 	if fake.SubscribeStub != nil {
 		return fake.SubscribeStub(guid, from)
 	} else {
-		return fake.subscribeReturns.result1, fake.subscribeReturns.result2, fake.subscribeReturns.result3
+		return fake.subscribeReturns.result1, fake.subscribeReturns.result2, fake.subscribeReturns.result3, fake.subscribeReturns.result4
 	}
 }
 
@@ -187,13 +188,14 @@ func (fake *FakeScheduler) SubscribeArgsForCall(i int) (string, uint) {
 	return fake.subscribeArgsForCall[i].guid, fake.subscribeArgsForCall[i].from
 }
 
-func (fake *FakeScheduler) SubscribeReturns(result1 <-chan event.Event, result2 chan<- struct{}, result3 error) {
+func (fake *FakeScheduler) SubscribeReturns(result1 <-chan event.Event, result2 <-chan event.Version, result3 chan<- struct{}, result4 error) {
 	fake.SubscribeStub = nil
 	fake.subscribeReturns = struct {
 		result1 <-chan event.Event
-		result2 chan<- struct{}
-		result3 error
-	}{result1, result2, result3}
+		result2 <-chan event.Version
+		result3 chan<- struct{}
+		result4 error
+	}{result1, result2, result3, result4}
 }
 
 func (fake *FakeScheduler) Drain() []builder.RunningBuild {
