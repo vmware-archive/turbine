@@ -45,7 +45,10 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	flusher := w.(http.Flusher)
 	closed := w.(http.CloseNotifier).CloseNotify()
 
-	w.Header().Add("Content-Type", "text/event-stream")
+	w.Header().Add("Content-Type", "text/event-stream; charset=utf-8")
+	w.Header().Add("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Add("Connection", "keep-alive")
+
 	w.WriteHeader(http.StatusOK)
 
 	flusher.Flush()
