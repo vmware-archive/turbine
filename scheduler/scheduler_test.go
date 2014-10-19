@@ -57,14 +57,8 @@ var _ = Describe("Scheduler", func() {
 	})
 
 	subscribeToBuildEvents := func() (<-chan event.Event, chan<- struct{}) {
-		events, versions, stop, err := scheduler.Subscribe(build.Guid, 0)
+		events, stop, err := scheduler.Subscribe(build.Guid, 0)
 		Ω(err).ShouldNot(HaveOccurred())
-
-		go func() {
-			for _ = range versions {
-				// discard versions to unblock events
-			}
-		}()
 
 		return events, stop
 	}
@@ -133,12 +127,10 @@ var _ = Describe("Scheduler", func() {
 		It("emits the current event version", func() {
 			scheduler.Start(build)
 
-			_, versions, stop, err := scheduler.Subscribe(build.Guid, 0)
-			Ω(err).ShouldNot(HaveOccurred())
-
+			emittedEvents, stop := subscribeToBuildEvents()
 			defer close(stop)
 
-			Eventually(versions).Should(Receive(Equal(event.CURRENT_VERSION)))
+			Eventually(emittedEvents).Should(Receive(Equal(event.CURRENT_VERSION)))
 		})
 
 		Context("and the build starts", func() {
@@ -832,14 +824,13 @@ var _ = Describe("Scheduler", func() {
 
 	Describe("Subscribe", func() {
 		var (
-			emittedEvents   <-chan event.Event
-			emittedVersions <-chan event.Version
-			stop            chan<- struct{}
-			subscribeErr    error
+			emittedEvents <-chan event.Event
+			stop          chan<- struct{}
+			subscribeErr  error
 		)
 
 		JustBeforeEach(func() {
-			emittedEvents, emittedVersions, stop, subscribeErr = scheduler.Subscribe(build.Guid, 0)
+			emittedEvents, stop, subscribeErr = scheduler.Subscribe(build.Guid, 0)
 		})
 
 		Context("with an unknown build", func() {
@@ -880,11 +871,9 @@ var _ = Describe("Scheduler", func() {
 				Ω(subscribeErr).ShouldNot(HaveOccurred())
 			})
 
-			It("returns its event and version streams, and a channel to close the subscription", func() {
+			It("returns its event stream, and a channel to close the subscription", func() {
 				var emitter event.Emitter
 				Eventually(buildEmitter).Should(Receive(&emitter))
-
-				Eventually(emittedVersions).Should(Receive(Equal(event.CURRENT_VERSION)))
 
 				emitter.EmitEvent(event.Start{Time: 1})
 				Eventually(emittedEvents).Should(Receive(Equal(event.Start{Time: 1})))

@@ -1,5 +1,5 @@
 package event
 
-type VersionMessage struct {
-	Version string `json:"version"`
-}
+type Version string
+
+func (Version) EventType() EventType { return EventTypeVersion }

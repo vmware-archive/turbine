@@ -8,6 +8,7 @@ type EventType string
 
 const (
 	EventTypeInvalid    EventType = ""
+	EventTypeVersion    EventType = "version"
 	EventTypeLog        EventType = "log"
 	EventTypeStatus     EventType = "status"
 	EventTypeInitialize EventType = "initialize"

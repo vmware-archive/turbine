@@ -33,7 +33,7 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	events, versions, stop, err := handler.scheduler.Subscribe(guid, idx)
+	events, stop, err := handler.scheduler.Subscribe(guid, idx)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -53,10 +53,6 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 
 	for {
-		if events == nil && versions == nil {
-			break
-		}
-
 		sseEvent := sse.Event{
 			ID: fmt.Sprintf("%d", idx),
 		}
@@ -64,8 +60,7 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		select {
 		case e, ok := <-events:
 			if !ok {
-				events = nil
-				continue
+				return
 			}
 
 			data, err := json.Marshal(e)
@@ -75,15 +70,6 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			sseEvent.Name = string(e.EventType())
 			sseEvent.Data = data
-
-		case v, ok := <-versions:
-			if !ok {
-				versions = nil
-				continue
-			}
-
-			sseEvent.Name = "version"
-			sseEvent.Data = []byte(v)
 
 		case <-closed:
 			return

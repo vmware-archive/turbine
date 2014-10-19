@@ -29,50 +29,43 @@ var _ = Describe("Hub", func() {
 		subscribers.Wait()
 	})
 
-	subscribe := func(from uint, events chan<- Event, versions chan<- Version) {
+	subscribe := func(from uint, events chan<- Event) {
 		subscribers.Add(1)
 		go func() {
 			defer subscribers.Done()
-			hub.Subscribe(from, events, versions, stopSubscribers)
+			hub.Subscribe(from, events, stopSubscribers)
 		}()
 	}
 
-	Context("when a version and event are emitted", func() {
+	Context("when an event is emitted", func() {
 		JustBeforeEach(func() {
-			hub.EmitVersion("1.0")
 			hub.EmitEvent(Start{Time: 123})
 		})
 
 		Describe("a late subscriber", func() {
 			It("receives the event", func() {
 				events := make(chan Event)
-				versions := make(chan Version)
 
-				subscribe(0, events, versions)
+				subscribe(0, events)
 
-				Eventually(versions).Should(Receive(Equal(Version("1.0"))))
 				Eventually(events).Should(Receive(Equal(Start{Time: 123})))
 			})
 		})
 
 		Context("with a subscriber already listening", func() {
 			var (
-				receivedEvents   <-chan Event
-				receivedVersions <-chan Version
+				receivedEvents <-chan Event
 			)
 
 			BeforeEach(func() {
 				events := make(chan Event)
-				versions := make(chan Version)
 
-				subscribe(0, events, versions)
+				subscribe(0, events)
 
 				receivedEvents = events
-				receivedVersions = versions
 			})
 
 			It("emits the event to the active subscriber", func() {
-				Eventually(receivedVersions).Should(Receive(Equal(Version("1.0"))))
 				Eventually(receivedEvents).Should(Receive(Equal(Start{Time: 123})))
 			})
 		})
@@ -81,8 +74,6 @@ var _ = Describe("Hub", func() {
 	Describe("subscribing", func() {
 		Context("starting from a previous index", func() {
 			BeforeEach(func() {
-				hub.EmitVersion("1.0")
-
 				for i := 0; i < 10; i++ {
 					hub.EmitEvent(Start{Time: int64(i)})
 				}
@@ -90,11 +81,9 @@ var _ = Describe("Hub", func() {
 
 			It("replays the event history", func() {
 				events := make(chan Event)
-				versions := make(chan Version)
 
-				subscribe(6, events, versions)
+				subscribe(5, events)
 
-				Consistently(versions).ShouldNot(Receive())
 				Ω(<-events).Should(Equal(Start{Time: 5}))
 				Ω(<-events).Should(Equal(Start{Time: 6}))
 				Ω(<-events).Should(Equal(Start{Time: 7}))
@@ -105,11 +94,9 @@ var _ = Describe("Hub", func() {
 			Context("when another event is emitted", func() {
 				It("consumes the event after the existing ones", func() {
 					events := make(chan Event)
-					versions := make(chan Version)
 
-					subscribe(6, events, versions)
+					subscribe(5, events)
 
-					Consistently(versions).ShouldNot(Receive())
 					Ω(<-events).Should(Equal(Start{Time: 5}))
 					Ω(<-events).Should(Equal(Start{Time: 6}))
 					Ω(<-events).Should(Equal(Start{Time: 7}))
@@ -126,12 +113,10 @@ var _ = Describe("Hub", func() {
 		Context("when the given index is out of bounds", func() {
 			It("closes the event and version destinations", func() {
 				events := make(chan Event)
-				versions := make(chan Version)
 
-				subscribe(1, events, versions)
+				subscribe(1, events)
 
 				Eventually(events).Should(BeClosed())
-				Eventually(versions).Should(BeClosed())
 			})
 		})
 	})
@@ -150,9 +135,8 @@ var _ = Describe("Hub", func() {
 
 			It("dispatches the previous events before closing the subscription", func() {
 				events := make(chan Event)
-				versions := make(chan Version)
 
-				subscribe(2, events, versions)
+				subscribe(2, events)
 
 				Ω(<-events).Should(Equal(Start{Time: 3}))
 
@@ -162,18 +146,15 @@ var _ = Describe("Hub", func() {
 
 			Context("and someone subscribed", func() {
 				var (
-					receivedEvents   <-chan Event
-					receivedVersions <-chan Version
+					receivedEvents <-chan Event
 				)
 
 				BeforeEach(func() {
 					events := make(chan Event)
-					versions := make(chan Version)
 
-					subscribe(0, events, versions)
+					subscribe(0, events)
 
 					receivedEvents = events
-					receivedVersions = versions
 				})
 
 				It("dispatches the events before closing the subscribers", func() {
@@ -181,7 +162,6 @@ var _ = Describe("Hub", func() {
 					Ω(<-receivedEvents).Should(Equal(Start{Time: 2}))
 					Ω(<-receivedEvents).Should(Equal(Start{Time: 3}))
 					Eventually(receivedEvents).Should(BeClosed())
-					Eventually(receivedVersions).Should(BeClosed())
 				})
 			})
 		})

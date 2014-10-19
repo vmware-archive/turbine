@@ -6,5 +6,3 @@ type Emitter interface {
 	EmitEvent(Event)
 	Close()
 }
-
-type Version string
