@@ -8,6 +8,7 @@ import (
 
 	"github.com/concourse/turbine/api/abort"
 	"github.com/concourse/turbine/api/check"
+	"github.com/concourse/turbine/api/events"
 	"github.com/concourse/turbine/api/execute"
 	"github.com/concourse/turbine/api/hijack"
 	"github.com/concourse/turbine/resource"
@@ -28,6 +29,7 @@ func New(
 		routes.ExecuteBuild:     execute.NewHandler(logger, scheduler, turbineEndpoint),
 		routes.AbortBuild:       abort.NewHandler(scheduler),
 		routes.HijackBuild:      hijack.NewHandler(logger, scheduler),
+		routes.GetBuildEvents:   events.NewHandler(scheduler),
 		routes.CheckInput:       checkHandler,
 		routes.CheckInputStream: http.HandlerFunc(checkHandler.Stream),
 	}
