@@ -134,7 +134,9 @@ var _ = Describe("Hub", func() {
 				subscribe(2, events)
 
 				Ω(<-events).Should(Equal(Start{Time: 3}))
-				Eventually(events).Should(BeClosed())
+
+				_, ok := <-events
+				Ω(ok).Should(BeFalse())
 			})
 
 			Context("and someone subscribed", func() {

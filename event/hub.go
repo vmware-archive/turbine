@@ -65,7 +65,7 @@ func (h *Hub) Subscribe(from uint, dest chan<- Event, stop <-chan struct{}) {
 		h.lock.RLock()
 
 		if uint(len(h.events)) <= i {
-			// out of bounds or reached end of event stream
+			// out of bounds
 			close(dest)
 			h.lock.RUnlock()
 			return
@@ -77,6 +77,12 @@ func (h *Hub) Subscribe(from uint, dest chan<- Event, stop <-chan struct{}) {
 		select {
 		case <-occ.occurred:
 		case <-stop:
+			return
+		}
+
+		if occ.event == nil {
+			// reached end of stream
+			close(dest)
 			return
 		}
 
