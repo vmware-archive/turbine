@@ -1,14 +1,9 @@
 package scheduler
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
-	"net/url"
 	"sync"
-	"time"
 
 	gapi "github.com/cloudfoundry-incubator/garden/api"
 	"github.com/concourse/turbine/api/builds"
@@ -303,49 +298,4 @@ func (scheduler *scheduler) updateAndReportBuild(
 		Status: build.Status,
 		Time:   statusTime,
 	})
-
-	if build.StatusCallback == "" {
-		return
-	}
-
-	log := logger.Session("report", lager.Data{
-		"build": build,
-	})
-
-	// this should always successfully parse (it's done via validation)
-	destination, _ := url.ParseRequestURI(build.StatusCallback)
-
-	payload, _ := json.Marshal(build)
-
-	for {
-		res, err := scheduler.httpClient.Do(&http.Request{
-			Method: "PUT",
-			URL:    destination,
-
-			ContentLength: int64(len(payload)),
-
-			Header: map[string][]string{
-				"Content-Type": {"application/json"},
-			},
-
-			Body: ioutil.NopCloser(bytes.NewBuffer(payload)),
-		})
-
-		if err != nil {
-			log.Error("failed", err)
-
-			select {
-			case <-time.After(time.Second):
-				// retry every second
-				continue
-			case <-scheduler.draining:
-				// don't block draining on failing callbacks
-				return
-			}
-		}
-
-		res.Body.Close()
-
-		break
-	}
 }

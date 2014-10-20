@@ -56,8 +56,6 @@ var _ = Describe("Builder", func() {
 		build = builds.Build{
 			Guid: "some-build-guid",
 
-			EventsCallback: "some-events-callback",
-
 			Config: builds.Config{
 				Image: "some-rootfs",
 
