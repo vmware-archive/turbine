@@ -55,6 +55,7 @@ var _ = Describe("Snapshotter", func() {
 						},
 					},
 				},
+				Status:    builds.StatusStarted,
 				ProcessID: 123,
 				EventHub:  firstHub,
 			},
@@ -66,6 +67,7 @@ var _ = Describe("Snapshotter", func() {
 						},
 					},
 				},
+				Status:    builds.StatusSucceeded,
 				ProcessID: 124,
 				EventHub:  secondHub,
 			},
@@ -80,6 +82,7 @@ var _ = Describe("Snapshotter", func() {
 						},
 					},
 				},
+				Status:    builds.StatusStarted,
 				ProcessID: 123,
 				Events: []event.Message{
 					{event.Version("0.0")},
@@ -94,6 +97,7 @@ var _ = Describe("Snapshotter", func() {
 						},
 					},
 				},
+				Status:    builds.StatusSucceeded,
 				ProcessID: 124,
 				Events: []event.Message{
 					{event.Version("1.0")},
@@ -160,6 +164,7 @@ var _ = Describe("Snapshotter", func() {
 				for i, build := range theRunningBuilds {
 					restored := scheduler.RestoreArgsForCall(i)
 					Ω(restored.Build).Should(Equal(build.Build))
+					Ω(restored.Status).Should(Equal(build.Status))
 					Ω(restored.ProcessID).Should(Equal(build.ProcessID))
 					Ω(restored.EventHub.Events()).Should(Equal(build.EventHub.Events()))
 				}

@@ -24,6 +24,7 @@ type Scheduler interface {
 
 type ScheduledBuild struct {
 	Build     builds.Build
+	Status    builds.Status
 	ProcessID uint32
 	EventHub  *event.Hub
 
@@ -107,25 +108,17 @@ func (scheduler *scheduler) Start(build builds.Build) {
 		if err != nil {
 			log.Error("errored", err)
 
-			build.StartTime = scheduler.clock.CurrentTime().Unix()
-			build.EndTime = build.StartTime
-
 			select {
 			case <-scheduled.abort:
-				build.Status = builds.StatusAborted
+				scheduler.updateAndReportBuild(build, builds.StatusAborted)
 			default:
-				build.Status = builds.StatusErrored
+				scheduler.updateAndReportBuild(build, builds.StatusErrored)
 			}
-
-			scheduler.updateAndReportBuild(build, log, scheduled.EventHub, build.EndTime)
 		} else {
 			log.Info("started")
 
 			scheduler.updateRunningBuild(running)
-
-			running.Build.StartTime = scheduler.clock.CurrentTime().Unix()
-			running.Build.Status = builds.StatusStarted
-			scheduler.updateAndReportBuild(running.Build, log, scheduled.EventHub, running.Build.StartTime)
+			scheduler.updateAndReportBuild(running.Build, builds.StatusStarted)
 
 			scheduler.attach(running, scheduled)
 		}
@@ -217,16 +210,12 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, scheduled *Sche
 	case err := <-errored:
 		log.Error("errored", err)
 
-		running.Build.EndTime = scheduler.clock.CurrentTime().Unix()
-
 		select {
 		case <-scheduled.abort:
-			running.Build.Status = builds.StatusAborted
+			scheduler.updateAndReportBuild(running.Build, builds.StatusAborted)
 		default:
-			running.Build.Status = builds.StatusErrored
+			scheduler.updateAndReportBuild(running.Build, builds.StatusErrored)
 		}
-
-		scheduler.updateAndReportBuild(running.Build, log, scheduled.EventHub, running.Build.EndTime)
 	case <-scheduler.draining:
 	}
 }
@@ -240,28 +229,20 @@ func (scheduler *scheduler) finish(exited builder.ExitedBuild, scheduled *Schedu
 	if err != nil {
 		log.Error("failed", err)
 
-		exited.Build.EndTime = scheduler.clock.CurrentTime().Unix()
-
 		select {
 		case <-scheduled.abort:
-			exited.Build.Status = builds.StatusAborted
+			scheduler.updateAndReportBuild(exited.Build, builds.StatusAborted)
 		default:
-			exited.Build.Status = builds.StatusErrored
+			scheduler.updateAndReportBuild(exited.Build, builds.StatusErrored)
 		}
-
-		scheduler.updateAndReportBuild(exited.Build, log, scheduled.EventHub, exited.Build.EndTime)
 	} else {
 		log.Info("finished")
 
-		finished.EndTime = scheduler.clock.CurrentTime().Unix()
-
 		if exited.ExitStatus == 0 {
-			finished.Status = builds.StatusSucceeded
+			scheduler.updateAndReportBuild(finished, builds.StatusSucceeded)
 		} else {
-			finished.Status = builds.StatusFailed
+			scheduler.updateAndReportBuild(finished, builds.StatusFailed)
 		}
-
-		scheduler.updateAndReportBuild(finished, log, scheduled.EventHub, finished.EndTime)
 	}
 }
 
@@ -286,16 +267,15 @@ func (scheduler *scheduler) updateRunningBuild(running builder.RunningBuild) {
 
 func (scheduler *scheduler) updateAndReportBuild(
 	build builds.Build,
-	logger lager.Logger,
-	emitter event.Emitter,
-	statusTime int64,
+	status builds.Status,
 ) {
 	scheduler.mutex.Lock()
-	scheduler.builds[build.Guid].Build = build
+	scheduled := scheduler.builds[build.Guid]
+	scheduled.Status = status
 	scheduler.mutex.Unlock()
 
-	emitter.EmitEvent(event.Status{
-		Status: build.Status,
-		Time:   statusTime,
+	scheduled.EventHub.EmitEvent(event.Status{
+		Status: scheduled.Status,
+		Time:   scheduler.clock.CurrentTime().Unix(),
 	})
 }

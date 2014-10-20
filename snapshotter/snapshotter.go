@@ -22,6 +22,7 @@ type Snapshotter struct {
 
 type BuildSnapshot struct {
 	Build     builds.Build    `json:"build"`
+	Status    builds.Status   `json:"status"`
 	ProcessID uint32          `json:"process_id"`
 	Events    []event.Message `json:"events"`
 }
@@ -63,6 +64,7 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 
 				snapshotter.scheduler.Restore(scheduler.ScheduledBuild{
 					Build:     snapshot.Build,
+					Status:    snapshot.Status,
 					ProcessID: snapshot.ProcessID,
 					EventHub:  hub,
 				})
@@ -92,8 +94,10 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 		for _, e := range running.EventHub.Events() {
 			msgs = append(msgs, event.Message{e})
 		}
+
 		snapshots = append(snapshots, BuildSnapshot{
 			Build:     running.Build,
+			Status:    running.Status,
 			ProcessID: running.ProcessID,
 			Events:    msgs,
 		})
