@@ -19,12 +19,20 @@ import (
 
 type Scheduler interface {
 	Start(builds.Build)
-	Attach(builder.RunningBuild)
+	Restore(ScheduledBuild)
 	Abort(guid string)
 	Hijack(guid string, process gapi.ProcessSpec, io gapi.ProcessIO) (gapi.Process, error)
 	Subscribe(guid string, from uint) (<-chan event.Event, chan<- struct{}, error)
 
-	Drain() []builder.RunningBuild
+	Drain() []ScheduledBuild
+}
+
+type ScheduledBuild struct {
+	Build     builds.Build
+	ProcessID uint32
+	EventHub  *event.Hub
+
+	abort chan struct{}
 }
 
 type scheduler struct {
@@ -36,11 +44,10 @@ type scheduler struct {
 
 	httpClient *http.Client
 
-	inFlight  *sync.WaitGroup
-	draining  chan struct{}
-	running   map[string]builder.RunningBuild
-	eventHubs map[string]*event.Hub
-	aborting  map[string]chan struct{}
+	inFlight *sync.WaitGroup
+	draining chan struct{}
+
+	builds map[string]*ScheduledBuild
 
 	mutex *sync.RWMutex
 }
@@ -63,20 +70,19 @@ func NewScheduler(
 			},
 		},
 
-		inFlight:  new(sync.WaitGroup),
-		draining:  make(chan struct{}),
-		running:   make(map[string]builder.RunningBuild),
-		eventHubs: make(map[string]*event.Hub),
-		aborting:  make(map[string]chan struct{}),
+		inFlight: new(sync.WaitGroup),
+		draining: make(chan struct{}),
+
+		builds: make(map[string]*ScheduledBuild),
 
 		mutex: new(sync.RWMutex),
 	}
 }
 
-func (scheduler *scheduler) Drain() []builder.RunningBuild {
+func (scheduler *scheduler) Drain() []ScheduledBuild {
 	close(scheduler.draining)
 	scheduler.inFlight.Wait()
-	return scheduler.runningBuilds()
+	return scheduler.scheduledBuilds()
 }
 
 func (scheduler *scheduler) Start(build builds.Build) {
@@ -86,18 +92,23 @@ func (scheduler *scheduler) Start(build builds.Build) {
 		"build": build,
 	})
 
-	abort := scheduler.abortChannel(build.Guid)
-	emitter := scheduler.eventHub(build.Guid)
+	scheduled := &ScheduledBuild{
+		Build:    build,
+		EventHub: event.NewHub(),
 
-	emitter.EmitEvent(event.CURRENT_VERSION)
+		abort: make(chan struct{}),
+	}
+
+	scheduled.EventHub.EmitEvent(event.CURRENT_VERSION)
+
+	scheduler.mutex.Lock()
+	scheduler.builds[build.Guid] = scheduled
+	scheduler.mutex.Unlock()
 
 	go func() {
 		defer scheduler.inFlight.Done()
-		defer scheduler.unregisterAbortChannel(build.Guid)
-		defer scheduler.unregisterEventHub(build.Guid)
-		defer emitter.Close()
 
-		running, err := scheduler.builder.Start(build, emitter, abort)
+		running, err := scheduler.builder.Start(scheduled.Build, scheduled.EventHub, scheduled.abort)
 		if err != nil {
 			log.Error("errored", err)
 
@@ -105,44 +116,62 @@ func (scheduler *scheduler) Start(build builds.Build) {
 			build.EndTime = build.StartTime
 
 			select {
-			case <-abort:
+			case <-scheduled.abort:
 				build.Status = builds.StatusAborted
 			default:
 				build.Status = builds.StatusErrored
 			}
 
-			scheduler.reportBuild(build, log, emitter, build.EndTime)
+			scheduler.updateAndReportBuild(build, log, scheduled.EventHub, build.EndTime)
 		} else {
 			log.Info("started")
 
+			scheduler.updateRunningBuild(running)
+
 			running.Build.StartTime = scheduler.clock.CurrentTime().Unix()
 			running.Build.Status = builds.StatusStarted
-			scheduler.reportBuild(running.Build, log, emitter, running.Build.StartTime)
+			scheduler.updateAndReportBuild(running.Build, log, scheduled.EventHub, running.Build.StartTime)
 
-			scheduler.attach(running, emitter)
+			scheduler.attach(running, scheduled)
 		}
 	}()
 }
 
-func (scheduler *scheduler) Attach(running builder.RunningBuild) {
-	emitter := scheduler.eventHub(running.Build.Guid)
-	defer scheduler.unregisterEventHub(running.Build.Guid)
+func (scheduler *scheduler) Restore(build ScheduledBuild) {
+	scheduled := &build
+	scheduled.abort = make(chan struct{})
 
-	emitter.EmitEvent(event.CURRENT_VERSION)
+	scheduler.mutex.Lock()
+	scheduler.builds[scheduled.Build.Guid] = scheduled
+	scheduler.mutex.Unlock()
 
-	scheduler.attach(running, emitter)
+	scheduler.inFlight.Add(1)
+
+	scheduled.EventHub.EmitEvent(event.CURRENT_VERSION)
+
+	go func() {
+		defer scheduler.inFlight.Done()
+
+		scheduler.attach(
+			builder.RunningBuild{
+				Build:     scheduled.Build,
+				ProcessID: scheduled.ProcessID,
+			},
+			scheduled,
+		)
+	}()
 }
 
 func (scheduler *scheduler) Abort(guid string) {
 	scheduler.mutex.Lock()
 	defer scheduler.mutex.Unlock()
 
-	abort, found := scheduler.aborting[guid]
+	scheduled, found := scheduler.builds[guid]
 	if !found {
 		return
 	}
 
-	close(abort)
+	close(scheduled.abort)
 }
 
 func (scheduler *scheduler) Hijack(guid string, spec gapi.ProcessSpec, io gapi.ProcessIO) (gapi.Process, error) {
@@ -151,7 +180,7 @@ func (scheduler *scheduler) Hijack(guid string, spec gapi.ProcessSpec, io gapi.P
 
 func (scheduler *scheduler) Subscribe(guid string, from uint) (<-chan event.Event, chan<- struct{}, error) {
 	scheduler.mutex.RLock()
-	hub, found := scheduler.eventHubs[guid]
+	scheduled, found := scheduler.builds[guid]
 	scheduler.mutex.RUnlock()
 
 	if !found {
@@ -161,19 +190,13 @@ func (scheduler *scheduler) Subscribe(guid string, from uint) (<-chan event.Even
 	events := make(chan event.Event)
 	stop := make(chan struct{})
 
-	go hub.Subscribe(from, events, stop)
+	go scheduled.EventHub.Subscribe(from, events, stop)
 
 	return events, stop, nil
 }
 
-func (scheduler *scheduler) attach(running builder.RunningBuild, emitter event.Emitter) {
-	scheduler.inFlight.Add(1) // in addition to .Start's
-	defer scheduler.inFlight.Done()
-
-	scheduler.addRunning(running)
-
-	abort := scheduler.abortChannel(running.Build.Guid)
-	defer scheduler.unregisterAbortChannel(running.Build.Guid)
+func (scheduler *scheduler) attach(running builder.RunningBuild, scheduled *ScheduledBuild) {
+	defer scheduled.EventHub.Close()
 
 	log := scheduler.logger.Session("attach", lager.Data{
 		"build": running.Build,
@@ -183,7 +206,7 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, emitter event.E
 	errored := make(chan error, 1)
 
 	go func() {
-		ex, err := scheduler.builder.Attach(running, emitter, abort)
+		ex, err := scheduler.builder.Attach(running, scheduled.EventHub, scheduled.abort)
 		if err != nil {
 			errored <- err
 		} else {
@@ -195,48 +218,43 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, emitter event.E
 	case build := <-exited:
 		log.Info("exited")
 
-		scheduler.finish(build, emitter)
+		scheduler.finish(build, scheduled)
 	case err := <-errored:
 		log.Error("errored", err)
 
 		running.Build.EndTime = scheduler.clock.CurrentTime().Unix()
 
 		select {
-		case <-abort:
+		case <-scheduled.abort:
 			running.Build.Status = builds.StatusAborted
 		default:
 			running.Build.Status = builds.StatusErrored
 		}
 
-		scheduler.reportBuild(running.Build, log, emitter, running.Build.EndTime)
+		scheduler.updateAndReportBuild(running.Build, log, scheduled.EventHub, running.Build.EndTime)
 	case <-scheduler.draining:
-		return
 	}
-
-	scheduler.removeRunning(running)
 }
 
-func (scheduler *scheduler) finish(exited builder.ExitedBuild, emitter event.Emitter) {
-	abort := scheduler.abortChannel(exited.Build.Guid)
-
+func (scheduler *scheduler) finish(exited builder.ExitedBuild, scheduled *ScheduledBuild) {
 	log := scheduler.logger.Session("finish", lager.Data{
 		"build": exited.Build,
 	})
 
-	finished, err := scheduler.builder.Finish(exited, emitter, abort)
+	finished, err := scheduler.builder.Finish(exited, scheduled.EventHub, scheduled.abort)
 	if err != nil {
 		log.Error("failed", err)
 
 		exited.Build.EndTime = scheduler.clock.CurrentTime().Unix()
 
 		select {
-		case <-abort:
+		case <-scheduled.abort:
 			exited.Build.Status = builds.StatusAborted
 		default:
 			exited.Build.Status = builds.StatusErrored
 		}
 
-		scheduler.reportBuild(exited.Build, log, emitter, exited.Build.EndTime)
+		scheduler.updateAndReportBuild(exited.Build, log, scheduled.EventHub, exited.Build.EndTime)
 	} else {
 		log.Info("finished")
 
@@ -248,78 +266,39 @@ func (scheduler *scheduler) finish(exited builder.ExitedBuild, emitter event.Emi
 			finished.Status = builds.StatusFailed
 		}
 
-		scheduler.reportBuild(finished, log, emitter, finished.EndTime)
+		scheduler.updateAndReportBuild(finished, log, scheduled.EventHub, finished.EndTime)
 	}
 }
 
-func (scheduler *scheduler) runningBuilds() []builder.RunningBuild {
+func (scheduler *scheduler) scheduledBuilds() []ScheduledBuild {
 	scheduler.mutex.RLock()
 
-	running := []builder.RunningBuild{}
-	for _, build := range scheduler.running {
-		running = append(running, build)
+	scheduled := []ScheduledBuild{}
+	for _, build := range scheduler.builds {
+		scheduled = append(scheduled, *build)
 	}
 
 	scheduler.mutex.RUnlock()
 
-	return running
+	return scheduled
 }
 
-func (scheduler *scheduler) addRunning(running builder.RunningBuild) {
+func (scheduler *scheduler) updateRunningBuild(running builder.RunningBuild) {
 	scheduler.mutex.Lock()
-	scheduler.running[running.Build.Guid] = running
+	scheduler.builds[running.Build.Guid].ProcessID = running.ProcessID
 	scheduler.mutex.Unlock()
 }
 
-func (scheduler *scheduler) removeRunning(running builder.RunningBuild) {
-	scheduler.mutex.Lock()
-	delete(scheduler.running, running.Build.Guid)
-	scheduler.mutex.Unlock()
-}
-
-func (scheduler *scheduler) eventHub(guid string) *event.Hub {
-	scheduler.mutex.Lock()
-	hub, found := scheduler.eventHubs[guid]
-	if !found {
-		hub = event.NewHub()
-		scheduler.eventHubs[guid] = hub
-	}
-	scheduler.mutex.Unlock()
-
-	return hub
-}
-
-func (scheduler *scheduler) unregisterEventHub(guid string) {
-	scheduler.mutex.Lock()
-	delete(scheduler.eventHubs, guid)
-	scheduler.mutex.Unlock()
-}
-
-func (scheduler *scheduler) abortChannel(guid string) chan struct{} {
-	scheduler.mutex.Lock()
-	defer scheduler.mutex.Unlock()
-
-	abort, found := scheduler.aborting[guid]
-	if !found {
-		abort = make(chan struct{})
-		scheduler.aborting[guid] = abort
-	}
-
-	return abort
-}
-
-func (scheduler *scheduler) unregisterAbortChannel(guid string) {
-	scheduler.mutex.Lock()
-	delete(scheduler.aborting, guid)
-	scheduler.mutex.Unlock()
-}
-
-func (scheduler *scheduler) reportBuild(
+func (scheduler *scheduler) updateAndReportBuild(
 	build builds.Build,
 	logger lager.Logger,
 	emitter event.Emitter,
 	statusTime int64,
 ) {
+	scheduler.mutex.Lock()
+	scheduler.builds[build.Guid].Build = build
+	scheduler.mutex.Unlock()
+
 	emitter.EmitEvent(event.Status{
 		Status: build.Status,
 		Time:   statusTime,

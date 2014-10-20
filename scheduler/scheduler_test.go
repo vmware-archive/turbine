@@ -54,6 +54,19 @@ var _ = Describe("Scheduler", func() {
 				},
 			},
 		}
+
+		// default to happy path
+		fakeBuilder.StartReturns(builder.RunningBuild{
+			Build:     build,
+			ProcessID: 42,
+		}, nil)
+
+		fakeBuilder.AttachReturns(builder.ExitedBuild{
+			Build:      build,
+			ExitStatus: 0,
+		}, nil)
+
+		fakeBuilder.FinishReturns(build, nil)
 	})
 
 	subscribeToBuildEvents := func() (<-chan event.Event, chan<- struct{}) {
@@ -676,18 +689,21 @@ var _ = Describe("Scheduler", func() {
 	})
 
 	Describe("Drain", func() {
+		var startTime time.Time
+
+		BeforeEach(func() {
+			startTime = time.Now()
+			clock.CurrentTimeReturns(startTime)
+		})
+
 		Context("when a build is starting", func() {
 			startingBuild := builds.Build{
 				Guid: "starting",
 			}
 
-			var startTime time.Time
 			var running chan builder.RunningBuild
 
 			BeforeEach(func() {
-				startTime = time.Now()
-				clock.CurrentTimeReturns(startTime)
-
 				running = make(chan builder.RunningBuild)
 
 				fakeBuilder.StartStub = func(build builds.Build, emitter event.Emitter, abort <-chan struct{}) (builder.RunningBuild, error) {
@@ -711,9 +727,8 @@ var _ = Describe("Scheduler", func() {
 				startedBuild := startingBuild
 				startedBuild.Status = builds.StatusStarted
 				startedBuild.StartTime = startTime.Unix()
-				runningBuild := builder.RunningBuild{Build: startedBuild}
 
-				drained := make(chan []builder.RunningBuild)
+				drained := make(chan []ScheduledBuild)
 
 				go func() {
 					drained <- scheduler.Drain()
@@ -721,9 +736,17 @@ var _ = Describe("Scheduler", func() {
 
 				Consistently(drained).ShouldNot(Receive())
 
-				running <- runningBuild
+				running <- builder.RunningBuild{
+					Build:     startedBuild,
+					ProcessID: 42,
+				}
 
-				Eventually(drained).Should(Receive(Equal([]builder.RunningBuild{runningBuild})))
+				var drainedBuilds []ScheduledBuild
+				Eventually(drained).Should(Receive(&drainedBuilds))
+
+				Ω(drainedBuilds).Should(HaveLen(1))
+				Ω(drainedBuilds[0].Build).Should(Equal(startedBuild))
+				Ω(drainedBuilds[0].ProcessID).Should(Equal(uint32(42)))
 			})
 
 			Context("and it errors", func() {
@@ -737,10 +760,10 @@ var _ = Describe("Scheduler", func() {
 					}
 				})
 
-				It("waits for it to error and does not return it", func() {
+				It("waits for it to error and returns it in errored state", func() {
 					scheduler.Start(build)
 
-					drained := make(chan []builder.RunningBuild)
+					drained := make(chan []ScheduledBuild)
 
 					go func() {
 						drained <- scheduler.Drain()
@@ -750,7 +773,16 @@ var _ = Describe("Scheduler", func() {
 
 					errored <- errors.New("oh no!")
 
-					Eventually(drained).Should(Receive(BeEmpty()))
+					var drainedBuilds []ScheduledBuild
+					Eventually(drained).Should(Receive(&drainedBuilds))
+
+					erroredBuild := build
+					erroredBuild.Status = builds.StatusErrored
+					erroredBuild.StartTime = startTime.Unix()
+					erroredBuild.EndTime = startTime.Unix()
+
+					Ω(drainedBuilds).Should(HaveLen(1))
+					Ω(drainedBuilds[0].Build).Should(Equal(erroredBuild))
 				})
 			})
 		})
@@ -772,7 +804,7 @@ var _ = Describe("Scheduler", func() {
 
 				Eventually(running).Should(BeClosed())
 
-				drained := make(chan []builder.RunningBuild)
+				drained := make(chan []ScheduledBuild)
 
 				go func() {
 					drained <- scheduler.Drain()
@@ -796,12 +828,12 @@ var _ = Describe("Scheduler", func() {
 				}
 			})
 
-			It("waits for it to error and does not return the finished build", func() {
+			It("waits for it to finish and returns the finished build", func() {
 				scheduler.Start(build)
 
 				Eventually(completing).Should(BeClosed())
 
-				drained := make(chan []builder.RunningBuild)
+				drained := make(chan []ScheduledBuild)
 
 				go func() {
 					drained <- scheduler.Drain()
@@ -809,9 +841,24 @@ var _ = Describe("Scheduler", func() {
 
 				Consistently(drained).ShouldNot(Receive())
 
-				finished <- builds.Build{}
+				startedBuild := build
+				startedBuild.StartTime = startTime.Unix()
 
-				Eventually(drained).Should(Receive(BeEmpty()))
+				endTime := startTime.Add(10 * time.Second)
+				clock.CurrentTimeReturns(endTime)
+
+				finished <- startedBuild
+
+				var drainedBuilds []ScheduledBuild
+				Eventually(drained).Should(Receive(&drainedBuilds))
+
+				finishedBuild := build
+				finishedBuild.Status = builds.StatusSucceeded
+				finishedBuild.StartTime = startTime.Unix()
+				finishedBuild.EndTime = endTime.Unix()
+
+				Ω(drainedBuilds).Should(HaveLen(1))
+				Ω(drainedBuilds[0].Build).Should(Equal(finishedBuild))
 			})
 		})
 

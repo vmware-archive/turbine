@@ -178,4 +178,20 @@ var _ = Describe("Hub", func() {
 			})
 		})
 	})
+
+	Describe("getting all events", func() {
+		It("returns all events emitted to the hub", func() {
+			hub.EmitEvent(Version("1.0"))
+			hub.EmitEvent(Start{Time: 1})
+			hub.EmitEvent(Start{Time: 2})
+			hub.EmitEvent(Start{Time: 3})
+
+			Ω(hub.Events()).Should(Equal([]Event{
+				Version("1.0"),
+				Start{Time: 1},
+				Start{Time: 2},
+				Start{Time: 3},
+			}))
+		})
+	})
 })

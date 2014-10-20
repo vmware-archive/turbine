@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/concourse/turbine/api/builds"
-	"github.com/concourse/turbine/builder"
+	"github.com/concourse/turbine/event"
 	"github.com/concourse/turbine/scheduler"
 	"github.com/pivotal-golang/lager"
 )
@@ -21,8 +21,9 @@ type Snapshotter struct {
 }
 
 type BuildSnapshot struct {
-	Build     builds.Build `json:"build"`
-	ProcessID uint32       `json:"process_id"`
+	Build     builds.Build    `json:"build"`
+	ProcessID uint32          `json:"process_id"`
+	Events    []event.Message `json:"events"`
 }
 
 func NewSnapshotter(logger lager.Logger, snapshotPath string, scheduler scheduler.Scheduler) *Snapshotter {
@@ -55,9 +56,15 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 					"snapshot": snapshot,
 				})
 
-				go snapshotter.scheduler.Attach(builder.RunningBuild{
+				hub := event.NewHub()
+				for _, m := range snapshot.Events {
+					hub.EmitEvent(m.Event)
+				}
+
+				snapshotter.scheduler.Restore(scheduler.ScheduledBuild{
 					Build:     snapshot.Build,
 					ProcessID: snapshot.ProcessID,
+					EventHub:  hub,
 				})
 			}
 		}
@@ -81,9 +88,14 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 
 	var snapshots []BuildSnapshot
 	for _, running := range running {
+		msgs := []event.Message{}
+		for _, e := range running.EventHub.Events() {
+			msgs = append(msgs, event.Message{e})
+		}
 		snapshots = append(snapshots, BuildSnapshot{
 			Build:     running.Build,
 			ProcessID: running.ProcessID,
+			Events:    msgs,
 		})
 	}
 

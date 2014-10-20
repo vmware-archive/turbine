@@ -6,7 +6,6 @@ import (
 
 	gapi "github.com/cloudfoundry-incubator/garden/api"
 	"github.com/concourse/turbine/api/builds"
-	"github.com/concourse/turbine/builder"
 	"github.com/concourse/turbine/event"
 	"github.com/concourse/turbine/scheduler"
 )
@@ -17,10 +16,10 @@ type FakeScheduler struct {
 	startArgsForCall []struct {
 		arg1 builds.Build
 	}
-	AttachStub        func(builder.RunningBuild)
-	attachMutex       sync.RWMutex
-	attachArgsForCall []struct {
-		arg1 builder.RunningBuild
+	RestoreStub        func(scheduler.ScheduledBuild)
+	restoreMutex       sync.RWMutex
+	restoreArgsForCall []struct {
+		arg1 scheduler.ScheduledBuild
 	}
 	AbortStub        func(guid string)
 	abortMutex       sync.RWMutex
@@ -49,11 +48,11 @@ type FakeScheduler struct {
 		result2 chan<- struct{}
 		result3 error
 	}
-	DrainStub        func() []builder.RunningBuild
+	DrainStub        func() []scheduler.ScheduledBuild
 	drainMutex       sync.RWMutex
 	drainArgsForCall []struct{}
 	drainReturns struct {
-		result1 []builder.RunningBuild
+		result1 []scheduler.ScheduledBuild
 	}
 }
 
@@ -80,27 +79,27 @@ func (fake *FakeScheduler) StartArgsForCall(i int) builds.Build {
 	return fake.startArgsForCall[i].arg1
 }
 
-func (fake *FakeScheduler) Attach(arg1 builder.RunningBuild) {
-	fake.attachMutex.Lock()
-	fake.attachArgsForCall = append(fake.attachArgsForCall, struct {
-		arg1 builder.RunningBuild
+func (fake *FakeScheduler) Restore(arg1 scheduler.ScheduledBuild) {
+	fake.restoreMutex.Lock()
+	fake.restoreArgsForCall = append(fake.restoreArgsForCall, struct {
+		arg1 scheduler.ScheduledBuild
 	}{arg1})
-	fake.attachMutex.Unlock()
-	if fake.AttachStub != nil {
-		fake.AttachStub(arg1)
+	fake.restoreMutex.Unlock()
+	if fake.RestoreStub != nil {
+		fake.RestoreStub(arg1)
 	}
 }
 
-func (fake *FakeScheduler) AttachCallCount() int {
-	fake.attachMutex.RLock()
-	defer fake.attachMutex.RUnlock()
-	return len(fake.attachArgsForCall)
+func (fake *FakeScheduler) RestoreCallCount() int {
+	fake.restoreMutex.RLock()
+	defer fake.restoreMutex.RUnlock()
+	return len(fake.restoreArgsForCall)
 }
 
-func (fake *FakeScheduler) AttachArgsForCall(i int) builder.RunningBuild {
-	fake.attachMutex.RLock()
-	defer fake.attachMutex.RUnlock()
-	return fake.attachArgsForCall[i].arg1
+func (fake *FakeScheduler) RestoreArgsForCall(i int) scheduler.ScheduledBuild {
+	fake.restoreMutex.RLock()
+	defer fake.restoreMutex.RUnlock()
+	return fake.restoreArgsForCall[i].arg1
 }
 
 func (fake *FakeScheduler) Abort(guid string) {
@@ -196,7 +195,7 @@ func (fake *FakeScheduler) SubscribeReturns(result1 <-chan event.Event, result2 
 	}{result1, result2, result3}
 }
 
-func (fake *FakeScheduler) Drain() []builder.RunningBuild {
+func (fake *FakeScheduler) Drain() []scheduler.ScheduledBuild {
 	fake.drainMutex.Lock()
 	fake.drainArgsForCall = append(fake.drainArgsForCall, struct{}{})
 	fake.drainMutex.Unlock()
@@ -213,10 +212,10 @@ func (fake *FakeScheduler) DrainCallCount() int {
 	return len(fake.drainArgsForCall)
 }
 
-func (fake *FakeScheduler) DrainReturns(result1 []builder.RunningBuild) {
+func (fake *FakeScheduler) DrainReturns(result1 []scheduler.ScheduledBuild) {
 	fake.DrainStub = nil
 	fake.drainReturns = struct {
-		result1 []builder.RunningBuild
+		result1 []scheduler.ScheduledBuild
 	}{result1}
 }
 

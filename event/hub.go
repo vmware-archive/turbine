@@ -94,3 +94,18 @@ func (h *Hub) Subscribe(from uint, events chan<- Event, stop <-chan struct{}) {
 		}
 	}
 }
+
+func (h *Hub) Events() []Event {
+	h.lock.RLock()
+
+	events := []Event{}
+	for _, e := range h.events {
+		if e.event != nil {
+			events = append(events, e.event)
+		}
+	}
+
+	h.lock.RUnlock()
+
+	return events
+}

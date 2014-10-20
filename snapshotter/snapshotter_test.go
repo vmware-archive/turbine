@@ -11,7 +11,8 @@ import (
 	"github.com/tedsuo/ifrit"
 
 	"github.com/concourse/turbine/api/builds"
-	"github.com/concourse/turbine/builder"
+	"github.com/concourse/turbine/event"
+	sched "github.com/concourse/turbine/scheduler"
 	sfakes "github.com/concourse/turbine/scheduler/fakes"
 	. "github.com/concourse/turbine/snapshotter"
 )
@@ -23,51 +24,8 @@ var _ = Describe("Snapshotter", func() {
 
 	var process ifrit.Process
 
-	theSnapshots := []BuildSnapshot{
-		{
-			Build: builds.Build{
-				Config: builds.Config{
-					Run: builds.RunConfig{
-						Path: "some-script",
-					},
-				},
-			},
-			ProcessID: 123,
-		},
-		{
-			Build: builds.Build{
-				Config: builds.Config{
-					Run: builds.RunConfig{
-						Path: "some-other-script",
-					},
-				},
-			},
-			ProcessID: 124,
-		},
-	}
-
-	theRunningBuilds := []builder.RunningBuild{
-		{
-			Build: builds.Build{
-				Config: builds.Config{
-					Run: builds.RunConfig{
-						Path: "some-script",
-					},
-				},
-			},
-			ProcessID: 123,
-		},
-		{
-			Build: builds.Build{
-				Config: builds.Config{
-					Run: builds.RunConfig{
-						Path: "some-other-script",
-					},
-				},
-			},
-			ProcessID: 124,
-		},
-	}
+	var theSnapshots []BuildSnapshot
+	var theRunningBuilds []sched.ScheduledBuild
 
 	BeforeEach(func() {
 		snapshotFile, err := ioutil.TempFile("", "snapshot-file")
@@ -79,6 +37,70 @@ var _ = Describe("Snapshotter", func() {
 
 		scheduler = new(sfakes.FakeScheduler)
 		snapshotter = NewSnapshotter(lagertest.NewTestLogger("test"), snapshotPath, scheduler)
+
+		firstHub := event.NewHub()
+		firstHub.EmitEvent(event.Version("0.0"))
+		firstHub.EmitEvent(event.Start{Time: 1})
+
+		secondHub := event.NewHub()
+		secondHub.EmitEvent(event.Version("1.0"))
+		secondHub.EmitEvent(event.Start{Time: 2})
+
+		theRunningBuilds = []sched.ScheduledBuild{
+			{
+				Build: builds.Build{
+					Config: builds.Config{
+						Run: builds.RunConfig{
+							Path: "some-script",
+						},
+					},
+				},
+				ProcessID: 123,
+				EventHub:  firstHub,
+			},
+			{
+				Build: builds.Build{
+					Config: builds.Config{
+						Run: builds.RunConfig{
+							Path: "some-other-script",
+						},
+					},
+				},
+				ProcessID: 124,
+				EventHub:  secondHub,
+			},
+		}
+
+		theSnapshots = []BuildSnapshot{
+			{
+				Build: builds.Build{
+					Config: builds.Config{
+						Run: builds.RunConfig{
+							Path: "some-script",
+						},
+					},
+				},
+				ProcessID: 123,
+				Events: []event.Message{
+					{event.Version("0.0")},
+					{event.Start{Time: 1}},
+				},
+			},
+			{
+				Build: builds.Build{
+					Config: builds.Config{
+						Run: builds.RunConfig{
+							Path: "some-other-script",
+						},
+					},
+				},
+				ProcessID: 124,
+				Events: []event.Message{
+					{event.Version("1.0")},
+					{event.Start{Time: 2}},
+				},
+			},
+		}
 	})
 
 	AfterEach(func() {
@@ -132,11 +154,14 @@ var _ = Describe("Snapshotter", func() {
 				Ω(err).ShouldNot(HaveOccurred())
 			})
 
-			It("attaches to the builds via the scheduler", func() {
-				Eventually(scheduler.AttachCallCount).Should(Equal(len(theRunningBuilds)))
+			It("restores the builds to the scheduler", func() {
+				Eventually(scheduler.RestoreCallCount).Should(Equal(len(theRunningBuilds)))
 
 				for i, build := range theRunningBuilds {
-					Ω(scheduler.AttachArgsForCall(i)).Should(Equal(build))
+					restored := scheduler.RestoreArgsForCall(i)
+					Ω(restored.Build).Should(Equal(build.Build))
+					Ω(restored.ProcessID).Should(Equal(build.ProcessID))
+					Ω(restored.EventHub.Events()).Should(Equal(build.EventHub.Events()))
 				}
 			})
 		})
