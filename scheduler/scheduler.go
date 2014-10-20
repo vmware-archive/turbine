@@ -133,21 +133,25 @@ func (scheduler *scheduler) Restore(build ScheduledBuild) {
 	scheduler.builds[scheduled.Build.Guid] = scheduled
 	scheduler.mutex.Unlock()
 
-	scheduler.inFlight.Add(1)
+	if build.Status == builds.StatusStarted {
+		scheduled.EventHub.EmitEvent(event.CURRENT_VERSION)
 
-	scheduled.EventHub.EmitEvent(event.CURRENT_VERSION)
+		scheduler.inFlight.Add(1)
 
-	go func() {
-		defer scheduler.inFlight.Done()
+		go func() {
+			defer scheduler.inFlight.Done()
 
-		scheduler.attach(
-			builder.RunningBuild{
-				Build:     scheduled.Build,
-				ProcessID: scheduled.ProcessID,
-			},
-			scheduled,
-		)
-	}()
+			scheduler.attach(
+				builder.RunningBuild{
+					Build:     scheduled.Build,
+					ProcessID: scheduled.ProcessID,
+				},
+				scheduled,
+			)
+		}()
+	} else {
+		scheduled.EventHub.Close()
+	}
 }
 
 func (scheduler *scheduler) Abort(guid string) {

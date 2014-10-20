@@ -308,6 +308,131 @@ var _ = Describe("Scheduler", func() {
 		})
 	})
 
+	Describe("Restore", func() {
+		var scheduledBuild ScheduledBuild
+
+		JustBeforeEach(func() {
+			scheduler.Restore(scheduledBuild)
+		})
+
+		Context("with a completed build", func() {
+			BeforeEach(func() {
+				hub := event.NewHub()
+				hub.EmitEvent(event.Version("1.0"))
+				hub.EmitEvent(event.Start{Time: 1})
+
+				scheduledBuild = ScheduledBuild{
+					Build:     build,
+					Status:    builds.StatusSucceeded,
+					ProcessID: 2,
+					EventHub:  hub,
+				}
+			})
+
+			It("restores its event log", func() {
+				events, stop, err := scheduler.Subscribe(build.Guid, 0)
+				Ω(err).ShouldNot(HaveOccurred())
+
+				defer close(stop)
+
+				Eventually(events).Should(Receive(Equal(event.Version("1.0"))))
+				Eventually(events).Should(Receive(Equal(event.Start{Time: 1})))
+			})
+
+			It("closes its event log without emitting a new version", func() {
+				events, stop, err := scheduler.Subscribe(build.Guid, 0)
+				Ω(err).ShouldNot(HaveOccurred())
+
+				defer close(stop)
+
+				Eventually(events).Should(Receive(Equal(event.Version("1.0"))))
+				Eventually(events).Should(Receive(Equal(event.Start{Time: 1})))
+
+				_, ok := <-events
+				Ω(ok).Should(BeFalse())
+			})
+
+			It("does not try to attach to the build", func() {
+				Consistently(fakeBuilder.AttachCallCount).Should(BeZero())
+			})
+		})
+
+		Context("with a started build", func() {
+			BeforeEach(func() {
+				hub := event.NewHub()
+				hub.EmitEvent(event.Version("1.0"))
+				hub.EmitEvent(event.Start{Time: 1})
+
+				scheduledBuild = ScheduledBuild{
+					Build:     build,
+					Status:    builds.StatusStarted,
+					ProcessID: 2,
+					EventHub:  hub,
+				}
+			})
+
+			It("emits the current event version", func() {
+				events, stop, err := scheduler.Subscribe(build.Guid, 0)
+				Ω(err).ShouldNot(HaveOccurred())
+
+				defer close(stop)
+
+				Eventually(events).Should(Receive(Equal(event.Version("1.0"))))
+				Eventually(events).Should(Receive(Equal(event.Start{Time: 1})))
+				Eventually(events).Should(Receive(Equal(event.CURRENT_VERSION)))
+			})
+
+			It("re-attaches to the build via the builder", func() {
+				Eventually(fakeBuilder.AttachCallCount).Should(Equal(1))
+
+				runningBuild, hub, abort := fakeBuilder.AttachArgsForCall(0)
+
+				Ω(runningBuild).Should(Equal(builder.RunningBuild{
+					Build:     build,
+					ProcessID: 2,
+				}))
+
+				Ω(hub).Should(Equal(scheduledBuild.EventHub))
+
+				Ω(abort).ShouldNot(BeNil())
+			})
+
+			Context("while attached", func() {
+				var exitedBuild chan builder.ExitedBuild
+
+				BeforeEach(func() {
+					exitedBuild = make(chan builder.ExitedBuild)
+
+					fakeBuilder.AttachStub = func(builder.RunningBuild, event.Emitter, <-chan struct{}) (builder.ExitedBuild, error) {
+						return <-exitedBuild, nil
+					}
+				})
+
+				It("does not close the event stream", func() {
+					events, stop, err := scheduler.Subscribe(build.Guid, 0)
+					Ω(err).ShouldNot(HaveOccurred())
+
+					defer close(stop)
+
+					Consistently(events).ShouldNot(BeClosed())
+
+					exitedTime := time.Now()
+					clock.CurrentTimeReturns(exitedTime)
+
+					exitedBuild <- builder.ExitedBuild{
+						Build:      build,
+						ExitStatus: 0,
+					}
+
+					Eventually(events).Should(Receive(Equal(event.Status{
+						Status: builds.StatusSucceeded,
+						Time:   exitedTime.Unix(),
+					})))
+				})
+			})
+		})
+	})
+
 	Describe("Hijack", func() {
 		Context("when the builder fails to hijack", func() {
 			disaster := errors.New("oh no!")
