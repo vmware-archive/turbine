@@ -114,6 +114,9 @@ func (scheduler *scheduler) Start(build builds.Build) {
 			default:
 				scheduler.updateAndReportBuild(build, builds.StatusErrored)
 			}
+
+			scheduled.EventHub.EmitEvent(event.End{})
+			scheduled.EventHub.Close()
 		} else {
 			log.Info("started")
 
@@ -211,6 +214,7 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, scheduled *Sche
 		log.Info("exited")
 
 		scheduler.finish(build, scheduled)
+
 	case err := <-errored:
 		log.Error("errored", err)
 
@@ -220,6 +224,8 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, scheduled *Sche
 		default:
 			scheduler.updateAndReportBuild(running.Build, builds.StatusErrored)
 		}
+
+		scheduled.EventHub.EmitEvent(event.End{})
 	case <-scheduler.draining:
 	}
 }
@@ -248,6 +254,8 @@ func (scheduler *scheduler) finish(exited builder.ExitedBuild, scheduled *Schedu
 			scheduler.updateAndReportBuild(finished, builds.StatusFailed)
 		}
 	}
+
+	scheduled.EventHub.EmitEvent(event.End{})
 }
 
 func (scheduler *scheduler) scheduledBuilds() []ScheduledBuild {

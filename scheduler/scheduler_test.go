@@ -156,7 +156,7 @@ var _ = Describe("Scheduler", func() {
 						}
 					})
 
-					It("emits a succeeded status event", func() {
+					It("emits a succeeded status event, ends the stream, and closes it", func() {
 						scheduler.Start(build)
 
 						emittedEvents, stop := subscribeToBuildEvents()
@@ -166,6 +166,9 @@ var _ = Describe("Scheduler", func() {
 							Status: builds.StatusSucceeded,
 							Time:   endTime.Unix(),
 						})))
+
+						Eventually(emittedEvents).Should(Receive(Equal(event.End{})))
+						Eventually(emittedEvents).Should(BeClosed())
 					})
 				})
 
@@ -177,7 +180,7 @@ var _ = Describe("Scheduler", func() {
 						}
 					})
 
-					It("emits an errored status event", func() {
+					It("emits an errored status event, ends the stream, and closes it", func() {
 						scheduler.Start(build)
 
 						emittedEvents, stop := subscribeToBuildEvents()
@@ -187,6 +190,9 @@ var _ = Describe("Scheduler", func() {
 							Status: builds.StatusErrored,
 							Time:   endTime.Unix(),
 						})))
+
+						Eventually(emittedEvents).Should(Receive(Equal(event.End{})))
+						Eventually(emittedEvents).Should(BeClosed())
 					})
 				})
 			})
@@ -221,7 +227,7 @@ var _ = Describe("Scheduler", func() {
 						}
 					})
 
-					It("emits a failed status event", func() {
+					It("emits a failed status event, ends the stream, and closes it", func() {
 						scheduler.Start(build)
 
 						emittedEvents, stop := subscribeToBuildEvents()
@@ -231,6 +237,9 @@ var _ = Describe("Scheduler", func() {
 							Status: builds.StatusFailed,
 							Time:   endTime.Unix(),
 						})))
+
+						Eventually(emittedEvents).Should(Receive(Equal(event.End{})))
+						Eventually(emittedEvents).Should(BeClosed())
 					})
 				})
 
@@ -242,7 +251,7 @@ var _ = Describe("Scheduler", func() {
 						}
 					})
 
-					It("emits an errored status event", func() {
+					It("emits an errored status event, ends the stream, and closes it", func() {
 						scheduler.Start(build)
 
 						emittedEvents, stop := subscribeToBuildEvents()
@@ -252,6 +261,9 @@ var _ = Describe("Scheduler", func() {
 							Status: builds.StatusErrored,
 							Time:   endTime.Unix(),
 						})))
+
+						Eventually(emittedEvents).Should(Receive(Equal(event.End{})))
+						Eventually(emittedEvents).Should(BeClosed())
 					})
 				})
 			})
@@ -264,7 +276,7 @@ var _ = Describe("Scheduler", func() {
 					}
 				})
 
-				It("emits an errored status event", func() {
+				It("emits an errored status event, ends the stream, and closes it", func() {
 					scheduler.Start(build)
 
 					emittedEvents, stop := subscribeToBuildEvents()
@@ -274,6 +286,9 @@ var _ = Describe("Scheduler", func() {
 						Status: builds.StatusErrored,
 						Time:   endTime.Unix(),
 					})))
+
+					Eventually(emittedEvents).Should(Receive(Equal(event.End{})))
+					Eventually(emittedEvents).Should(BeClosed())
 				})
 			})
 		})
@@ -294,7 +309,7 @@ var _ = Describe("Scheduler", func() {
 				}
 			})
 
-			It("emits an errored status event", func() {
+			It("emits an errored status event, ends the stream, and closes it", func() {
 				scheduler.Start(build)
 
 				emittedEvents, stop := subscribeToBuildEvents()
@@ -304,6 +319,9 @@ var _ = Describe("Scheduler", func() {
 					Status: builds.StatusErrored,
 					Time:   endTime.Unix(),
 				})))
+
+				Eventually(emittedEvents).Should(Receive(Equal(event.End{})))
+				Eventually(emittedEvents).Should(BeClosed())
 			})
 		})
 	})
@@ -519,7 +537,7 @@ var _ = Describe("Scheduler", func() {
 				Ω(abort).Should(BeClosed())
 			})
 
-			It("emits an aborted status event", func() {
+			It("emits an aborted status event, ends the stream, and closes it", func() {
 				scheduler.Start(build)
 
 				Eventually(gotAborting).Should(Receive())
@@ -533,6 +551,9 @@ var _ = Describe("Scheduler", func() {
 					Status: builds.StatusAborted,
 					Time:   currentTime.Unix(),
 				})))
+
+				Eventually(emittedEvents).Should(Receive(Equal(event.End{})))
+				Eventually(emittedEvents).Should(BeClosed())
 			})
 		})
 
@@ -564,7 +585,7 @@ var _ = Describe("Scheduler", func() {
 				Ω(abort).Should(BeClosed())
 			})
 
-			It("emits an aborted status event", func() {
+			It("emits an aborted status event, ends the stream, and closes it", func() {
 				scheduler.Start(build)
 
 				Eventually(gotAborting).Should(Receive())
@@ -578,6 +599,9 @@ var _ = Describe("Scheduler", func() {
 					Status: builds.StatusAborted,
 					Time:   currentTime.Unix(),
 				})))
+
+				Eventually(emittedEvents).Should(Receive(Equal(event.End{})))
+				Eventually(emittedEvents).Should(BeClosed())
 			})
 		})
 
@@ -613,7 +637,7 @@ var _ = Describe("Scheduler", func() {
 				Ω(abort).Should(BeClosed())
 			})
 
-			It("emits an aborted status event", func() {
+			It("emits an aborted status event, ends the stream, and closes it", func() {
 				scheduler.Start(build)
 
 				Eventually(gotAborting).Should(Receive())
@@ -627,6 +651,9 @@ var _ = Describe("Scheduler", func() {
 					Status: builds.StatusAborted,
 					Time:   currentTime.Unix(),
 				})))
+
+				Eventually(emittedEvents).Should(Receive(Equal(event.End{})))
+				Eventually(emittedEvents).Should(BeClosed())
 			})
 		})
 	})
@@ -640,23 +667,13 @@ var _ = Describe("Scheduler", func() {
 		})
 
 		Context("when a build is starting", func() {
-			startingBuild := builds.Build{
-				Guid: "starting",
-			}
-
 			var running chan builder.RunningBuild
 
 			BeforeEach(func() {
 				running = make(chan builder.RunningBuild)
 
 				fakeBuilder.StartStub = func(build builds.Build, emitter event.Emitter, abort <-chan struct{}) (builder.RunningBuild, error) {
-					if build.Guid == "starting" {
-						return <-running, nil
-					}
-
-					return builder.RunningBuild{
-						Build: build,
-					}, nil
+					return <-running, nil
 				}
 
 				fakeBuilder.AttachStub = func(running builder.RunningBuild, emitter event.Emitter, abort <-chan struct{}) (builder.ExitedBuild, error) {
@@ -665,7 +682,7 @@ var _ = Describe("Scheduler", func() {
 			})
 
 			It("waits for it to start running and returns its running state", func() {
-				scheduler.Start(startingBuild)
+				scheduler.Start(build)
 
 				drained := make(chan []ScheduledBuild)
 
@@ -676,7 +693,7 @@ var _ = Describe("Scheduler", func() {
 				Consistently(drained).ShouldNot(Receive())
 
 				running <- builder.RunningBuild{
-					Build:     startingBuild,
+					Build:     build,
 					ProcessID: 42,
 				}
 
@@ -684,9 +701,25 @@ var _ = Describe("Scheduler", func() {
 				Eventually(drained).Should(Receive(&drainedBuilds))
 
 				Ω(drainedBuilds).Should(HaveLen(1))
-				Ω(drainedBuilds[0].Build).Should(Equal(startingBuild))
+				Ω(drainedBuilds[0].Build).Should(Equal(build))
 				Ω(drainedBuilds[0].Status).Should(Equal(builds.StatusStarted))
 				Ω(drainedBuilds[0].ProcessID).Should(Equal(uint32(42)))
+			})
+
+			It("does not emit an end event, as the stream is not over", func() {
+				scheduler.Start(build)
+
+				go scheduler.Drain()
+
+				emittedEvents, stop := subscribeToBuildEvents()
+				defer close(stop)
+
+				running <- builder.RunningBuild{
+					Build:     build,
+					ProcessID: 42,
+				}
+
+				Consistently(emittedEvents).ShouldNot(Receive(Equal(event.End{})))
 			})
 
 			Context("and it errors", func() {
@@ -719,6 +752,32 @@ var _ = Describe("Scheduler", func() {
 					Ω(drainedBuilds).Should(HaveLen(1))
 					Ω(drainedBuilds[0].Build).Should(Equal(build))
 					Ω(drainedBuilds[0].Status).Should(Equal(builds.StatusErrored))
+				})
+
+				It("emits an end event", func() {
+					scheduler.Start(build)
+
+					go scheduler.Drain()
+
+					emittedEvents, stop := subscribeToBuildEvents()
+					defer close(stop)
+
+					errored <- errors.New("oh no!")
+
+					Eventually(emittedEvents).Should(Receive(Equal(event.End{})))
+				})
+
+				It("closes the event stream", func() {
+					scheduler.Start(build)
+
+					go scheduler.Drain()
+
+					emittedEvents, stop := subscribeToBuildEvents()
+					defer close(stop)
+
+					errored <- errors.New("oh no!")
+
+					Eventually(emittedEvents).Should(BeClosed())
 				})
 			})
 		})
