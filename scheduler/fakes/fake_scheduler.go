@@ -48,6 +48,11 @@ type FakeScheduler struct {
 		result2 chan<- struct{}
 		result3 error
 	}
+	DeleteStub        func(guid string)
+	deleteMutex       sync.RWMutex
+	deleteArgsForCall []struct {
+		guid string
+	}
 	DrainStub        func() []scheduler.ScheduledBuild
 	drainMutex       sync.RWMutex
 	drainArgsForCall []struct{}
@@ -193,6 +198,29 @@ func (fake *FakeScheduler) SubscribeReturns(result1 <-chan event.Event, result2 
 		result2 chan<- struct{}
 		result3 error
 	}{result1, result2, result3}
+}
+
+func (fake *FakeScheduler) Delete(guid string) {
+	fake.deleteMutex.Lock()
+	fake.deleteArgsForCall = append(fake.deleteArgsForCall, struct {
+		guid string
+	}{guid})
+	fake.deleteMutex.Unlock()
+	if fake.DeleteStub != nil {
+		fake.DeleteStub(guid)
+	}
+}
+
+func (fake *FakeScheduler) DeleteCallCount() int {
+	fake.deleteMutex.RLock()
+	defer fake.deleteMutex.RUnlock()
+	return len(fake.deleteArgsForCall)
+}
+
+func (fake *FakeScheduler) DeleteArgsForCall(i int) string {
+	fake.deleteMutex.RLock()
+	defer fake.deleteMutex.RUnlock()
+	return fake.deleteArgsForCall[i].guid
 }
 
 func (fake *FakeScheduler) Drain() []scheduler.ScheduledBuild {

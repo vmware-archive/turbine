@@ -18,6 +18,7 @@ type Scheduler interface {
 	Abort(guid string)
 	Hijack(guid string, process gapi.ProcessSpec, io gapi.ProcessIO) (gapi.Process, error)
 	Subscribe(guid string, from uint) (<-chan event.Event, chan<- struct{}, error)
+	Delete(guid string)
 
 	Drain() []ScheduledBuild
 }
@@ -29,6 +30,7 @@ type ScheduledBuild struct {
 	EventHub  *event.Hub
 
 	abort chan struct{}
+	done  chan struct{}
 }
 
 type scheduler struct {
@@ -93,6 +95,7 @@ func (scheduler *scheduler) Start(build builds.Build) {
 		EventHub: event.NewHub(),
 
 		abort: make(chan struct{}),
+		done:  make(chan struct{}),
 	}
 
 	scheduled.EventHub.EmitEvent(event.CURRENT_VERSION)
@@ -117,6 +120,7 @@ func (scheduler *scheduler) Start(build builds.Build) {
 
 			scheduled.EventHub.EmitEvent(event.End{})
 			scheduled.EventHub.Close()
+			close(scheduled.done)
 		} else {
 			log.Info("started")
 
@@ -131,6 +135,7 @@ func (scheduler *scheduler) Start(build builds.Build) {
 func (scheduler *scheduler) Restore(build ScheduledBuild) {
 	scheduled := &build
 	scheduled.abort = make(chan struct{})
+	scheduled.done = make(chan struct{})
 
 	scheduler.mutex.Lock()
 	scheduler.builds[scheduled.Build.Guid] = scheduled
@@ -154,6 +159,7 @@ func (scheduler *scheduler) Restore(build ScheduledBuild) {
 		}()
 	} else {
 		scheduled.EventHub.Close()
+		close(scheduled.done)
 	}
 }
 
@@ -167,6 +173,22 @@ func (scheduler *scheduler) Abort(guid string) {
 	}
 
 	close(scheduled.abort)
+}
+
+func (scheduler *scheduler) Delete(guid string) {
+	scheduler.mutex.RLock()
+	scheduled, found := scheduler.builds[guid]
+	scheduler.mutex.RUnlock()
+
+	if !found {
+		return
+	}
+
+	<-scheduled.done
+
+	scheduler.mutex.Lock()
+	delete(scheduler.builds, guid)
+	scheduler.mutex.Unlock()
 }
 
 func (scheduler *scheduler) Hijack(guid string, spec gapi.ProcessSpec, io gapi.ProcessIO) (gapi.Process, error) {
@@ -192,6 +214,7 @@ func (scheduler *scheduler) Subscribe(guid string, from uint) (<-chan event.Even
 
 func (scheduler *scheduler) attach(running builder.RunningBuild, scheduled *ScheduledBuild) {
 	defer scheduled.EventHub.Close()
+	defer close(scheduled.done)
 
 	log := scheduler.logger.Session("attach", lager.Data{
 		"build": running.Build,

@@ -658,6 +658,22 @@ var _ = Describe("Scheduler", func() {
 		})
 	})
 
+	Describe("Delete", func() {
+		It("clears out the build's events", func() {
+			scheduler.Start(build)
+
+			_, stop, err := scheduler.Subscribe(build.Guid, 0)
+			Ω(err).ShouldNot(HaveOccurred())
+
+			defer close(stop)
+
+			scheduler.Delete(build.Guid)
+
+			_, _, err = scheduler.Subscribe(build.Guid, 0)
+			Ω(err).Should(HaveOccurred())
+		})
+	})
+
 	Describe("Drain", func() {
 		var startTime time.Time
 
