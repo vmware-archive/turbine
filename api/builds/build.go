@@ -19,9 +19,6 @@ type Build struct {
 
 	Inputs  []Input  `json:"inputs"`
 	Outputs []Output `json:"outputs"`
-
-	AbortURL  string `json:"abort_url"`
-	HijackURL string `json:"hijack_url"`
 }
 
 type Config struct {

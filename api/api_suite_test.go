@@ -7,12 +7,10 @@ import (
 
 	"github.com/concourse/turbine/api"
 	rfakes "github.com/concourse/turbine/resource/fakes"
-	"github.com/concourse/turbine/routes"
 	sfakes "github.com/concourse/turbine/scheduler/fakes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/pivotal-golang/lager/lagertest"
-	"github.com/tedsuo/rata"
 )
 
 var scheduler *sfakes.FakeScheduler
@@ -27,9 +25,13 @@ var _ = BeforeEach(func() {
 	tracker = new(rfakes.FakeTracker)
 	drain = make(chan struct{})
 
-	turbineEndpoint := rata.NewRequestGenerator("http://some-turbine", routes.Routes)
-
-	handler, err := api.New(lagertest.NewTestLogger("test"), scheduler, tracker, turbineEndpoint, drain)
+	handler, err := api.New(
+		lagertest.NewTestLogger("test"),
+		scheduler,
+		tracker,
+		"http://some-turbine",
+		drain,
+	)
 	Ω(err).ShouldNot(HaveOccurred())
 
 	server = httptest.NewServer(handler)

@@ -6,10 +6,8 @@ import (
 
 	"github.com/nu7hatch/gouuid"
 	"github.com/pivotal-golang/lager"
-	"github.com/tedsuo/rata"
 
 	"github.com/concourse/turbine/api/builds"
-	"github.com/concourse/turbine/routes"
 	"github.com/concourse/turbine/scheduler"
 )
 
@@ -17,13 +15,13 @@ type handler struct {
 	logger lager.Logger
 
 	scheduler       scheduler.Scheduler
-	turbineEndpoint *rata.RequestGenerator
+	turbineEndpoint string
 }
 
 func NewHandler(
 	logger lager.Logger,
 	scheduler scheduler.Scheduler,
-	turbineEndpoint *rata.RequestGenerator,
+	turbineEndpoint string,
 ) http.Handler {
 	return &handler{
 		logger: logger,
@@ -56,38 +54,13 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	build.Guid = guid.String()
 
-	abortReq, err := handler.turbineEndpoint.CreateRequest(
-		routes.AbortBuild,
-		rata.Params{"guid": build.Guid},
-		nil,
-	)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	}
-
-	build.AbortURL = abortReq.URL.String()
-
-	hijackReq, err := handler.turbineEndpoint.CreateRequest(
-		routes.HijackBuild,
-		rata.Params{"guid": build.Guid},
-		nil,
-	)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	}
-
-	build.HijackURL = hijackReq.URL.String()
-
 	log.Info("scheduling", lager.Data{
 		"guid": build.Guid,
 	})
 
 	handler.scheduler.Start(build)
 
+	w.Header().Add("X-Turbine-Endpoint", handler.turbineEndpoint)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(build)
 }

@@ -20,7 +20,7 @@ func New(
 	logger lager.Logger,
 	scheduler scheduler.Scheduler,
 	tracker resource.Tracker,
-	turbineEndpoint *rata.RequestGenerator,
+	turbineEndpoint string,
 	drain <-chan struct{},
 ) (http.Handler, error) {
 	checkHandler := check.NewHandler(logger, tracker, drain)

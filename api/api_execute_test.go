@@ -56,12 +56,14 @@ var _ = Describe("POST /builds", func() {
 		Ω(err).ShouldNot(HaveOccurred())
 
 		Ω(returnedBuild.Guid).ShouldNot(BeEmpty())
-		Ω(returnedBuild.AbortURL).Should(Equal("http://some-turbine/builds/" + returnedBuild.Guid + "/abort"))
-		Ω(returnedBuild.HijackURL).Should(Equal("http://some-turbine/builds/" + returnedBuild.Guid + "/hijack"))
 		Ω(returnedBuild.Inputs).Should(Equal(build.Inputs))
 
 		Ω(scheduler.StartCallCount()).Should(Equal(1))
 		Ω(scheduler.StartArgsForCall(0)).Should(Equal(returnedBuild))
+	})
+
+	It("returns the turbine endpoint as X-Turbine-Endpoint", func() {
+		Ω(response.Header.Get("X-Turbine-Endpoint")).Should(Equal("http://some-turbine"))
 	})
 
 	Context("when the payload is malformed JSON", func() {

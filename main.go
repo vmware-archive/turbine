@@ -15,7 +15,6 @@ import (
 	"github.com/tedsuo/ifrit/grouper"
 	"github.com/tedsuo/ifrit/http_server"
 	"github.com/tedsuo/ifrit/sigmon"
-	"github.com/tedsuo/rata"
 
 	"github.com/concourse/turbine/api"
 	"github.com/concourse/turbine/builder"
@@ -23,7 +22,6 @@ import (
 	"github.com/concourse/turbine/builder/outputs"
 	"github.com/concourse/turbine/config"
 	"github.com/concourse/turbine/resource"
-	"github.com/concourse/turbine/routes"
 	"github.com/concourse/turbine/scheduler"
 	"github.com/concourse/turbine/snapshotter"
 )
@@ -113,11 +111,9 @@ func main() {
 
 	scheduler := scheduler.NewScheduler(logger.Session("scheduler"), builder, scheduler.NewClock())
 
-	generator := rata.NewRequestGenerator("http://"+*peerAddr, routes.Routes)
-
 	drain := make(chan struct{})
 
-	handler, err := api.New(logger.Session("api"), scheduler, resourceTracker, generator, drain)
+	handler, err := api.New(logger.Session("api"), scheduler, resourceTracker, "http://"+*peerAddr, drain)
 	if err != nil {
 		logger.Fatal("failed-to-initialize-handler", err)
 	}
