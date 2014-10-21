@@ -171,6 +171,39 @@ var _ = Describe("Snapshotter", func() {
 			})
 		})
 
+		Context("and it contains builds with no status", func() {
+			BeforeEach(func() {
+				snapshot, err := json.Marshal([]BuildSnapshot{
+					{
+						Build: builds.Build{
+							Config: builds.Config{
+								Run: builds.RunConfig{
+									Path: "some-script",
+								},
+							},
+						},
+						Status:    "",
+						ProcessID: 123,
+						Events: []event.Message{
+							{event.Version("0.0")},
+							{event.Start{Time: 1}},
+						},
+					},
+				})
+				Ω(err).ShouldNot(HaveOccurred())
+
+				err = ioutil.WriteFile(snapshotPath, snapshot, 0644)
+				Ω(err).ShouldNot(HaveOccurred())
+			})
+
+			It("restores them with 'started' status for the transition from 0.16.0 to 0.17.0", func() {
+				Eventually(scheduler.RestoreCallCount).Should(Equal(1))
+
+				restored := scheduler.RestoreArgsForCall(0)
+				Ω(restored.Status).Should(Equal(builds.StatusStarted))
+			})
+		})
+
 		Context("and it contains invalid JSON", func() {
 			BeforeEach(func() {
 				err := ioutil.WriteFile(snapshotPath, []byte("ß"), 0644)

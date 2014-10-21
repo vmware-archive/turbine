@@ -62,6 +62,11 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 					hub.EmitEvent(m.Event)
 				}
 
+				if snapshot.Status == "" {
+					// 0.16.0 -> 0.17.0 compatibility
+					snapshot.Status = builds.StatusStarted
+				}
+
 				snapshotter.scheduler.Restore(scheduler.ScheduledBuild{
 					Build:     snapshot.Build,
 					Status:    snapshot.Status,
