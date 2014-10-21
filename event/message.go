@@ -36,46 +36,60 @@ func (m *Message) UnmarshalJSON(bytes []byte) error {
 		return err
 	}
 
-	switch envelope.Type {
-	case EventTypeLog:
-		event := Log{}
-		err = json.Unmarshal(*envelope.EventPayload, &event)
-		m.Event = event
-	case EventTypeStatus:
-		event := Status{}
-		err = json.Unmarshal(*envelope.EventPayload, &event)
-		m.Event = event
-	case EventTypeInitialize:
-		event := Initialize{}
-		err = json.Unmarshal(*envelope.EventPayload, &event)
-		m.Event = event
-	case EventTypeStart:
-		event := Start{}
-		err = json.Unmarshal(*envelope.EventPayload, &event)
-		m.Event = event
-	case EventTypeFinish:
-		event := Finish{}
-		err = json.Unmarshal(*envelope.EventPayload, &event)
-		m.Event = event
-	case EventTypeError:
-		event := Error{}
-		err = json.Unmarshal(*envelope.EventPayload, &event)
-		m.Event = event
-	case EventTypeInput:
-		event := Input{}
-		err = json.Unmarshal(*envelope.EventPayload, &event)
-		m.Event = event
-	case EventTypeOutput:
-		event := Output{}
-		err = json.Unmarshal(*envelope.EventPayload, &event)
-		m.Event = event
-	case EventTypeVersion:
-		event := Version("")
-		err = json.Unmarshal(*envelope.EventPayload, &event)
-		m.Event = event
-	default:
-		return fmt.Errorf("unknown event type: %v", envelope.Type)
+	event, err := ParseEvent(envelope.Type, *envelope.EventPayload)
+	if err != nil {
+		return err
 	}
 
-	return err
+	m.Event = event
+
+	return nil
+}
+
+func ParseEvent(t EventType, payload []byte) (Event, error) {
+	var ev Event
+	var err error
+
+	switch t {
+	case EventTypeLog:
+		event := Log{}
+		err = json.Unmarshal(payload, &event)
+		ev = event
+	case EventTypeStatus:
+		event := Status{}
+		err = json.Unmarshal(payload, &event)
+		ev = event
+	case EventTypeInitialize:
+		event := Initialize{}
+		err = json.Unmarshal(payload, &event)
+		ev = event
+	case EventTypeStart:
+		event := Start{}
+		err = json.Unmarshal(payload, &event)
+		ev = event
+	case EventTypeFinish:
+		event := Finish{}
+		err = json.Unmarshal(payload, &event)
+		ev = event
+	case EventTypeError:
+		event := Error{}
+		err = json.Unmarshal(payload, &event)
+		ev = event
+	case EventTypeInput:
+		event := Input{}
+		err = json.Unmarshal(payload, &event)
+		ev = event
+	case EventTypeOutput:
+		event := Output{}
+		err = json.Unmarshal(payload, &event)
+		ev = event
+	case EventTypeVersion:
+		event := Version("")
+		err = json.Unmarshal(payload, &event)
+		ev = event
+	default:
+		return nil, fmt.Errorf("unknown event type: %v", t)
+	}
+
+	return ev, err
 }
