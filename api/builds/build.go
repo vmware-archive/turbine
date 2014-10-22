@@ -39,8 +39,13 @@ type InputConfig struct {
 }
 
 type Input struct {
+	// logical name of the input with respect to the build's config
 	Name string `json:"name"`
 
+	// name of resource providing the input
+	Resource string `json:"resource"`
+
+	// type of resource
 	Type string `json:"type"`
 
 	// e.g. sha
@@ -55,6 +60,7 @@ type Input struct {
 	// e.g. commit_author, commit_date
 	Metadata []MetadataField `json:"metadata,omitempty"`
 
+	// path to build configuration provided by this input
 	ConfigPath string `json:"config_path"`
 }
 

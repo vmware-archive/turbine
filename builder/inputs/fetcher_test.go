@@ -41,12 +41,14 @@ var _ = Describe("Inputs", func() {
 
 		inputs = []builds.Input{
 			{
-				Name: "first-resource",
-				Type: "raw",
+				Name:     "first-input",
+				Resource: "first-resource",
+				Type:     "raw",
 			},
 			{
-				Name: "second-resource",
-				Type: "raw",
+				Name:     "second-input",
+				Resource: "second-resource",
+				Type:     "raw",
 			},
 		}
 
@@ -121,7 +123,8 @@ var _ = Describe("Inputs", func() {
 
 			It("returns the fetched inputs", func() {
 				Ω(fetchedInputs[0].Input).Should(Equal(builds.Input{
-					Name:     "first-resource",
+					Name:     "first-input",
+					Resource: "first-resource",
 					Type:     "raw",
 					Version:  builds.Version{"version": "1"},
 					Metadata: []builds.MetadataField{{Name: "key", Value: "meta-1"}},
@@ -133,7 +136,8 @@ var _ = Describe("Inputs", func() {
 				Ω(string(stream)).Should(Equal("some-data-1"))
 
 				Ω(fetchedInputs[1].Input).Should(Equal(builds.Input{
-					Name:     "second-resource",
+					Name:     "second-input",
+					Resource: "second-resource",
 					Type:     "raw",
 					Version:  builds.Version{"version": "2"},
 					Metadata: []builds.MetadataField{{Name: "key", Value: "meta-2"}},
@@ -148,7 +152,8 @@ var _ = Describe("Inputs", func() {
 			It("emits input events", func() {
 				Eventually(events.Sent).Should(ContainElement(event.Input{
 					Input: builds.Input{
-						Name:     "first-resource",
+						Name:     "first-input",
+						Resource: "first-resource",
 						Type:     "raw",
 						Version:  builds.Version{"version": "1"},
 						Metadata: []builds.MetadataField{{Name: "key", Value: "meta-1"}},
@@ -157,7 +162,8 @@ var _ = Describe("Inputs", func() {
 
 				Eventually(events.Sent).Should(ContainElement(event.Input{
 					Input: builds.Input{
-						Name:     "second-resource",
+						Name:     "second-input",
+						Resource: "second-resource",
 						Type:     "raw",
 						Version:  builds.Version{"version": "2"},
 						Metadata: []builds.MetadataField{{Name: "key", Value: "meta-2"}},
@@ -220,7 +226,7 @@ var _ = Describe("Inputs", func() {
 						Payload: "hello from the resource",
 						Origin: event.Origin{
 							Type: event.OriginTypeInput,
-							Name: "first-resource",
+							Name: "first-input",
 						},
 					}))
 				})
@@ -269,7 +275,7 @@ var _ = Describe("Inputs", func() {
 					Message: "oh no!",
 					Origin: event.Origin{
 						Type: event.OriginTypeInput,
-						Name: "second-resource",
+						Name: "second-input",
 					},
 				}))
 			})
@@ -297,7 +303,7 @@ var _ = Describe("Inputs", func() {
 					Message: "oh no!",
 					Origin: event.Origin{
 						Type: event.OriginTypeInput,
-						Name: "first-resource",
+						Name: "first-input",
 					},
 				}))
 			})
