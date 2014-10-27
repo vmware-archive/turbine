@@ -4,7 +4,6 @@ import (
 	garden "github.com/cloudfoundry-incubator/garden/api"
 	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/event"
-	"github.com/concourse/turbine/logwriter"
 	"github.com/concourse/turbine/resource"
 )
 
@@ -39,7 +38,7 @@ func (p parallelPerformer) PerformOutputs(
 				return
 			}
 
-			eventLog := logwriter.NewWriter(emitter, event.Origin{
+			eventLog := event.NewWriter(emitter, event.Origin{
 				Type: event.OriginTypeOutput,
 				Name: output.Name,
 			})

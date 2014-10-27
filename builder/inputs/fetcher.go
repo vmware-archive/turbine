@@ -5,7 +5,6 @@ import (
 
 	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/event"
-	"github.com/concourse/turbine/logwriter"
 	"github.com/concourse/turbine/resource"
 )
 
@@ -39,7 +38,7 @@ func (fetcher *parallelFetcher) Fetch(inputs []turbine.Input, emitter event.Emit
 
 	for i, input := range inputs {
 		go func(i int, input turbine.Input) {
-			eventLog := logwriter.NewWriter(emitter, event.Origin{
+			eventLog := event.NewWriter(emitter, event.Origin{
 				Type: event.OriginTypeInput,
 				Name: input.Name,
 			})

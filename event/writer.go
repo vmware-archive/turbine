@@ -1,20 +1,18 @@
-package logwriter
+package event
 
 import (
 	"io"
 	"unicode/utf8"
-
-	"github.com/concourse/turbine/event"
 )
 
 type writer struct {
-	emitter event.Emitter
-	origin  event.Origin
+	emitter Emitter
+	origin  Origin
 
 	dangling []byte
 }
 
-func NewWriter(emitter event.Emitter, origin event.Origin) io.Writer {
+func NewWriter(emitter Emitter, origin Origin) io.Writer {
 	return &writer{
 		emitter: emitter,
 		origin:  origin,
@@ -32,7 +30,7 @@ func (writer *writer) Write(data []byte) (int, error) {
 
 	writer.dangling = nil
 
-	writer.emitter.EmitEvent(event.Log{
+	writer.emitter.EmitEvent(Log{
 		Payload: string(text),
 		Origin:  writer.origin,
 	})

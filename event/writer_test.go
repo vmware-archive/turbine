@@ -1,4 +1,4 @@
-package logwriter_test
+package event_test
 
 import (
 	"io"
@@ -6,9 +6,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/concourse/turbine/event"
+	. "github.com/concourse/turbine/event"
 	efakes "github.com/concourse/turbine/event/fakes"
-	. "github.com/concourse/turbine/logwriter"
 )
 
 const nihongo = "日本語"
@@ -16,7 +15,7 @@ const nihongo = "日本語"
 var _ = Describe("Writer", func() {
 	var (
 		emitter *efakes.FakeEmitter
-		origin  event.Origin
+		origin  Origin
 
 		writer io.Writer
 	)
@@ -24,8 +23,8 @@ var _ = Describe("Writer", func() {
 	BeforeEach(func() {
 		emitter = new(efakes.FakeEmitter)
 
-		origin = event.Origin{
-			Type: event.OriginTypeRun,
+		origin = Origin{
+			Type: OriginTypeRun,
 			Name: "some-source",
 		}
 
@@ -35,7 +34,7 @@ var _ = Describe("Writer", func() {
 	It("does not transmit utf8 codepoints that are split in twain", func() {
 		writer.Write([]byte("hello"))
 		Ω(emitter.EmitEventCallCount()).Should(Equal(1))
-		Ω(emitter.EmitEventArgsForCall(0)).Should(Equal(event.Log{
+		Ω(emitter.EmitEventArgsForCall(0)).Should(Equal(Log{
 			Payload: "hello",
 			Origin:  origin,
 		}))
@@ -45,7 +44,7 @@ var _ = Describe("Writer", func() {
 
 		writer.Write([]byte(nihongo[7:]))
 		Ω(emitter.EmitEventCallCount()).Should(Equal(2))
-		Ω(emitter.EmitEventArgsForCall(1)).Should(Equal(event.Log{
+		Ω(emitter.EmitEventArgsForCall(1)).Should(Equal(Log{
 			Payload: nihongo,
 			Origin:  origin,
 		}))

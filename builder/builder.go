@@ -14,7 +14,6 @@ import (
 	"github.com/concourse/turbine/builder/inputs"
 	"github.com/concourse/turbine/builder/outputs"
 	"github.com/concourse/turbine/event"
-	"github.com/concourse/turbine/logwriter"
 	"github.com/concourse/turbine/resource"
 )
 
@@ -360,11 +359,11 @@ func (builder *builder) performOutputs(
 
 func emitterProcessIO(emitter event.Emitter) gapi.ProcessIO {
 	return gapi.ProcessIO{
-		Stdout: logwriter.NewWriter(emitter, event.Origin{
+		Stdout: event.NewWriter(emitter, event.Origin{
 			Type: event.OriginTypeRun,
 			Name: "stdout",
 		}),
-		Stderr: logwriter.NewWriter(emitter, event.Origin{
+		Stderr: event.NewWriter(emitter, event.Origin{
 			Type: event.OriginTypeRun,
 			Name: "stderr",
 		}),
