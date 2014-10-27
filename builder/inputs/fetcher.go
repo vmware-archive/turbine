@@ -3,21 +3,21 @@ package inputs
 import (
 	"io"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/event"
 	"github.com/concourse/turbine/logwriter"
 	"github.com/concourse/turbine/resource"
 )
 
 type FetchedInput struct {
-	Input   builds.Input
+	Input   turbine.Input
 	Stream  io.Reader
-	Config  builds.Config
+	Config  turbine.Config
 	Release func() error
 }
 
 type Fetcher interface {
-	Fetch([]builds.Input, event.Emitter, <-chan struct{}) ([]FetchedInput, error)
+	Fetch([]turbine.Input, event.Emitter, <-chan struct{}) ([]FetchedInput, error)
 }
 
 type parallelFetcher struct {
@@ -30,7 +30,7 @@ func NewParallelFetcher(tracker resource.Tracker) Fetcher {
 	}
 }
 
-func (fetcher *parallelFetcher) Fetch(inputs []builds.Input, emitter event.Emitter, abort <-chan struct{}) ([]FetchedInput, error) {
+func (fetcher *parallelFetcher) Fetch(inputs []turbine.Input, emitter event.Emitter, abort <-chan struct{}) ([]FetchedInput, error) {
 	fetchedInputs := make([]FetchedInput, len(inputs))
 
 	errResults := make(chan error, len(inputs))
@@ -38,7 +38,7 @@ func (fetcher *parallelFetcher) Fetch(inputs []builds.Input, emitter event.Emitt
 	initializedResources := make(chan resource.Resource, len(inputs))
 
 	for i, input := range inputs {
-		go func(i int, input builds.Input) {
+		go func(i int, input turbine.Input) {
 			eventLog := logwriter.NewWriter(emitter, event.Origin{
 				Type: event.OriginTypeInput,
 				Name: input.Name,
@@ -100,7 +100,7 @@ func (fetcher *parallelFetcher) Fetch(inputs []builds.Input, emitter event.Emitt
 	return fetchedInputs, nil
 }
 
-func emitInputError(emitter event.Emitter, input builds.Input, err error) {
+func emitInputError(emitter event.Emitter, input turbine.Input, err error) {
 	emitter.EmitEvent(event.Error{
 		Message: err.Error(),
 		Origin: event.Origin{

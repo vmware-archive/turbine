@@ -1,4 +1,4 @@
-package builds
+package turbine
 
 func (a Config) Merge(b Config) Config {
 	if b.Image != "" {

@@ -1,4 +1,4 @@
-package builds_test
+package turbine_test
 
 import (
 	. "github.com/onsi/ginkgo"
@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestBuilds(t *testing.T) {
+func TestTurbine(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Builds Suite")
+	RunSpecs(t, "Turbine Suite")
 }

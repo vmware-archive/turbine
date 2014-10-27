@@ -9,13 +9,13 @@ import (
 	"io/ioutil"
 	"time"
 
-	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	garden "github.com/cloudfoundry-incubator/garden/api"
 	gfakes "github.com/cloudfoundry-incubator/garden/api/fakes"
 	"github.com/cloudfoundry-incubator/garden/client/fake_api_client"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	. "github.com/concourse/turbine/builder"
 	"github.com/concourse/turbine/builder/inputs"
 	ifakes "github.com/concourse/turbine/builder/inputs/fakes"
@@ -37,7 +37,7 @@ var _ = Describe("Builder", func() {
 
 		builder Builder
 
-		build builds.Build
+		build turbine.Build
 	)
 
 	BeforeEach(func() {
@@ -53,10 +53,10 @@ var _ = Describe("Builder", func() {
 
 		builder = NewBuilder(gardenClient, inputFetcher, outputPerformer)
 
-		build = builds.Build{
+		build = turbine.Build{
 			Guid: "some-build-guid",
 
-			Config: builds.Config{
+			Config: turbine.Config{
 				Image: "some-rootfs",
 
 				Params: map[string]string{
@@ -64,7 +64,7 @@ var _ = Describe("Builder", func() {
 					"BAZ": "buzz",
 				},
 
-				Run: builds.RunConfig{
+				Run: turbine.RunConfig{
 					Path: "./bin/test",
 					Args: []string{"arg1", "arg2"},
 				},
@@ -81,7 +81,7 @@ var _ = Describe("Builder", func() {
 		)
 
 		BeforeEach(func() {
-			build.Inputs = []builds.Input{
+			build.Inputs = []turbine.Input{
 				{
 					Name: "first-resource",
 					Type: "raw",
@@ -119,11 +119,11 @@ var _ = Describe("Builder", func() {
 
 				fetchedInputs = []inputs.FetchedInput{
 					{
-						Input: builds.Input{
+						Input: turbine.Input{
 							Name:     "first-resource",
 							Type:     "raw",
-							Version:  builds.Version{"version": "1"},
-							Metadata: []builds.MetadataField{{Name: "key", Value: "meta-1"}},
+							Version:  turbine.Version{"version": "1"},
+							Metadata: []turbine.MetadataField{{Name: "key", Value: "meta-1"}},
 						},
 						Stream: bytes.NewBufferString("some-data-1"),
 						Release: func() error {
@@ -132,11 +132,11 @@ var _ = Describe("Builder", func() {
 						},
 					},
 					{
-						Input: builds.Input{
+						Input: turbine.Input{
 							Name:     "second-resource",
 							Type:     "raw",
-							Version:  builds.Version{"version": "2"},
-							Metadata: []builds.MetadataField{{Name: "key", Value: "meta-2"}},
+							Version:  turbine.Version{"version": "2"},
+							Metadata: []turbine.MetadataField{{Name: "key", Value: "meta-2"}},
 						},
 						Stream: bytes.NewBufferString("some-data-2"),
 						Release: func() error {
@@ -146,7 +146,7 @@ var _ = Describe("Builder", func() {
 					},
 				}
 
-				inputFetcher.FetchStub = func(fetchInputs []builds.Input, fetchEmitter event.Emitter, fetchAbort <-chan struct{}) ([]inputs.FetchedInput, error) {
+				inputFetcher.FetchStub = func(fetchInputs []turbine.Input, fetchEmitter event.Emitter, fetchAbort <-chan struct{}) ([]inputs.FetchedInput, error) {
 					Ω(fetchInputs).Should(Equal(build.Inputs))
 					Ω(fetchEmitter).Should(Equal(emitter))
 
@@ -203,13 +203,13 @@ var _ = Describe("Builder", func() {
 				Ω(spec.Args).Should(Equal([]string{"arg1", "arg2"}))
 				Ω(spec.Env).Should(ConsistOf("FOO=bar", "BAZ=buzz"))
 				Ω(spec.Dir).Should(Equal("/tmp/build/src"))
-				Ω(spec.TTY).Should(Equal(&garden_api.TTYSpec{}))
+				Ω(spec.TTY).Should(Equal(&garden.TTYSpec{}))
 				Ω(spec.Privileged).Should(BeFalse())
 			})
 
 			It("emits an initialize event followed by a start event", func() {
 				Eventually(events.Sent).Should(ContainElement(event.Initialize{
-					BuildConfig: builds.Config{
+					BuildConfig: turbine.Config{
 						Image: "some-rootfs",
 
 						Params: map[string]string{
@@ -217,7 +217,7 @@ var _ = Describe("Builder", func() {
 							"BAZ": "buzz",
 						},
 
-						Run: builds.RunConfig{
+						Run: turbine.RunConfig{
 							Path: "./bin/test",
 							Args: []string{"arg1", "arg2"},
 						},
@@ -252,7 +252,7 @@ var _ = Describe("Builder", func() {
 
 				Context("but an input configured an image", func() {
 					BeforeEach(func() {
-						fetchedInputs[0].Config = builds.Config{
+						fetchedInputs[0].Config = turbine.Config{
 							Image: "build-config-image",
 						}
 					})
@@ -270,7 +270,7 @@ var _ = Describe("Builder", func() {
 
 			Context("when an input provides build configuration", func() {
 				BeforeEach(func() {
-					fetchedInputs[0].Config = builds.Config{
+					fetchedInputs[0].Config = turbine.Config{
 						Image: "build-config-image",
 
 						Params: map[string]string{
@@ -291,8 +291,8 @@ var _ = Describe("Builder", func() {
 
 				Context("which specifies explicit inputs", func() {
 					BeforeEach(func() {
-						fetchedInputs[0].Config = builds.Config{
-							Inputs: []builds.InputConfig{
+						fetchedInputs[0].Config = turbine.Config{
+							Inputs: []turbine.InputConfig{
 								{
 									Name: "first-resource",
 									Path: "first/source/path",
@@ -328,7 +328,7 @@ var _ = Describe("Builder", func() {
 
 					Context("and some are missing in the build", func() {
 						BeforeEach(func() {
-							fetchedInputs[0].Config.Inputs = []builds.InputConfig{
+							fetchedInputs[0].Config.Inputs = []turbine.InputConfig{
 								{Name: "some-bogus-input"},
 							}
 						})
@@ -391,7 +391,7 @@ var _ = Describe("Builder", func() {
 
 			Context("when the build emits logs", func() {
 				BeforeEach(func() {
-					gardenClient.Connection.RunStub = func(handle string, spec garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error) {
+					gardenClient.Connection.RunStub = func(handle string, spec garden.ProcessSpec, io garden.ProcessIO) (garden.Process, error) {
 						go func() {
 							defer GinkgoRecover()
 
@@ -476,11 +476,11 @@ var _ = Describe("Builder", func() {
 				It("notifies that the build is started, with updated inputs (version + metadata)", func() {
 					inputs := started.Build.Inputs
 
-					Ω(inputs[0].Version).Should(Equal(builds.Version{"version": "1"}))
-					Ω(inputs[0].Metadata).Should(Equal([]builds.MetadataField{{Name: "key", Value: "meta-1"}}))
+					Ω(inputs[0].Version).Should(Equal(turbine.Version{"version": "1"}))
+					Ω(inputs[0].Metadata).Should(Equal([]turbine.MetadataField{{Name: "key", Value: "meta-1"}}))
 
-					Ω(inputs[1].Version).Should(Equal(builds.Version{"version": "2"}))
-					Ω(inputs[1].Metadata).Should(Equal([]builds.MetadataField{{Name: "key", Value: "meta-2"}}))
+					Ω(inputs[1].Version).Should(Equal(turbine.Version{"version": "2"}))
+					Ω(inputs[1].Metadata).Should(Equal([]turbine.MetadataField{{Name: "key", Value: "meta-2"}}))
 				})
 
 				It("returns the container, container handle, process ID, process stream, and logs", func() {
@@ -525,7 +525,7 @@ var _ = Describe("Builder", func() {
 		})
 
 		BeforeEach(func() {
-			container, err := gardenClient.Create(garden_api.ContainerSpec{})
+			container, err := gardenClient.Create(garden.ContainerSpec{})
 			Ω(err).ShouldNot(HaveOccurred())
 
 			runningProcess := new(gfakes.FakeProcess)
@@ -598,7 +598,7 @@ var _ = Describe("Builder", func() {
 
 				Context("and the build emits logs", func() {
 					BeforeEach(func() {
-						gardenClient.Connection.AttachStub = func(handle string, pid uint32, io garden_api.ProcessIO) (garden_api.Process, error) {
+						gardenClient.Connection.AttachStub = func(handle string, pid uint32, io garden.ProcessIO) (garden.Process, error) {
 							Ω(handle).Should(Equal("some-build-guid"))
 							Ω(pid).Should(Equal(uint32(42)))
 							Ω(io.Stdout).ShouldNot(BeNil())
@@ -712,10 +712,10 @@ var _ = Describe("Builder", func() {
 	})
 
 	Describe("Hijack", func() {
-		var spec garden_api.ProcessSpec
-		var io garden_api.ProcessIO
+		var spec garden.ProcessSpec
+		var io garden.ProcessIO
 
-		var process garden_api.Process
+		var process garden.Process
 		var hijackErr error
 
 		JustBeforeEach(func() {
@@ -723,12 +723,12 @@ var _ = Describe("Builder", func() {
 		})
 
 		BeforeEach(func() {
-			spec = garden_api.ProcessSpec{
+			spec = garden.ProcessSpec{
 				Path: "some-path",
 				Args: []string{"some", "args"},
 			}
 
-			io = garden_api.ProcessIO{
+			io = garden.ProcessIO{
 				Stdin:  new(bytes.Buffer),
 				Stdout: new(bytes.Buffer),
 			}
@@ -793,11 +793,11 @@ var _ = Describe("Builder", func() {
 		var exitedBuild ExitedBuild
 		var abort chan struct{}
 
-		var onSuccessOutput builds.Output
-		var onSuccessOrFailureOutput builds.Output
-		var onFailureOutput builds.Output
+		var onSuccessOutput turbine.Output
+		var onSuccessOrFailureOutput turbine.Output
+		var onFailureOutput turbine.Output
 
-		var finished builds.Build
+		var finished turbine.Build
 		var finishErr error
 
 		JustBeforeEach(func() {
@@ -806,63 +806,63 @@ var _ = Describe("Builder", func() {
 		})
 
 		BeforeEach(func() {
-			build.Inputs = []builds.Input{
+			build.Inputs = []turbine.Input{
 				{
 					Name:    "first-input",
 					Type:    "some-type",
-					Source:  builds.Source{"uri": "in-source-1"},
-					Version: builds.Version{"key": "in-version-1"},
-					Metadata: []builds.MetadataField{
+					Source:  turbine.Source{"uri": "in-source-1"},
+					Version: turbine.Version{"key": "in-version-1"},
+					Metadata: []turbine.MetadataField{
 						{Name: "first-meta-name", Value: "first-meta-value"},
 					},
 				},
 				{
 					Name:    "second-input",
 					Type:    "some-type",
-					Source:  builds.Source{"uri": "in-source-2"},
-					Version: builds.Version{"key": "in-version-2"},
-					Metadata: []builds.MetadataField{
+					Source:  turbine.Source{"uri": "in-source-2"},
+					Version: turbine.Version{"key": "in-version-2"},
+					Metadata: []turbine.MetadataField{
 						{Name: "second-meta-name", Value: "second-meta-value"},
 					},
 				},
 			}
 
-			onSuccessOutput = builds.Output{
+			onSuccessOutput = turbine.Output{
 				Name:   "on-success",
 				Type:   "some-type",
-				On:     []builds.OutputCondition{builds.OutputConditionSuccess},
-				Params: builds.Params{"key": "success-param"},
-				Source: builds.Source{"uri": "http://success-uri"},
+				On:     []turbine.OutputCondition{turbine.OutputConditionSuccess},
+				Params: turbine.Params{"key": "success-param"},
+				Source: turbine.Source{"uri": "http://success-uri"},
 			}
 
-			onSuccessOrFailureOutput = builds.Output{
+			onSuccessOrFailureOutput = turbine.Output{
 				Name: "on-success-or-failure",
 				Type: "some-type",
-				On: []builds.OutputCondition{
-					builds.OutputConditionSuccess,
-					builds.OutputConditionFailure,
+				On: []turbine.OutputCondition{
+					turbine.OutputConditionSuccess,
+					turbine.OutputConditionFailure,
 				},
-				Params: builds.Params{"key": "success-or-failure-param"},
-				Source: builds.Source{"uri": "http://success-or-failure-uri"},
+				Params: turbine.Params{"key": "success-or-failure-param"},
+				Source: turbine.Source{"uri": "http://success-or-failure-uri"},
 			}
 
-			onFailureOutput = builds.Output{
+			onFailureOutput = turbine.Output{
 				Name: "on-failure",
 				Type: "some-type",
-				On: []builds.OutputCondition{
-					builds.OutputConditionFailure,
+				On: []turbine.OutputCondition{
+					turbine.OutputConditionFailure,
 				},
-				Params: builds.Params{"key": "failure-param"},
-				Source: builds.Source{"uri": "http://failure-uri"},
+				Params: turbine.Params{"key": "failure-param"},
+				Source: turbine.Source{"uri": "http://failure-uri"},
 			}
 
-			build.Outputs = []builds.Output{
+			build.Outputs = []turbine.Output{
 				onSuccessOutput,
 				onSuccessOrFailureOutput,
 				onFailureOutput,
 			}
 
-			container, err := gardenClient.Create(garden_api.ContainerSpec{})
+			container, err := gardenClient.Create(garden.ContainerSpec{})
 			Ω(err).ShouldNot(HaveOccurred())
 
 			exitedBuild = ExitedBuild{
@@ -895,7 +895,7 @@ var _ = Describe("Builder", func() {
 
 				container, outputs, performingEmitter, _ := outputPerformer.PerformOutputsArgsForCall(0)
 				Ω(container).Should(Equal(exitedBuild.Container))
-				Ω(outputs).Should(Equal([]builds.Output{
+				Ω(outputs).Should(Equal([]turbine.Output{
 					onSuccessOutput,
 					onSuccessOrFailureOutput,
 				}))
@@ -915,31 +915,31 @@ var _ = Describe("Builder", func() {
 			})
 
 			Context("when performing outputs succeeds", func() {
-				explicitOutputOnSuccess := builds.Output{
+				explicitOutputOnSuccess := turbine.Output{
 					Name:     "on-success",
 					Type:     "some-type",
-					On:       []builds.OutputCondition{builds.OutputConditionSuccess},
-					Source:   builds.Source{"uri": "http://success-uri"},
-					Params:   builds.Params{"key": "success-param"},
-					Version:  builds.Version{"version": "on-success-performed"},
-					Metadata: []builds.MetadataField{{Name: "output", Value: "on-success"}},
+					On:       []turbine.OutputCondition{turbine.OutputConditionSuccess},
+					Source:   turbine.Source{"uri": "http://success-uri"},
+					Params:   turbine.Params{"key": "success-param"},
+					Version:  turbine.Version{"version": "on-success-performed"},
+					Metadata: []turbine.MetadataField{{Name: "output", Value: "on-success"}},
 				}
 
-				explicitOutputOnSuccessOrFailure := builds.Output{
+				explicitOutputOnSuccessOrFailure := turbine.Output{
 					Name: "on-success-or-failure",
 					Type: "some-type",
-					On: []builds.OutputCondition{
-						builds.OutputConditionSuccess,
-						builds.OutputConditionFailure,
+					On: []turbine.OutputCondition{
+						turbine.OutputConditionSuccess,
+						turbine.OutputConditionFailure,
 					},
-					Source:   builds.Source{"uri": "http://success-or-failure-uri"},
-					Params:   builds.Params{"key": "success-or-failure-param"},
-					Version:  builds.Version{"version": "on-success-or-failure-performed"},
-					Metadata: []builds.MetadataField{{Name: "output", Value: "on-success-or-failure"}},
+					Source:   turbine.Source{"uri": "http://success-or-failure-uri"},
+					Params:   turbine.Params{"key": "success-or-failure-param"},
+					Version:  turbine.Version{"version": "on-success-or-failure-performed"},
+					Metadata: []turbine.MetadataField{{Name: "output", Value: "on-success-or-failure"}},
 				}
 
 				BeforeEach(func() {
-					performedOutputs := []builds.Output{
+					performedOutputs := []turbine.Output{
 						explicitOutputOnSuccess,
 						explicitOutputOnSuccessOrFailure,
 					}
@@ -991,7 +991,7 @@ var _ = Describe("Builder", func() {
 
 				container, outputs, performingEmitter, _ := outputPerformer.PerformOutputsArgsForCall(0)
 				Ω(container).Should(Equal(exitedBuild.Container))
-				Ω(outputs).Should(Equal([]builds.Output{
+				Ω(outputs).Should(Equal([]turbine.Output{
 					onSuccessOrFailureOutput,
 					onFailureOutput,
 				}))
@@ -1011,31 +1011,31 @@ var _ = Describe("Builder", func() {
 			})
 
 			Context("when performing outputs succeeds", func() {
-				explicitOutputOnSuccessOrFailure := builds.Output{
+				explicitOutputOnSuccessOrFailure := turbine.Output{
 					Name: "on-success-or-failure",
 					Type: "some-type",
-					On: []builds.OutputCondition{
-						builds.OutputConditionSuccess,
-						builds.OutputConditionFailure,
+					On: []turbine.OutputCondition{
+						turbine.OutputConditionSuccess,
+						turbine.OutputConditionFailure,
 					},
-					Source:   builds.Source{"uri": "http://success-or-failure-uri"},
-					Params:   builds.Params{"key": "success-or-failure-param"},
-					Version:  builds.Version{"version": "on-success-or-failure-performed"},
-					Metadata: []builds.MetadataField{{Name: "output", Value: "on-success-or-failure"}},
+					Source:   turbine.Source{"uri": "http://success-or-failure-uri"},
+					Params:   turbine.Params{"key": "success-or-failure-param"},
+					Version:  turbine.Version{"version": "on-success-or-failure-performed"},
+					Metadata: []turbine.MetadataField{{Name: "output", Value: "on-success-or-failure"}},
 				}
 
-				explicitOutputOnFailure := builds.Output{
+				explicitOutputOnFailure := turbine.Output{
 					Name:     "on-failure",
 					Type:     "some-type",
-					On:       []builds.OutputCondition{builds.OutputConditionSuccess},
-					Source:   builds.Source{"uri": "http://failure-uri"},
-					Params:   builds.Params{"key": "failure-param"},
-					Version:  builds.Version{"version": "on-failure-performed"},
-					Metadata: []builds.MetadataField{{Name: "output", Value: "on-failure"}},
+					On:       []turbine.OutputCondition{turbine.OutputConditionSuccess},
+					Source:   turbine.Source{"uri": "http://failure-uri"},
+					Params:   turbine.Params{"key": "failure-param"},
+					Version:  turbine.Version{"version": "on-failure-performed"},
+					Metadata: []turbine.MetadataField{{Name: "output", Value: "on-failure"}},
 				}
 
 				BeforeEach(func() {
-					performedOutputs := []builds.Output{
+					performedOutputs := []turbine.Output{
 						explicitOutputOnSuccessOrFailure,
 						explicitOutputOnFailure,
 					}

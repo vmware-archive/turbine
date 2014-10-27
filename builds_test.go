@@ -1,7 +1,7 @@
-package builds_test
+package turbine_test
 
 import (
-	. "github.com/concourse/turbine/api/builds"
+	. "github.com/concourse/turbine"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

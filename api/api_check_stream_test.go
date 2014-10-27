@@ -5,22 +5,22 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/resource/fakes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("GET /checks/stream", func() {
-	var input builds.Input
+	var input turbine.Input
 
 	var conn *websocket.Conn
 
 	BeforeEach(func() {
-		input = builds.Input{
+		input = turbine.Input{
 			Type:    "git",
-			Source:  builds.Source{"uri": "example.com"},
-			Version: builds.Version{"ref": "foo"},
+			Source:  turbine.Source{"uri": "example.com"},
+			Version: turbine.Version{"ref": "foo"},
 		}
 	})
 
@@ -53,7 +53,7 @@ var _ = Describe("GET /checks/stream", func() {
 			})
 
 			Context("and the resource yields versions", func() {
-				versions := []builds.Version{{"version": "1"}, {"version": "2"}}
+				versions := []turbine.Version{{"version": "1"}, {"version": "2"}}
 
 				BeforeEach(func() {
 					resource.CheckReturns(versions, nil)
@@ -63,7 +63,7 @@ var _ = Describe("GET /checks/stream", func() {
 					Eventually(resource.CheckCallCount).Should(Equal(1))
 					Ω(resource.CheckArgsForCall(0)).Should(Equal(input))
 
-					var returnedVersions []builds.Version
+					var returnedVersions []turbine.Version
 					err := conn.ReadJSON(&returnedVersions)
 					Ω(err).ShouldNot(HaveOccurred())
 

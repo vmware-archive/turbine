@@ -10,7 +10,7 @@ import (
 	"github.com/pivotal-golang/lager/lagertest"
 	"github.com/tedsuo/ifrit"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/event"
 	sched "github.com/concourse/turbine/scheduler"
 	sfakes "github.com/concourse/turbine/scheduler/fakes"
@@ -48,26 +48,26 @@ var _ = Describe("Snapshotter", func() {
 
 		theRunningBuilds = []sched.ScheduledBuild{
 			{
-				Build: builds.Build{
-					Config: builds.Config{
-						Run: builds.RunConfig{
+				Build: turbine.Build{
+					Config: turbine.Config{
+						Run: turbine.RunConfig{
 							Path: "some-script",
 						},
 					},
 				},
-				Status:    builds.StatusStarted,
+				Status:    turbine.StatusStarted,
 				ProcessID: 123,
 				EventHub:  firstHub,
 			},
 			{
-				Build: builds.Build{
-					Config: builds.Config{
-						Run: builds.RunConfig{
+				Build: turbine.Build{
+					Config: turbine.Config{
+						Run: turbine.RunConfig{
 							Path: "some-other-script",
 						},
 					},
 				},
-				Status:    builds.StatusSucceeded,
+				Status:    turbine.StatusSucceeded,
 				ProcessID: 124,
 				EventHub:  secondHub,
 			},
@@ -75,14 +75,14 @@ var _ = Describe("Snapshotter", func() {
 
 		theSnapshots = []BuildSnapshot{
 			{
-				Build: builds.Build{
-					Config: builds.Config{
-						Run: builds.RunConfig{
+				Build: turbine.Build{
+					Config: turbine.Config{
+						Run: turbine.RunConfig{
 							Path: "some-script",
 						},
 					},
 				},
-				Status:    builds.StatusStarted,
+				Status:    turbine.StatusStarted,
 				ProcessID: 123,
 				Events: []event.Message{
 					{event.Version("0.0")},
@@ -90,14 +90,14 @@ var _ = Describe("Snapshotter", func() {
 				},
 			},
 			{
-				Build: builds.Build{
-					Config: builds.Config{
-						Run: builds.RunConfig{
+				Build: turbine.Build{
+					Config: turbine.Config{
+						Run: turbine.RunConfig{
 							Path: "some-other-script",
 						},
 					},
 				},
-				Status:    builds.StatusSucceeded,
+				Status:    turbine.StatusSucceeded,
 				ProcessID: 124,
 				Events: []event.Message{
 					{event.Version("1.0")},
@@ -175,9 +175,9 @@ var _ = Describe("Snapshotter", func() {
 			BeforeEach(func() {
 				snapshot, err := json.Marshal([]BuildSnapshot{
 					{
-						Build: builds.Build{
-							Config: builds.Config{
-								Run: builds.RunConfig{
+						Build: turbine.Build{
+							Config: turbine.Config{
+								Run: turbine.RunConfig{
 									Path: "some-script",
 								},
 							},
@@ -200,7 +200,7 @@ var _ = Describe("Snapshotter", func() {
 				Eventually(scheduler.RestoreCallCount).Should(Equal(1))
 
 				restored := scheduler.RestoreArgsForCall(0)
-				Ω(restored.Status).Should(Equal(builds.StatusStarted))
+				Ω(restored.Status).Should(Equal(turbine.StatusStarted))
 			})
 		})
 

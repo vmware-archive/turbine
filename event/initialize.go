@@ -1,9 +1,9 @@
 package event
 
-import "github.com/concourse/turbine/api/builds"
+import "github.com/concourse/turbine"
 
 type Initialize struct {
-	BuildConfig builds.Config `json:"config"`
+	BuildConfig turbine.Config `json:"config"`
 }
 
 func (Initialize) EventType() EventType { return EventTypeInitialize }

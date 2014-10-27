@@ -8,7 +8,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/pivotal-golang/lager"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 )
 
 var upgrader = websocket.Upgrader{
@@ -37,7 +37,7 @@ func (handler *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	var input builds.Input
+	var input turbine.Input
 	err = conn.ReadJSON(&input)
 	if err != nil {
 		handler.logger.Error("malformed-request", err)

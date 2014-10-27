@@ -8,14 +8,14 @@ import (
 
 	"github.com/cloudfoundry-incubator/candiedyaml"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 )
 
 // Request payload from sourcefetcher to /opt/resource/in script
 type inRequest struct {
-	Source  builds.Source  `json:"source"`
-	Params  builds.Params  `json:"params,omitempty"`
-	Version builds.Version `json:"version,omitempty"`
+	Source  turbine.Source  `json:"source"`
+	Params  turbine.Params  `json:"params,omitempty"`
+	Version turbine.Version `json:"version,omitempty"`
 }
 
 // Response payload from /opt/resource/in script to sourcefetcher
@@ -23,12 +23,12 @@ type inResponse struct {
 	// Version is returned because request payload
 	// may not contain Version to fetch relying on
 	// 'in' script to fetch latest version.
-	Version builds.Version `json:"version"`
+	Version turbine.Version `json:"version"`
 
-	Metadata []builds.MetadataField `json:"metadata,omitempty"`
+	Metadata []turbine.MetadataField `json:"metadata,omitempty"`
 }
 
-func (resource *resource) In(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
+func (resource *resource) In(input turbine.Input) (io.Reader, turbine.Input, turbine.Config, error) {
 	var resp inResponse
 
 	err := resource.runScript(
@@ -38,12 +38,12 @@ func (resource *resource) In(input builds.Input) (io.Reader, builds.Input, build
 		&resp,
 	)
 	if err != nil {
-		return nil, builds.Input{}, builds.Config{}, err
+		return nil, turbine.Input{}, turbine.Config{}, err
 	}
 
 	buildConfig, err := resource.extractConfig(input)
 	if err != nil {
-		return nil, builds.Input{}, builds.Config{}, err
+		return nil, turbine.Input{}, turbine.Config{}, err
 	}
 
 	input.Version = resp.Version
@@ -51,22 +51,22 @@ func (resource *resource) In(input builds.Input) (io.Reader, builds.Input, build
 
 	outStream, err := resource.container.StreamOut(path.Join(ResourcesDir, input.Name) + "/")
 	if err != nil {
-		return nil, builds.Input{}, builds.Config{}, err
+		return nil, turbine.Input{}, turbine.Config{}, err
 	}
 
 	return outStream, input, buildConfig, nil
 }
 
-func (resource *resource) extractConfig(input builds.Input) (builds.Config, error) {
+func (resource *resource) extractConfig(input turbine.Input) (turbine.Config, error) {
 	if input.ConfigPath == "" {
-		return builds.Config{}, nil
+		return turbine.Config{}, nil
 	}
 
 	configPath := path.Join(ResourcesDir, input.Name, input.ConfigPath)
 
 	configStream, err := resource.container.StreamOut(configPath)
 	if err != nil {
-		return builds.Config{}, err
+		return turbine.Config{}, err
 	}
 
 	reader := tar.NewReader(configStream)
@@ -74,17 +74,17 @@ func (resource *resource) extractConfig(input builds.Input) (builds.Config, erro
 	_, err = reader.Next()
 	if err != nil {
 		if err == io.EOF {
-			return builds.Config{}, fmt.Errorf("could not find build config '%s'", input.ConfigPath)
+			return turbine.Config{}, fmt.Errorf("could not find build config '%s'", input.ConfigPath)
 		}
 
-		return builds.Config{}, err
+		return turbine.Config{}, err
 	}
 
-	var buildConfig builds.Config
+	var buildConfig turbine.Config
 
 	err = candiedyaml.NewDecoder(reader).Decode(&buildConfig)
 	if err != nil {
-		return builds.Config{}, fmt.Errorf("invalid build config '%s': %s", input.ConfigPath, err)
+		return turbine.Config{}, fmt.Errorf("invalid build config '%s': %s", input.ConfigPath, err)
 	}
 
 	return buildConfig, nil

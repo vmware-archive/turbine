@@ -4,16 +4,16 @@ package fakes
 import (
 	"sync"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/builder/inputs"
 	"github.com/concourse/turbine/event"
 )
 
 type FakeFetcher struct {
-	FetchStub        func([]builds.Input, event.Emitter, <-chan struct{}) ([]inputs.FetchedInput, error)
+	FetchStub        func([]turbine.Input, event.Emitter, <-chan struct{}) ([]inputs.FetchedInput, error)
 	fetchMutex       sync.RWMutex
 	fetchArgsForCall []struct {
-		arg1 []builds.Input
+		arg1 []turbine.Input
 		arg2 event.Emitter
 		arg3 <-chan struct{}
 	}
@@ -23,10 +23,10 @@ type FakeFetcher struct {
 	}
 }
 
-func (fake *FakeFetcher) Fetch(arg1 []builds.Input, arg2 event.Emitter, arg3 <-chan struct{}) ([]inputs.FetchedInput, error) {
+func (fake *FakeFetcher) Fetch(arg1 []turbine.Input, arg2 event.Emitter, arg3 <-chan struct{}) ([]inputs.FetchedInput, error) {
 	fake.fetchMutex.Lock()
 	fake.fetchArgsForCall = append(fake.fetchArgsForCall, struct {
-		arg1 []builds.Input
+		arg1 []turbine.Input
 		arg2 event.Emitter
 		arg3 <-chan struct{}
 	}{arg1, arg2, arg3})
@@ -44,7 +44,7 @@ func (fake *FakeFetcher) FetchCallCount() int {
 	return len(fake.fetchArgsForCall)
 }
 
-func (fake *FakeFetcher) FetchArgsForCall(i int) ([]builds.Input, event.Emitter, <-chan struct{}) {
+func (fake *FakeFetcher) FetchArgsForCall(i int) ([]turbine.Input, event.Emitter, <-chan struct{}) {
 	fake.fetchMutex.RLock()
 	defer fake.fetchMutex.RUnlock()
 	return fake.fetchArgsForCall[i].arg1, fake.fetchArgsForCall[i].arg2, fake.fetchArgsForCall[i].arg3

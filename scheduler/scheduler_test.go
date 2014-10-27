@@ -9,9 +9,9 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/pivotal-golang/lager/lagertest"
 
-	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	garden "github.com/cloudfoundry-incubator/garden/api"
 	gfakes "github.com/cloudfoundry-incubator/garden/api/fakes"
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/builder"
 	bfakes "github.com/concourse/turbine/builder/fakes"
 	"github.com/concourse/turbine/event"
@@ -26,7 +26,7 @@ var _ = Describe("Scheduler", func() {
 
 		scheduler Scheduler
 
-		build builds.Build
+		build turbine.Build
 	)
 
 	BeforeEach(func() {
@@ -36,16 +36,16 @@ var _ = Describe("Scheduler", func() {
 		logger := lagertest.NewTestLogger("test")
 		scheduler = NewScheduler(logger, fakeBuilder, clock)
 
-		build = builds.Build{
+		build = turbine.Build{
 			Guid: "abc",
 
-			Inputs: []builds.Input{
+			Inputs: []turbine.Input{
 				{
 					Type: "git",
 				},
 			},
 
-			Config: builds.Config{
+			Config: turbine.Config{
 				Params: map[string]string{
 					"FOO":  "bar",
 					"FIZZ": "buzz",
@@ -121,7 +121,7 @@ var _ = Describe("Scheduler", func() {
 				defer close(stop)
 
 				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-					Status: builds.StatusStarted,
+					Status: turbine.StatusStarted,
 					Time:   startTime.Unix(),
 				})))
 			})
@@ -150,7 +150,7 @@ var _ = Describe("Scheduler", func() {
 
 				Context("and the build finishes", func() {
 					BeforeEach(func() {
-						fakeBuilder.FinishStub = func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (builds.Build, error) {
+						fakeBuilder.FinishStub = func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (turbine.Build, error) {
 							clock.CurrentTimeReturns(endTime)
 							return exited.Build, nil
 						}
@@ -163,7 +163,7 @@ var _ = Describe("Scheduler", func() {
 						defer close(stop)
 
 						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-							Status: builds.StatusSucceeded,
+							Status: turbine.StatusSucceeded,
 							Time:   endTime.Unix(),
 						})))
 
@@ -174,9 +174,9 @@ var _ = Describe("Scheduler", func() {
 
 				Context("and the build fails to finish", func() {
 					BeforeEach(func() {
-						fakeBuilder.FinishStub = func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (builds.Build, error) {
+						fakeBuilder.FinishStub = func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (turbine.Build, error) {
 							clock.CurrentTimeReturns(endTime)
-							return builds.Build{}, errors.New("oh no!")
+							return turbine.Build{}, errors.New("oh no!")
 						}
 					})
 
@@ -187,7 +187,7 @@ var _ = Describe("Scheduler", func() {
 						defer close(stop)
 
 						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-							Status: builds.StatusErrored,
+							Status: turbine.StatusErrored,
 							Time:   endTime.Unix(),
 						})))
 
@@ -221,7 +221,7 @@ var _ = Describe("Scheduler", func() {
 
 				Context("and the build finishes", func() {
 					BeforeEach(func() {
-						fakeBuilder.FinishStub = func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (builds.Build, error) {
+						fakeBuilder.FinishStub = func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (turbine.Build, error) {
 							clock.CurrentTimeReturns(endTime)
 							return exited.Build, nil
 						}
@@ -234,7 +234,7 @@ var _ = Describe("Scheduler", func() {
 						defer close(stop)
 
 						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-							Status: builds.StatusFailed,
+							Status: turbine.StatusFailed,
 							Time:   endTime.Unix(),
 						})))
 
@@ -245,7 +245,7 @@ var _ = Describe("Scheduler", func() {
 
 				Context("and the build fails to finish", func() {
 					BeforeEach(func() {
-						fakeBuilder.FinishStub = func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (builds.Build, error) {
+						fakeBuilder.FinishStub = func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (turbine.Build, error) {
 							clock.CurrentTimeReturns(endTime)
 							return exited.Build, errors.New("oh no!")
 						}
@@ -258,7 +258,7 @@ var _ = Describe("Scheduler", func() {
 						defer close(stop)
 
 						Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-							Status: builds.StatusErrored,
+							Status: turbine.StatusErrored,
 							Time:   endTime.Unix(),
 						})))
 
@@ -283,7 +283,7 @@ var _ = Describe("Scheduler", func() {
 					defer close(stop)
 
 					Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-						Status: builds.StatusErrored,
+						Status: turbine.StatusErrored,
 						Time:   endTime.Unix(),
 					})))
 
@@ -303,7 +303,7 @@ var _ = Describe("Scheduler", func() {
 
 				clock.CurrentTimeReturns(startTime)
 
-				fakeBuilder.StartStub = func(builds.Build, event.Emitter, <-chan struct{}) (builder.RunningBuild, error) {
+				fakeBuilder.StartStub = func(turbine.Build, event.Emitter, <-chan struct{}) (builder.RunningBuild, error) {
 					clock.CurrentTimeReturns(endTime)
 					return builder.RunningBuild{}, errors.New("oh no!")
 				}
@@ -316,7 +316,7 @@ var _ = Describe("Scheduler", func() {
 				defer close(stop)
 
 				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-					Status: builds.StatusErrored,
+					Status: turbine.StatusErrored,
 					Time:   endTime.Unix(),
 				})))
 
@@ -341,7 +341,7 @@ var _ = Describe("Scheduler", func() {
 
 				scheduledBuild = ScheduledBuild{
 					Build:     build,
-					Status:    builds.StatusSucceeded,
+					Status:    turbine.StatusSucceeded,
 					ProcessID: 2,
 					EventHub:  hub,
 				}
@@ -383,7 +383,7 @@ var _ = Describe("Scheduler", func() {
 
 				scheduledBuild = ScheduledBuild{
 					Build:     build,
-					Status:    builds.StatusStarted,
+					Status:    turbine.StatusStarted,
 					ProcessID: 2,
 					EventHub:  hub,
 				}
@@ -443,7 +443,7 @@ var _ = Describe("Scheduler", func() {
 					}
 
 					Eventually(events).Should(Receive(Equal(event.Status{
-						Status: builds.StatusSucceeded,
+						Status: turbine.StatusSucceeded,
 						Time:   exitedTime.Unix(),
 					})))
 				})
@@ -460,7 +460,7 @@ var _ = Describe("Scheduler", func() {
 			})
 
 			It("returns an error", func() {
-				_, err := scheduler.Hijack("some-guid", garden_api.ProcessSpec{}, garden_api.ProcessIO{})
+				_, err := scheduler.Hijack("some-guid", garden.ProcessSpec{}, garden.ProcessIO{})
 				Ω(err).Should(Equal(disaster))
 			})
 		})
@@ -474,18 +474,18 @@ var _ = Describe("Scheduler", func() {
 			})
 
 			It("hijacks via the builder", func() {
-				spec := garden_api.ProcessSpec{
+				spec := garden.ProcessSpec{
 					Path: "process-path",
 					Args: []string{"process", "args"},
-					TTY: &garden_api.TTYSpec{
-						WindowSize: &garden_api.WindowSize{
+					TTY: &garden.TTYSpec{
+						WindowSize: &garden.WindowSize{
 							Columns: 123,
 							Rows:    456,
 						},
 					},
 				}
 
-				io := garden_api.ProcessIO{
+				io := garden.ProcessIO{
 					Stdin:  new(bytes.Buffer),
 					Stdout: new(bytes.Buffer),
 				}
@@ -519,7 +519,7 @@ var _ = Describe("Scheduler", func() {
 			BeforeEach(func() {
 				gotAborting = make(chan (<-chan struct{}), 1)
 
-				fakeBuilder.StartStub = func(build builds.Build, emitter event.Emitter, abort <-chan struct{}) (builder.RunningBuild, error) {
+				fakeBuilder.StartStub = func(build turbine.Build, emitter event.Emitter, abort <-chan struct{}) (builder.RunningBuild, error) {
 					gotAborting <- abort
 					<-abort
 					return builder.RunningBuild{}, errors.New("aborted")
@@ -548,7 +548,7 @@ var _ = Describe("Scheduler", func() {
 				defer close(stop)
 
 				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-					Status: builds.StatusAborted,
+					Status: turbine.StatusAborted,
 					Time:   currentTime.Unix(),
 				})))
 
@@ -563,7 +563,7 @@ var _ = Describe("Scheduler", func() {
 			BeforeEach(func() {
 				gotAborting = make(chan (<-chan struct{}), 1)
 
-				fakeBuilder.StartStub = func(build builds.Build, emitter event.Emitter, abort <-chan struct{}) (builder.RunningBuild, error) {
+				fakeBuilder.StartStub = func(build turbine.Build, emitter event.Emitter, abort <-chan struct{}) (builder.RunningBuild, error) {
 					return builder.RunningBuild{Build: build}, nil
 				}
 
@@ -596,7 +596,7 @@ var _ = Describe("Scheduler", func() {
 				defer close(stop)
 
 				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-					Status: builds.StatusAborted,
+					Status: turbine.StatusAborted,
 					Time:   currentTime.Unix(),
 				})))
 
@@ -611,7 +611,7 @@ var _ = Describe("Scheduler", func() {
 			BeforeEach(func() {
 				gotAborting = make(chan (<-chan struct{}), 1)
 
-				fakeBuilder.StartStub = func(build builds.Build, emitter event.Emitter, abort <-chan struct{}) (builder.RunningBuild, error) {
+				fakeBuilder.StartStub = func(build turbine.Build, emitter event.Emitter, abort <-chan struct{}) (builder.RunningBuild, error) {
 					return builder.RunningBuild{Build: build}, nil
 				}
 
@@ -619,10 +619,10 @@ var _ = Describe("Scheduler", func() {
 					return builder.ExitedBuild{Build: running.Build}, nil
 				}
 
-				fakeBuilder.FinishStub = func(build builder.ExitedBuild, emitter event.Emitter, abort <-chan struct{}) (builds.Build, error) {
+				fakeBuilder.FinishStub = func(build builder.ExitedBuild, emitter event.Emitter, abort <-chan struct{}) (turbine.Build, error) {
 					gotAborting <- abort
 					<-abort
-					return builds.Build{}, errors.New("aborted")
+					return turbine.Build{}, errors.New("aborted")
 				}
 			})
 
@@ -648,7 +648,7 @@ var _ = Describe("Scheduler", func() {
 				defer close(stop)
 
 				Eventually(emittedEvents).Should(Receive(Equal(event.Status{
-					Status: builds.StatusAborted,
+					Status: turbine.StatusAborted,
 					Time:   currentTime.Unix(),
 				})))
 
@@ -688,7 +688,7 @@ var _ = Describe("Scheduler", func() {
 			BeforeEach(func() {
 				running = make(chan builder.RunningBuild)
 
-				fakeBuilder.StartStub = func(build builds.Build, emitter event.Emitter, abort <-chan struct{}) (builder.RunningBuild, error) {
+				fakeBuilder.StartStub = func(build turbine.Build, emitter event.Emitter, abort <-chan struct{}) (builder.RunningBuild, error) {
 					return <-running, nil
 				}
 
@@ -718,7 +718,7 @@ var _ = Describe("Scheduler", func() {
 
 				Ω(drainedBuilds).Should(HaveLen(1))
 				Ω(drainedBuilds[0].Build).Should(Equal(build))
-				Ω(drainedBuilds[0].Status).Should(Equal(builds.StatusStarted))
+				Ω(drainedBuilds[0].Status).Should(Equal(turbine.StatusStarted))
 				Ω(drainedBuilds[0].ProcessID).Should(Equal(uint32(42)))
 			})
 
@@ -744,7 +744,7 @@ var _ = Describe("Scheduler", func() {
 				BeforeEach(func() {
 					errored = make(chan error)
 
-					fakeBuilder.StartStub = func(builds.Build, event.Emitter, <-chan struct{}) (builder.RunningBuild, error) {
+					fakeBuilder.StartStub = func(turbine.Build, event.Emitter, <-chan struct{}) (builder.RunningBuild, error) {
 						return builder.RunningBuild{}, <-errored
 					}
 				})
@@ -767,7 +767,7 @@ var _ = Describe("Scheduler", func() {
 
 					Ω(drainedBuilds).Should(HaveLen(1))
 					Ω(drainedBuilds[0].Build).Should(Equal(build))
-					Ω(drainedBuilds[0].Status).Should(Equal(builds.StatusErrored))
+					Ω(drainedBuilds[0].Status).Should(Equal(turbine.StatusErrored))
 				})
 
 				It("emits an end event", func() {
@@ -827,13 +827,13 @@ var _ = Describe("Scheduler", func() {
 
 		Context("when a build is completing", func() {
 			var completing chan struct{}
-			var finished chan builds.Build
+			var finished chan turbine.Build
 
 			BeforeEach(func() {
 				completing = make(chan struct{})
-				finished = make(chan builds.Build)
+				finished = make(chan turbine.Build)
 
-				fakeBuilder.FinishStub = func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (builds.Build, error) {
+				fakeBuilder.FinishStub = func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (turbine.Build, error) {
 					close(completing)
 					return <-finished, nil
 				}
@@ -862,7 +862,7 @@ var _ = Describe("Scheduler", func() {
 
 				Ω(drainedBuilds).Should(HaveLen(1))
 				Ω(drainedBuilds[0].Build).Should(Equal(build))
-				Ω(drainedBuilds[0].Status).Should(Equal(builds.StatusSucceeded))
+				Ω(drainedBuilds[0].Status).Should(Equal(turbine.StatusSucceeded))
 			})
 		})
 

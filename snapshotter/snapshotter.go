@@ -5,7 +5,7 @@ import (
 	"errors"
 	"os"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/event"
 	"github.com/concourse/turbine/scheduler"
 	"github.com/pivotal-golang/lager"
@@ -21,8 +21,8 @@ type Snapshotter struct {
 }
 
 type BuildSnapshot struct {
-	Build     builds.Build    `json:"build"`
-	Status    builds.Status   `json:"status"`
+	Build     turbine.Build   `json:"build"`
+	Status    turbine.Status  `json:"status"`
 	ProcessID uint32          `json:"process_id"`
 	Events    []event.Message `json:"events"`
 }
@@ -64,7 +64,7 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 
 				if snapshot.Status == "" {
 					// 0.16.0 -> 0.17.0 compatibility
-					snapshot.Status = builds.StatusStarted
+					snapshot.Status = turbine.StatusStarted
 				}
 
 				snapshotter.scheduler.Restore(scheduler.ScheduledBuild{

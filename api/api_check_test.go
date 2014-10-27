@@ -6,19 +6,19 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/resource/fakes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("POST /checks", func() {
-	var input builds.Input
+	var input turbine.Input
 	var requestURL string
 	var requestBody string
 	var response *http.Response
 
-	inputPayload := func(input builds.Input) string {
+	inputPayload := func(input turbine.Input) string {
 		payload, err := json.Marshal(input)
 		Ω(err).ShouldNot(HaveOccurred())
 
@@ -26,10 +26,10 @@ var _ = Describe("POST /checks", func() {
 	}
 
 	BeforeEach(func() {
-		input = builds.Input{
+		input = turbine.Input{
 			Type:    "git",
-			Source:  builds.Source{"uri": "example.com"},
-			Version: builds.Version{"ref": "foo"},
+			Source:  turbine.Source{"uri": "example.com"},
+			Version: turbine.Version{"ref": "foo"},
 		}
 
 		requestURL = server.URL + "/checks"
@@ -59,17 +59,17 @@ var _ = Describe("POST /checks", func() {
 
 		Context("and checking succeeds", func() {
 			var (
-				version1 builds.Version
-				version2 builds.Version
+				version1 turbine.Version
+				version2 turbine.Version
 
-				returnedVersions []builds.Version
+				returnedVersions []turbine.Version
 			)
 
 			BeforeEach(func() {
-				version1 = builds.Version{"ref": "a"}
-				version2 = builds.Version{"ref": "b"}
+				version1 = turbine.Version{"ref": "a"}
+				version2 = turbine.Version{"ref": "b"}
 
-				resource.CheckReturns([]builds.Version{version1, version2}, nil)
+				resource.CheckReturns([]turbine.Version{version1, version2}, nil)
 			})
 
 			JustBeforeEach(func() {
@@ -87,7 +87,7 @@ var _ = Describe("POST /checks", func() {
 			})
 
 			It("returns the detected versions", func() {
-				Ω(returnedVersions).Should(Equal([]builds.Version{version1, version2}))
+				Ω(returnedVersions).Should(Equal([]turbine.Version{version1, version2}))
 			})
 
 			It("releases the resource", func() {

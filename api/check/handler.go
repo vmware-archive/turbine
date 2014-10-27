@@ -7,7 +7,7 @@ import (
 
 	"github.com/pivotal-golang/lager"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/resource"
 )
 
@@ -27,7 +27,7 @@ func NewHandler(logger lager.Logger, tracker resource.Tracker, drain <-chan stru
 }
 
 func (handler *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var input builds.Input
+	var input turbine.Input
 	err := json.NewDecoder(r.Body).Decode(&input)
 	if err != nil {
 		handler.logger.Error("malformed-request", err)

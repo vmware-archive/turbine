@@ -7,7 +7,7 @@ import (
 	"github.com/nu7hatch/gouuid"
 	"github.com/pivotal-golang/lager"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/scheduler"
 )
 
@@ -32,7 +32,7 @@ func NewHandler(
 }
 
 func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var build builds.Build
+	var build turbine.Build
 	err := json.NewDecoder(r.Body).Decode(&build)
 	if err != nil {
 		handler.logger.Error("malformed-request", err)

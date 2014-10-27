@@ -10,7 +10,7 @@ import (
 
 	gapi "github.com/cloudfoundry-incubator/garden/api"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/builder/inputs"
 	"github.com/concourse/turbine/builder/outputs"
 	"github.com/concourse/turbine/event"
@@ -31,7 +31,7 @@ func (err UnsatisfiedInputError) Error() string {
 
 type Builder interface {
 	// begin execution of a build, fetching all inputs and spawning the process
-	Start(builds.Build, event.Emitter, <-chan struct{}) (RunningBuild, error)
+	Start(turbine.Build, event.Emitter, <-chan struct{}) (RunningBuild, error)
 
 	// attach to a running build, forwarding output events
 	//
@@ -42,11 +42,11 @@ type Builder interface {
 	Hijack(string, gapi.ProcessSpec, gapi.ProcessIO) (gapi.Process, error)
 
 	// process an exited build's outputs
-	Finish(ExitedBuild, event.Emitter, <-chan struct{}) (builds.Build, error)
+	Finish(ExitedBuild, event.Emitter, <-chan struct{}) (turbine.Build, error)
 }
 
 type RunningBuild struct {
-	Build builds.Build
+	Build turbine.Build
 
 	Container gapi.Container
 
@@ -55,7 +55,7 @@ type RunningBuild struct {
 }
 
 type ExitedBuild struct {
-	Build builds.Build
+	Build turbine.Build
 
 	Container gapi.Container
 
@@ -80,13 +80,13 @@ func NewBuilder(
 	}
 }
 
-func (builder *builder) Start(build builds.Build, emitter event.Emitter, abort <-chan struct{}) (RunningBuild, error) {
+func (builder *builder) Start(build turbine.Build, emitter event.Emitter, abort <-chan struct{}) (RunningBuild, error) {
 	fetchedInputs, err := builder.inputFetcher.Fetch(build.Inputs, emitter, abort)
 	if err != nil {
 		return RunningBuild{}, builder.emitError(emitter, "failed to fetch inputs", err)
 	}
 
-	newInputs := make([]builds.Input, len(fetchedInputs))
+	newInputs := make([]turbine.Input, len(fetchedInputs))
 	for i, fetched := range fetchedInputs {
 		newInputs[i] = fetched.Input
 		build.Config = fetched.Config.Merge(build.Config)
@@ -169,7 +169,7 @@ func (builder *builder) Attach(running RunningBuild, emitter event.Emitter, abor
 	}, nil
 }
 
-func (builder *builder) Finish(exited ExitedBuild, emitter event.Emitter, abort <-chan struct{}) (builds.Build, error) {
+func (builder *builder) Finish(exited ExitedBuild, emitter event.Emitter, abort <-chan struct{}) (turbine.Build, error) {
 	emitter.EmitEvent(event.Finish{
 		Time:       time.Now().Unix(),
 		ExitStatus: exited.ExitStatus,
@@ -177,7 +177,7 @@ func (builder *builder) Finish(exited ExitedBuild, emitter event.Emitter, abort 
 
 	outputs, err := builder.performOutputs(exited.Container, exited, emitter, abort)
 	if err != nil {
-		return builds.Build{}, err
+		return turbine.Build{}, err
 	}
 
 	exited.Build.Outputs = outputs
@@ -204,7 +204,7 @@ func (builder *builder) emitError(emitter event.Emitter, message string, err err
 
 func (builder *builder) createBuildContainer(
 	buildGuid string,
-	buildConfig builds.Config,
+	buildConfig turbine.Config,
 ) (gapi.Container, error) {
 	if buildConfig.Image == "" {
 		return nil, ErrNoImageSpecified
@@ -219,7 +219,7 @@ func (builder *builder) createBuildContainer(
 func (builder *builder) streamInResources(
 	container gapi.Container,
 	fetchedInputs []inputs.FetchedInput,
-	configuredInputs []builds.InputConfig,
+	configuredInputs []turbine.InputConfig,
 ) error {
 	if len(fetchedInputs) == 0 {
 		// ensure sources dir exists even if there are no inputs
@@ -278,7 +278,7 @@ func (builder *builder) runBuild(
 	container gapi.Container,
 	processIO gapi.ProcessIO,
 	privileged bool,
-	buildConfig builds.Config,
+	buildConfig turbine.Config,
 ) (gapi.Process, error) {
 	env := []string{}
 	for n, v := range buildConfig.Params {
@@ -339,9 +339,9 @@ func (builder *builder) performOutputs(
 	build ExitedBuild,
 	emitter event.Emitter,
 	abort <-chan struct{},
-) ([]builds.Output, error) {
-	implicitOutputs := []builds.Output{}
-	outputsToPerform := []builds.Output{}
+) ([]turbine.Output, error) {
+	implicitOutputs := []turbine.Output{}
+	outputsToPerform := []turbine.Output{}
 	for _, output := range build.Build.Outputs {
 		if !output.On.SatisfiedBy(build.ExitStatus) {
 			continue

@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	. "github.com/concourse/turbine/builder/inputs"
 	"github.com/concourse/turbine/event"
 	efakes "github.com/concourse/turbine/event/fakes"
@@ -23,7 +23,7 @@ var _ = Describe("Inputs", func() {
 	var (
 		tracker *rfakes.FakeTracker
 
-		inputs  []builds.Input
+		inputs  []turbine.Input
 		emitter *efakes.FakeEmitter
 		events  *testlog.EventLog
 		abort   chan struct{}
@@ -39,7 +39,7 @@ var _ = Describe("Inputs", func() {
 
 		fetcher = NewParallelFetcher(tracker)
 
-		inputs = []builds.Input{
+		inputs = []turbine.Input{
 			{
 				Name:     "first-input",
 				Resource: "first-resource",
@@ -83,36 +83,36 @@ var _ = Describe("Inputs", func() {
 
 		Context("when each resource in action succeeds", func() {
 			var (
-				firstConfig  builds.Config
-				secondConfig builds.Config
+				firstConfig  turbine.Config
+				secondConfig turbine.Config
 			)
 
 			BeforeEach(func() {
-				firstConfig = builds.Config{}
-				secondConfig = builds.Config{}
+				firstConfig = turbine.Config{}
+				secondConfig = turbine.Config{}
 
 				sync := new(sync.WaitGroup)
 				sync.Add(2)
 
-				resource1.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
+				resource1.InStub = func(input turbine.Input) (io.Reader, turbine.Input, turbine.Config, error) {
 					// asserts that inputs are fetched in parallel
 					sync.Done()
 					sync.Wait()
 
 					sourceStream := bytes.NewBufferString("some-data-1")
-					input.Version = builds.Version{"version": "1"}
-					input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-1"}}
+					input.Version = turbine.Version{"version": "1"}
+					input.Metadata = []turbine.MetadataField{{Name: "key", Value: "meta-1"}}
 					return sourceStream, input, firstConfig, nil
 				}
 
-				resource2.InStub = func(input builds.Input) (io.Reader, builds.Input, builds.Config, error) {
+				resource2.InStub = func(input turbine.Input) (io.Reader, turbine.Input, turbine.Config, error) {
 					// asserts that inputs are fetched in parallel
 					sync.Done()
 					sync.Wait()
 
 					sourceStream := bytes.NewBufferString("some-data-2")
-					input.Version = builds.Version{"version": "2"}
-					input.Metadata = []builds.MetadataField{{Name: "key", Value: "meta-2"}}
+					input.Version = turbine.Version{"version": "2"}
+					input.Metadata = []turbine.MetadataField{{Name: "key", Value: "meta-2"}}
 					return sourceStream, input, secondConfig, nil
 				}
 			})
@@ -122,12 +122,12 @@ var _ = Describe("Inputs", func() {
 			})
 
 			It("returns the fetched inputs", func() {
-				Ω(fetchedInputs[0].Input).Should(Equal(builds.Input{
+				Ω(fetchedInputs[0].Input).Should(Equal(turbine.Input{
 					Name:     "first-input",
 					Resource: "first-resource",
 					Type:     "raw",
-					Version:  builds.Version{"version": "1"},
-					Metadata: []builds.MetadataField{{Name: "key", Value: "meta-1"}},
+					Version:  turbine.Version{"version": "1"},
+					Metadata: []turbine.MetadataField{{Name: "key", Value: "meta-1"}},
 				}))
 
 				Ω(fetchedInputs[0].Stream).ShouldNot(BeNil())
@@ -135,12 +135,12 @@ var _ = Describe("Inputs", func() {
 				Ω(err).ShouldNot(HaveOccurred())
 				Ω(string(stream)).Should(Equal("some-data-1"))
 
-				Ω(fetchedInputs[1].Input).Should(Equal(builds.Input{
+				Ω(fetchedInputs[1].Input).Should(Equal(turbine.Input{
 					Name:     "second-input",
 					Resource: "second-resource",
 					Type:     "raw",
-					Version:  builds.Version{"version": "2"},
-					Metadata: []builds.MetadataField{{Name: "key", Value: "meta-2"}},
+					Version:  turbine.Version{"version": "2"},
+					Metadata: []turbine.MetadataField{{Name: "key", Value: "meta-2"}},
 				}))
 
 				Ω(fetchedInputs[1].Stream).ShouldNot(BeNil())
@@ -151,22 +151,22 @@ var _ = Describe("Inputs", func() {
 
 			It("emits input events", func() {
 				Eventually(events.Sent).Should(ContainElement(event.Input{
-					Input: builds.Input{
+					Input: turbine.Input{
 						Name:     "first-input",
 						Resource: "first-resource",
 						Type:     "raw",
-						Version:  builds.Version{"version": "1"},
-						Metadata: []builds.MetadataField{{Name: "key", Value: "meta-1"}},
+						Version:  turbine.Version{"version": "1"},
+						Metadata: []turbine.MetadataField{{Name: "key", Value: "meta-1"}},
 					},
 				}))
 
 				Eventually(events.Sent).Should(ContainElement(event.Input{
-					Input: builds.Input{
+					Input: turbine.Input{
 						Name:     "second-input",
 						Resource: "second-resource",
 						Type:     "raw",
-						Version:  builds.Version{"version": "2"},
-						Metadata: []builds.MetadataField{{Name: "key", Value: "meta-2"}},
+						Version:  turbine.Version{"version": "2"},
+						Metadata: []turbine.MetadataField{{Name: "key", Value: "meta-2"}},
 					},
 				}))
 			})
@@ -185,7 +185,7 @@ var _ = Describe("Inputs", func() {
 
 			Context("when an input provides build configuration", func() {
 				BeforeEach(func() {
-					firstConfig = builds.Config{
+					firstConfig = turbine.Config{
 						Image: "build-config-image",
 
 						Params: map[string]string{
@@ -196,7 +196,7 @@ var _ = Describe("Inputs", func() {
 				})
 
 				It("returns it on the fetched input", func() {
-					Ω(fetchedInputs[0].Config).Should(Equal(builds.Config{
+					Ω(fetchedInputs[0].Config).Should(Equal(turbine.Config{
 						Image: "build-config-image",
 
 						Params: map[string]string{
@@ -285,7 +285,7 @@ var _ = Describe("Inputs", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
-				resource1.InReturns(nil, builds.Input{}, builds.Config{}, disaster)
+				resource1.InReturns(nil, turbine.Input{}, turbine.Config{}, disaster)
 			})
 
 			It("returns the error", func() {

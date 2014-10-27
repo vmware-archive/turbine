@@ -3,26 +3,26 @@ package resource
 import (
 	"io"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 )
 
 // Request payload from resource to /opt/resource/out script
 type outRequest struct {
-	Source  builds.Source  `json:"source"`
-	Params  builds.Params  `json:"params,omitempty"`
-	Version builds.Version `json:"version,omitempty"`
+	Source  turbine.Source  `json:"source"`
+	Params  turbine.Params  `json:"params,omitempty"`
+	Version turbine.Version `json:"version,omitempty"`
 }
 
 // Response payload from /opt/resource/out script to resource
 type outResponse struct {
-	Version  builds.Version         `json:"version"`
-	Metadata []builds.MetadataField `json:"metadata"`
+	Version  turbine.Version         `json:"version"`
+	Metadata []turbine.MetadataField `json:"metadata"`
 }
 
-func (resource *resource) Out(sourceStream io.Reader, output builds.Output) (builds.Output, error) {
+func (resource *resource) Out(sourceStream io.Reader, output turbine.Output) (turbine.Output, error) {
 	err := resource.container.StreamIn(ResourcesDir, sourceStream)
 	if err != nil {
-		return builds.Output{}, err
+		return turbine.Output{}, err
 	}
 
 	var resp outResponse
@@ -38,7 +38,7 @@ func (resource *resource) Out(sourceStream io.Reader, output builds.Output) (bui
 		&resp,
 	)
 	if err != nil {
-		return builds.Output{}, err
+		return turbine.Output{}, err
 	}
 
 	output.Version = resp.Version

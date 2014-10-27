@@ -4,17 +4,17 @@ package fakes
 import (
 	"sync"
 
-	gapi "github.com/cloudfoundry-incubator/garden/api"
-	"github.com/concourse/turbine/api/builds"
+	garden "github.com/cloudfoundry-incubator/garden/api"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/builder"
 	"github.com/concourse/turbine/event"
 )
 
 type FakeBuilder struct {
-	StartStub        func(builds.Build, event.Emitter, <-chan struct{}) (builder.RunningBuild, error)
+	StartStub        func(turbine.Build, event.Emitter, <-chan struct{}) (builder.RunningBuild, error)
 	startMutex       sync.RWMutex
 	startArgsForCall []struct {
-		arg1 builds.Build
+		arg1 turbine.Build
 		arg2 event.Emitter
 		arg3 <-chan struct{}
 	}
@@ -33,18 +33,18 @@ type FakeBuilder struct {
 		result1 builder.ExitedBuild
 		result2 error
 	}
-	HijackStub        func(string, gapi.ProcessSpec, gapi.ProcessIO) (gapi.Process, error)
+	HijackStub        func(string, garden.ProcessSpec, garden.ProcessIO) (garden.Process, error)
 	hijackMutex       sync.RWMutex
 	hijackArgsForCall []struct {
 		arg1 string
-		arg2 gapi.ProcessSpec
-		arg3 gapi.ProcessIO
+		arg2 garden.ProcessSpec
+		arg3 garden.ProcessIO
 	}
 	hijackReturns struct {
-		result1 gapi.Process
+		result1 garden.Process
 		result2 error
 	}
-	FinishStub        func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (builds.Build, error)
+	FinishStub        func(builder.ExitedBuild, event.Emitter, <-chan struct{}) (turbine.Build, error)
 	finishMutex       sync.RWMutex
 	finishArgsForCall []struct {
 		arg1 builder.ExitedBuild
@@ -52,15 +52,15 @@ type FakeBuilder struct {
 		arg3 <-chan struct{}
 	}
 	finishReturns struct {
-		result1 builds.Build
+		result1 turbine.Build
 		result2 error
 	}
 }
 
-func (fake *FakeBuilder) Start(arg1 builds.Build, arg2 event.Emitter, arg3 <-chan struct{}) (builder.RunningBuild, error) {
+func (fake *FakeBuilder) Start(arg1 turbine.Build, arg2 event.Emitter, arg3 <-chan struct{}) (builder.RunningBuild, error) {
 	fake.startMutex.Lock()
 	fake.startArgsForCall = append(fake.startArgsForCall, struct {
-		arg1 builds.Build
+		arg1 turbine.Build
 		arg2 event.Emitter
 		arg3 <-chan struct{}
 	}{arg1, arg2, arg3})
@@ -78,7 +78,7 @@ func (fake *FakeBuilder) StartCallCount() int {
 	return len(fake.startArgsForCall)
 }
 
-func (fake *FakeBuilder) StartArgsForCall(i int) (builds.Build, event.Emitter, <-chan struct{}) {
+func (fake *FakeBuilder) StartArgsForCall(i int) (turbine.Build, event.Emitter, <-chan struct{}) {
 	fake.startMutex.RLock()
 	defer fake.startMutex.RUnlock()
 	return fake.startArgsForCall[i].arg1, fake.startArgsForCall[i].arg2, fake.startArgsForCall[i].arg3
@@ -127,12 +127,12 @@ func (fake *FakeBuilder) AttachReturns(result1 builder.ExitedBuild, result2 erro
 	}{result1, result2}
 }
 
-func (fake *FakeBuilder) Hijack(arg1 string, arg2 gapi.ProcessSpec, arg3 gapi.ProcessIO) (gapi.Process, error) {
+func (fake *FakeBuilder) Hijack(arg1 string, arg2 garden.ProcessSpec, arg3 garden.ProcessIO) (garden.Process, error) {
 	fake.hijackMutex.Lock()
 	fake.hijackArgsForCall = append(fake.hijackArgsForCall, struct {
 		arg1 string
-		arg2 gapi.ProcessSpec
-		arg3 gapi.ProcessIO
+		arg2 garden.ProcessSpec
+		arg3 garden.ProcessIO
 	}{arg1, arg2, arg3})
 	fake.hijackMutex.Unlock()
 	if fake.HijackStub != nil {
@@ -148,21 +148,21 @@ func (fake *FakeBuilder) HijackCallCount() int {
 	return len(fake.hijackArgsForCall)
 }
 
-func (fake *FakeBuilder) HijackArgsForCall(i int) (string, gapi.ProcessSpec, gapi.ProcessIO) {
+func (fake *FakeBuilder) HijackArgsForCall(i int) (string, garden.ProcessSpec, garden.ProcessIO) {
 	fake.hijackMutex.RLock()
 	defer fake.hijackMutex.RUnlock()
 	return fake.hijackArgsForCall[i].arg1, fake.hijackArgsForCall[i].arg2, fake.hijackArgsForCall[i].arg3
 }
 
-func (fake *FakeBuilder) HijackReturns(result1 gapi.Process, result2 error) {
+func (fake *FakeBuilder) HijackReturns(result1 garden.Process, result2 error) {
 	fake.HijackStub = nil
 	fake.hijackReturns = struct {
-		result1 gapi.Process
+		result1 garden.Process
 		result2 error
 	}{result1, result2}
 }
 
-func (fake *FakeBuilder) Finish(arg1 builder.ExitedBuild, arg2 event.Emitter, arg3 <-chan struct{}) (builds.Build, error) {
+func (fake *FakeBuilder) Finish(arg1 builder.ExitedBuild, arg2 event.Emitter, arg3 <-chan struct{}) (turbine.Build, error) {
 	fake.finishMutex.Lock()
 	fake.finishArgsForCall = append(fake.finishArgsForCall, struct {
 		arg1 builder.ExitedBuild
@@ -189,10 +189,10 @@ func (fake *FakeBuilder) FinishArgsForCall(i int) (builder.ExitedBuild, event.Em
 	return fake.finishArgsForCall[i].arg1, fake.finishArgsForCall[i].arg2, fake.finishArgsForCall[i].arg3
 }
 
-func (fake *FakeBuilder) FinishReturns(result1 builds.Build, result2 error) {
+func (fake *FakeBuilder) FinishReturns(result1 turbine.Build, result2 error) {
 	fake.FinishStub = nil
 	fake.finishReturns = struct {
-		result1 builds.Build
+		result1 turbine.Build
 		result2 error
 	}{result1, result2}
 }

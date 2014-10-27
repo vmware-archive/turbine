@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/scheduler"
 	"github.com/pivotal-golang/lager"
 )
@@ -16,11 +17,6 @@ type handler struct {
 	logger lager.Logger
 
 	scheduler scheduler.Scheduler
-}
-
-type ProcessPayload struct {
-	Stdin   []byte
-	TTYSpec *garden_api.TTYSpec
 }
 
 func NewHandler(logger lager.Logger, scheduler scheduler.Scheduler) http.Handler {
@@ -81,7 +77,7 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		defer inW.Close()
 
 		for {
-			var payload ProcessPayload
+			var payload turbine.HijackPayload
 			err := decoder.Decode(&payload)
 			if err != nil {
 				break

@@ -1,15 +1,15 @@
 package outputs
 
 import (
-	garden_api "github.com/cloudfoundry-incubator/garden/api"
-	"github.com/concourse/turbine/api/builds"
+	garden "github.com/cloudfoundry-incubator/garden/api"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/event"
 	"github.com/concourse/turbine/logwriter"
 	"github.com/concourse/turbine/resource"
 )
 
 type Performer interface {
-	PerformOutputs(garden_api.Container, []builds.Output, event.Emitter, <-chan struct{}) ([]builds.Output, error)
+	PerformOutputs(garden.Container, []turbine.Output, event.Emitter, <-chan struct{}) ([]turbine.Output, error)
 }
 
 func NewParallelPerformer(tracker resource.Tracker) Performer {
@@ -21,17 +21,17 @@ type parallelPerformer struct {
 }
 
 func (p parallelPerformer) PerformOutputs(
-	container garden_api.Container,
-	outputs []builds.Output,
+	container garden.Container,
+	outputs []turbine.Output,
 	emitter event.Emitter,
 	abort <-chan struct{},
-) ([]builds.Output, error) {
-	resultingOutputs := make([]builds.Output, len(outputs))
+) ([]turbine.Output, error) {
+	resultingOutputs := make([]turbine.Output, len(outputs))
 
 	errResults := make(chan error, len(outputs))
 
 	for i, output := range outputs {
-		go func(i int, output builds.Output) {
+		go func(i int, output turbine.Output) {
 			streamOut, err := container.StreamOut("/tmp/build/src/")
 			if err != nil {
 				emitOutputError(emitter, output, err)
@@ -83,7 +83,7 @@ func (p parallelPerformer) PerformOutputs(
 	return resultingOutputs, nil
 }
 
-func emitOutputError(emitter event.Emitter, output builds.Output, err error) {
+func emitOutputError(emitter event.Emitter, output turbine.Output, err error) {
 	emitter.EmitEvent(event.Error{
 		Message: err.Error(),
 		Origin: event.Origin{

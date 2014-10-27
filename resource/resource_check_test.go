@@ -4,9 +4,9 @@ import (
 	"errors"
 	"io/ioutil"
 
-	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	garden "github.com/cloudfoundry-incubator/garden/api"
 	gfakes "github.com/cloudfoundry-incubator/garden/api/fakes"
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -14,7 +14,7 @@ import (
 
 var _ = Describe("Resource Check", func() {
 	var (
-		input builds.Input
+		input turbine.Input
 
 		checkScriptStdout     string
 		checkScriptStderr     string
@@ -23,15 +23,15 @@ var _ = Describe("Resource Check", func() {
 
 		checkScriptProcess *gfakes.FakeProcess
 
-		checkResult []builds.Version
+		checkResult []turbine.Version
 		checkErr    error
 	)
 
 	BeforeEach(func() {
-		input = builds.Input{
+		input = turbine.Input{
 			Type:    "some-resource",
-			Source:  builds.Source{"some": "source"},
-			Version: builds.Version{"some": "version"},
+			Source:  turbine.Source{"some": "source"},
+			Version: turbine.Version{"some": "version"},
 		}
 
 		checkScriptStdout = "[]"
@@ -49,7 +49,7 @@ var _ = Describe("Resource Check", func() {
 	})
 
 	JustBeforeEach(func() {
-		gardenClient.Connection.RunStub = func(handle string, spec garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error) {
+		gardenClient.Connection.RunStub = func(handle string, spec garden.ProcessSpec, io garden.ProcessIO) (garden.Process, error) {
 			if runCheckError != nil {
 				return nil, runCheckError
 			}
@@ -89,10 +89,10 @@ var _ = Describe("Resource Check", func() {
 		It("returns the raw parsed contents", func() {
 			Ω(checkErr).ShouldNot(HaveOccurred())
 
-			Ω(checkResult).Should(Equal([]builds.Version{
-				builds.Version{"ver": "abc"},
-				builds.Version{"ver": "def"},
-				builds.Version{"ver": "ghi"},
+			Ω(checkResult).Should(Equal([]turbine.Version{
+				turbine.Version{"ver": "abc"},
+				turbine.Version{"ver": "def"},
+				turbine.Version{"ver": "ghi"},
 			}))
 		})
 	})

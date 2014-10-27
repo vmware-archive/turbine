@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"net/http/httputil"
 
-	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	garden "github.com/cloudfoundry-incubator/garden/api"
 	gfakes "github.com/cloudfoundry-incubator/garden/api/fakes"
-	"github.com/concourse/turbine/api/hijack"
+	"github.com/concourse/turbine"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -28,7 +28,7 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 	BeforeEach(func() {
 		var err error
 
-		payload, err = json.Marshal(garden_api.ProcessSpec{
+		payload, err = json.Marshal(garden.ProcessSpec{
 			Path: "bash",
 			Args: []string{"-l"},
 		})
@@ -72,7 +72,7 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 
 			guid, spec, _ := scheduler.HijackArgsForCall(0)
 			Ω(guid).Should(Equal("some-build-guid"))
-			Ω(spec).Should(Equal(garden_api.ProcessSpec{
+			Ω(spec).Should(Equal(garden.ProcessSpec{
 				Path: "bash",
 				Args: []string{"-l"},
 			}))
@@ -84,7 +84,7 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 
 		Context("when the process prints stdout and stderr", func() {
 			BeforeEach(func() {
-				scheduler.HijackStub = func(guid string, spec garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error) {
+				scheduler.HijackStub = func(guid string, spec garden.ProcessSpec, io garden.ProcessIO) (garden.Process, error) {
 					Ω(io.Stdout).ShouldNot(BeZero())
 					Ω(io.Stderr).ShouldNot(BeZero())
 
@@ -117,7 +117,7 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 			})
 
 			It("forwards to the process's stdin", func() {
-				err := encoder.Encode(hijack.ProcessPayload{
+				err := encoder.Encode(turbine.HijackPayload{
 					Stdin: []byte("some stdin\n"),
 				})
 				Ω(err).ShouldNot(HaveOccurred())
@@ -140,14 +140,14 @@ var _ = Describe("POST /builds/:guid/hijack", func() {
 			})
 
 			It("forwards tty spec paylods to the process", func() {
-				ttySpec := &garden_api.TTYSpec{
-					WindowSize: &garden_api.WindowSize{
+				ttySpec := &garden.TTYSpec{
+					WindowSize: &garden.WindowSize{
 						Columns: 80,
 						Rows:    24,
 					},
 				}
 
-				err := encoder.Encode(hijack.ProcessPayload{
+				err := encoder.Encode(turbine.HijackPayload{
 					TTYSpec: ttySpec,
 				})
 				Ω(err).ShouldNot(HaveOccurred())

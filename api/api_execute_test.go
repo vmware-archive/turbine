@@ -5,17 +5,17 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("POST /builds", func() {
-	var build builds.Build
+	var build turbine.Build
 	var requestBody string
 	var response *http.Response
 
-	buildPayload := func(build builds.Build) string {
+	buildPayload := func(build turbine.Build) string {
 		payload, err := json.Marshal(build)
 		Ω(err).ShouldNot(HaveOccurred())
 
@@ -23,8 +23,8 @@ var _ = Describe("POST /builds", func() {
 	}
 
 	BeforeEach(func() {
-		build = builds.Build{
-			Inputs: []builds.Input{
+		build = turbine.Build{
+			Inputs: []turbine.Input{
 				{
 					Type: "git",
 				},
@@ -50,7 +50,7 @@ var _ = Describe("POST /builds", func() {
 	})
 
 	It("schedules the build and returns it with a guid and abort url", func() {
-		var returnedBuild builds.Build
+		var returnedBuild turbine.Build
 
 		err := json.NewDecoder(response.Body).Decode(&returnedBuild)
 		Ω(err).ShouldNot(HaveOccurred())

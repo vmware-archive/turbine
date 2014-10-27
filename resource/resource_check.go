@@ -1,14 +1,14 @@
 package resource
 
-import "github.com/concourse/turbine/api/builds"
+import "github.com/concourse/turbine"
 
 type versionAndSource struct {
-	Version builds.Version `json:"version"`
-	Source  builds.Source  `json:"source"`
+	Version turbine.Version `json:"version"`
+	Source  turbine.Source  `json:"source"`
 }
 
-func (resource *resource) Check(input builds.Input) ([]builds.Version, error) {
-	var versions []builds.Version
+func (resource *resource) Check(input turbine.Input) ([]turbine.Version, error) {
+	var versions []turbine.Version
 
 	err := resource.runScript(
 		"/opt/resource/check",

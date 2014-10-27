@@ -7,9 +7,9 @@ import (
 	"io"
 	"io/ioutil"
 
-	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	garden "github.com/cloudfoundry-incubator/garden/api"
 	gfakes "github.com/cloudfoundry-incubator/garden/api/fakes"
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -17,7 +17,7 @@ import (
 
 var _ = Describe("Resource In", func() {
 	var (
-		input builds.Input
+		input turbine.Input
 
 		inScriptStdout     string
 		inScriptStderr     string
@@ -27,18 +27,18 @@ var _ = Describe("Resource In", func() {
 		inScriptProcess *gfakes.FakeProcess
 
 		inStream io.Reader
-		inConfig builds.Config
-		inInput  builds.Input
+		inConfig turbine.Config
+		inInput  turbine.Input
 		inErr    error
 	)
 
 	BeforeEach(func() {
-		input = builds.Input{
+		input = turbine.Input{
 			Name:    "some-name",
 			Type:    "some-resource",
-			Source:  builds.Source{"some": "source"},
-			Version: builds.Version{"some": "version"},
-			Params:  builds.Params{"some": "params"},
+			Source:  turbine.Source{"some": "source"},
+			Version: turbine.Version{"some": "version"},
+			Params:  turbine.Params{"some": "params"},
 		}
 
 		inScriptStdout = "{}"
@@ -53,7 +53,7 @@ var _ = Describe("Resource In", func() {
 	})
 
 	JustBeforeEach(func() {
-		gardenClient.Connection.RunStub = func(handle string, spec garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error) {
+		gardenClient.Connection.RunStub = func(handle string, spec garden.ProcessSpec, io garden.ProcessIO) (garden.Process, error) {
 			if runInError != nil {
 				return nil, runInError
 			}
@@ -102,8 +102,8 @@ var _ = Describe("Resource In", func() {
 
 		It("returns the build source printed out by /opt/resource/in", func() {
 			expectedFetchedInput := input
-			expectedFetchedInput.Version = builds.Version{"some": "new-version"}
-			expectedFetchedInput.Metadata = []builds.MetadataField{
+			expectedFetchedInput.Version = turbine.Version{"some": "new-version"}
+			expectedFetchedInput.Metadata = []turbine.MetadataField{
 				{Name: "a", Value: "a-value"},
 				{Name: "b", Value: "b-value"},
 			}

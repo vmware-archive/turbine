@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	. "github.com/concourse/turbine/event"
 
 	. "github.com/onsi/ginkgo"
@@ -44,7 +44,7 @@ var _ = Describe("Encoding & Decoding messages", func() {
 	Describe("Status", func() {
 		BeforeEach(func() {
 			event = Status{
-				Status: builds.StatusSucceeded,
+				Status: turbine.StatusSucceeded,
 				Time:   time.Now().Unix(),
 			}
 		})
@@ -55,7 +55,7 @@ var _ = Describe("Encoding & Decoding messages", func() {
 	Describe("Initialize", func() {
 		BeforeEach(func() {
 			event = Initialize{
-				BuildConfig: builds.Config{
+				BuildConfig: turbine.Config{
 					Image: "some-image",
 				},
 			}
@@ -102,7 +102,7 @@ var _ = Describe("Encoding & Decoding messages", func() {
 	Describe("Input", func() {
 		BeforeEach(func() {
 			event = Input{
-				Input: builds.Input{
+				Input: turbine.Input{
 					Name: "some-resource",
 				},
 			}
@@ -114,7 +114,7 @@ var _ = Describe("Encoding & Decoding messages", func() {
 	Describe("Output", func() {
 		BeforeEach(func() {
 			event = Output{
-				Output: builds.Output{
+				Output: turbine.Output{
 					Name: "some-resource",
 				},
 			}

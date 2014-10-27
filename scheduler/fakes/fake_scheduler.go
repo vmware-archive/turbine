@@ -4,17 +4,17 @@ package fakes
 import (
 	"sync"
 
-	gapi "github.com/cloudfoundry-incubator/garden/api"
-	"github.com/concourse/turbine/api/builds"
+	garden "github.com/cloudfoundry-incubator/garden/api"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/event"
 	"github.com/concourse/turbine/scheduler"
 )
 
 type FakeScheduler struct {
-	StartStub        func(builds.Build)
+	StartStub        func(turbine.Build)
 	startMutex       sync.RWMutex
 	startArgsForCall []struct {
-		arg1 builds.Build
+		arg1 turbine.Build
 	}
 	RestoreStub        func(scheduler.ScheduledBuild)
 	restoreMutex       sync.RWMutex
@@ -26,15 +26,15 @@ type FakeScheduler struct {
 	abortArgsForCall []struct {
 		guid string
 	}
-	HijackStub        func(guid string, process gapi.ProcessSpec, io gapi.ProcessIO) (gapi.Process, error)
+	HijackStub        func(guid string, process garden.ProcessSpec, io garden.ProcessIO) (garden.Process, error)
 	hijackMutex       sync.RWMutex
 	hijackArgsForCall []struct {
 		guid    string
-		process gapi.ProcessSpec
-		io      gapi.ProcessIO
+		process garden.ProcessSpec
+		io      garden.ProcessIO
 	}
 	hijackReturns struct {
-		result1 gapi.Process
+		result1 garden.Process
 		result2 error
 	}
 	SubscribeStub        func(guid string, from uint) (<-chan event.Event, chan<- struct{}, error)
@@ -56,15 +56,15 @@ type FakeScheduler struct {
 	DrainStub        func() []scheduler.ScheduledBuild
 	drainMutex       sync.RWMutex
 	drainArgsForCall []struct{}
-	drainReturns struct {
+	drainReturns     struct {
 		result1 []scheduler.ScheduledBuild
 	}
 }
 
-func (fake *FakeScheduler) Start(arg1 builds.Build) {
+func (fake *FakeScheduler) Start(arg1 turbine.Build) {
 	fake.startMutex.Lock()
 	fake.startArgsForCall = append(fake.startArgsForCall, struct {
-		arg1 builds.Build
+		arg1 turbine.Build
 	}{arg1})
 	fake.startMutex.Unlock()
 	if fake.StartStub != nil {
@@ -78,7 +78,7 @@ func (fake *FakeScheduler) StartCallCount() int {
 	return len(fake.startArgsForCall)
 }
 
-func (fake *FakeScheduler) StartArgsForCall(i int) builds.Build {
+func (fake *FakeScheduler) StartArgsForCall(i int) turbine.Build {
 	fake.startMutex.RLock()
 	defer fake.startMutex.RUnlock()
 	return fake.startArgsForCall[i].arg1
@@ -130,12 +130,12 @@ func (fake *FakeScheduler) AbortArgsForCall(i int) string {
 	return fake.abortArgsForCall[i].guid
 }
 
-func (fake *FakeScheduler) Hijack(guid string, process gapi.ProcessSpec, io gapi.ProcessIO) (gapi.Process, error) {
+func (fake *FakeScheduler) Hijack(guid string, process garden.ProcessSpec, io garden.ProcessIO) (garden.Process, error) {
 	fake.hijackMutex.Lock()
 	fake.hijackArgsForCall = append(fake.hijackArgsForCall, struct {
 		guid    string
-		process gapi.ProcessSpec
-		io      gapi.ProcessIO
+		process garden.ProcessSpec
+		io      garden.ProcessIO
 	}{guid, process, io})
 	fake.hijackMutex.Unlock()
 	if fake.HijackStub != nil {
@@ -151,16 +151,16 @@ func (fake *FakeScheduler) HijackCallCount() int {
 	return len(fake.hijackArgsForCall)
 }
 
-func (fake *FakeScheduler) HijackArgsForCall(i int) (string, gapi.ProcessSpec, gapi.ProcessIO) {
+func (fake *FakeScheduler) HijackArgsForCall(i int) (string, garden.ProcessSpec, garden.ProcessIO) {
 	fake.hijackMutex.RLock()
 	defer fake.hijackMutex.RUnlock()
 	return fake.hijackArgsForCall[i].guid, fake.hijackArgsForCall[i].process, fake.hijackArgsForCall[i].io
 }
 
-func (fake *FakeScheduler) HijackReturns(result1 gapi.Process, result2 error) {
+func (fake *FakeScheduler) HijackReturns(result1 garden.Process, result2 error) {
 	fake.HijackStub = nil
 	fake.hijackReturns = struct {
-		result1 gapi.Process
+		result1 garden.Process
 		result2 error
 	}{result1, result2}
 }

@@ -7,9 +7,9 @@ import (
 	"io/ioutil"
 	"sync"
 
-	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	garden "github.com/cloudfoundry-incubator/garden/api"
 	"github.com/cloudfoundry-incubator/garden/client/fake_api_client"
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	. "github.com/concourse/turbine/builder/outputs"
 	"github.com/concourse/turbine/event"
 	efakes "github.com/concourse/turbine/event/fakes"
@@ -28,8 +28,8 @@ var _ = Describe("Performer", func() {
 		tracker   *rfakes.FakeTracker
 		performer Performer
 
-		container        garden_api.Container
-		outputsToPerform []builds.Output
+		container        garden.Container
+		outputsToPerform []turbine.Output
 		emitter          *efakes.FakeEmitter
 		events           *testlog.EventLog
 		abort            chan struct{}
@@ -37,7 +37,7 @@ var _ = Describe("Performer", func() {
 		resource1 *rfakes.FakeResource
 		resource2 *rfakes.FakeResource
 
-		performedOutputs []builds.Output
+		performedOutputs []turbine.Output
 		performErr       error
 	)
 
@@ -48,7 +48,7 @@ var _ = Describe("Performer", func() {
 
 		gardenClient.Connection.CreateReturns("the-performing-container", nil)
 
-		container, err = gardenClient.Create(garden_api.ContainerSpec{})
+		container, err = gardenClient.Create(garden.ContainerSpec{})
 		Ω(err).ShouldNot(HaveOccurred())
 
 		resource1 = new(rfakes.FakeResource)
@@ -69,18 +69,18 @@ var _ = Describe("Performer", func() {
 			}
 		}
 
-		outputsToPerform = []builds.Output{
-			builds.Output{
+		outputsToPerform = []turbine.Output{
+			turbine.Output{
 				Name:   "banana",
 				Type:   "some-type",
-				Params: builds.Params{"key": "banana-param"},
-				Source: builds.Source{"uri": "http://banana-uri"},
+				Params: turbine.Params{"key": "banana-param"},
+				Source: turbine.Source{"uri": "http://banana-uri"},
 			},
-			builds.Output{
+			turbine.Output{
 				Name:   "monkey",
 				Type:   "some-type",
-				Params: builds.Params{"key": "monkey-param"},
-				Source: builds.Source{"uri": "http://monkey-uri"},
+				Params: turbine.Params{"key": "monkey-param"},
+				Source: turbine.Source{"uri": "http://monkey-uri"},
 			},
 		}
 
@@ -97,9 +97,9 @@ var _ = Describe("Performer", func() {
 		performedOutputs, performErr = performer.PerformOutputs(container, outputsToPerform, emitter, abort)
 	})
 
-	performedOutput := func(output builds.Output) builds.Output {
-		output.Version = builds.Version{"version": output.Name + "-performed"}
-		output.Metadata = []builds.MetadataField{{Name: "output", Value: output.Name}}
+	performedOutput := func(output turbine.Output) turbine.Output {
+		output.Version = turbine.Version{"version": output.Name + "-performed"}
+		output.Metadata = []turbine.MetadataField{{Name: "output", Value: output.Name}}
 		return output
 	}
 
@@ -115,13 +115,13 @@ var _ = Describe("Performer", func() {
 				sync := new(sync.WaitGroup)
 				sync.Add(2)
 
-				resource1.OutStub = func(src io.Reader, output builds.Output) (builds.Output, error) {
+				resource1.OutStub = func(src io.Reader, output turbine.Output) (turbine.Output, error) {
 					sync.Done()
 					sync.Wait()
 					return performedOutput(output), nil
 				}
 
-				resource2.OutStub = func(src io.Reader, output builds.Output) (builds.Output, error) {
+				resource2.OutStub = func(src io.Reader, output turbine.Output) (turbine.Output, error) {
 					sync.Done()
 					sync.Wait()
 					return performedOutput(output), nil
@@ -141,28 +141,28 @@ var _ = Describe("Performer", func() {
 				Ω(err).ShouldNot(HaveOccurred())
 				Ω(string(streamedIn)).Should(Equal("streamed-out"))
 
-				Ω([]builds.Output{output1, output2}).Should(ConsistOf(outputsToPerform))
+				Ω([]turbine.Output{output1, output2}).Should(ConsistOf(outputsToPerform))
 			})
 
 			It("returns the outputs and emits events for each explicit output", func() {
 				Ω(performedOutputs).Should(HaveLen(2))
 
-				monkeyResult := builds.Output{
+				monkeyResult := turbine.Output{
 					Name:     "monkey",
 					Type:     "some-type",
-					Source:   builds.Source{"uri": "http://monkey-uri"},
-					Params:   builds.Params{"key": "monkey-param"},
-					Version:  builds.Version{"version": "monkey-performed"},
-					Metadata: []builds.MetadataField{{Name: "output", Value: "monkey"}},
+					Source:   turbine.Source{"uri": "http://monkey-uri"},
+					Params:   turbine.Params{"key": "monkey-param"},
+					Version:  turbine.Version{"version": "monkey-performed"},
+					Metadata: []turbine.MetadataField{{Name: "output", Value: "monkey"}},
 				}
 
-				bananaResult := builds.Output{
+				bananaResult := turbine.Output{
 					Name:     "banana",
 					Type:     "some-type",
-					Source:   builds.Source{"uri": "http://banana-uri"},
-					Params:   builds.Params{"key": "banana-param"},
-					Version:  builds.Version{"version": "banana-performed"},
-					Metadata: []builds.MetadataField{{Name: "output", Value: "banana"}},
+					Source:   turbine.Source{"uri": "http://banana-uri"},
+					Params:   turbine.Params{"key": "banana-param"},
+					Version:  turbine.Version{"version": "banana-performed"},
+					Metadata: []turbine.MetadataField{{Name: "output", Value: "banana"}},
 				}
 
 				Ω(performedOutputs).Should(ContainElement(monkeyResult))
@@ -189,7 +189,7 @@ var _ = Describe("Performer", func() {
 			disaster := errors.New("oh no!")
 
 			BeforeEach(func() {
-				resource1.OutReturns(builds.Output{Name: "failed-output"}, disaster)
+				resource1.OutReturns(turbine.Output{Name: "failed-output"}, disaster)
 			})
 
 			It("returns an error", func() {
@@ -210,7 +210,7 @@ var _ = Describe("Performer", func() {
 
 			It("does not emit a bogus output event", func() {
 				Ω(events.Sent()).ShouldNot(ContainElement(event.Output{
-					builds.Output{Name: "failed-output"},
+					turbine.Output{Name: "failed-output"},
 				}))
 			})
 
@@ -232,7 +232,7 @@ var _ = Describe("Performer", func() {
 				for i, resource := range []*rfakes.FakeResource{resource1, resource2} {
 					idx := i
 
-					resource.OutStub = func(src io.Reader, output builds.Output) (builds.Output, error) {
+					resource.OutStub = func(src io.Reader, output turbine.Output) (turbine.Output, error) {
 						defer GinkgoRecover()
 
 						_, logs, _ := tracker.InitArgsForCall(idx)
@@ -268,10 +268,10 @@ var _ = Describe("Performer", func() {
 			errAborted := errors.New("aborted!")
 
 			BeforeEach(func() {
-				resource1.OutStub = func(io.Reader, builds.Output) (builds.Output, error) {
+				resource1.OutStub = func(io.Reader, turbine.Output) (turbine.Output, error) {
 					// return abort error to simulate fetching being aborted;
 					// assert that the channel closed below
-					return builds.Output{}, errAborted
+					return turbine.Output{}, errAborted
 				}
 			})
 

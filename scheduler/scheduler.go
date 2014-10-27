@@ -6,14 +6,14 @@ import (
 	"sync"
 
 	gapi "github.com/cloudfoundry-incubator/garden/api"
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/builder"
 	"github.com/concourse/turbine/event"
 	"github.com/pivotal-golang/lager"
 )
 
 type Scheduler interface {
-	Start(builds.Build)
+	Start(turbine.Build)
 	Restore(ScheduledBuild)
 	Abort(guid string)
 	Hijack(guid string, process gapi.ProcessSpec, io gapi.ProcessIO) (gapi.Process, error)
@@ -24,8 +24,8 @@ type Scheduler interface {
 }
 
 type ScheduledBuild struct {
-	Build     builds.Build
-	Status    builds.Status
+	Build     turbine.Build
+	Status    turbine.Status
 	ProcessID uint32
 	EventHub  *event.Hub
 
@@ -83,7 +83,7 @@ func (scheduler *scheduler) Drain() []ScheduledBuild {
 	return scheduler.scheduledBuilds()
 }
 
-func (scheduler *scheduler) Start(build builds.Build) {
+func (scheduler *scheduler) Start(build turbine.Build) {
 	scheduler.inFlight.Add(1)
 
 	log := scheduler.logger.Session("start", lager.Data{
@@ -113,9 +113,9 @@ func (scheduler *scheduler) Start(build builds.Build) {
 
 			select {
 			case <-scheduled.abort:
-				scheduler.updateAndReportBuild(build, builds.StatusAborted)
+				scheduler.updateAndReportBuild(build, turbine.StatusAborted)
 			default:
-				scheduler.updateAndReportBuild(build, builds.StatusErrored)
+				scheduler.updateAndReportBuild(build, turbine.StatusErrored)
 			}
 
 			scheduled.EventHub.EmitEvent(event.End{})
@@ -125,7 +125,7 @@ func (scheduler *scheduler) Start(build builds.Build) {
 			log.Info("started")
 
 			scheduler.updateRunningBuild(running)
-			scheduler.updateAndReportBuild(running.Build, builds.StatusStarted)
+			scheduler.updateAndReportBuild(running.Build, turbine.StatusStarted)
 
 			scheduler.attach(running, scheduled)
 		}
@@ -141,7 +141,7 @@ func (scheduler *scheduler) Restore(build ScheduledBuild) {
 	scheduler.builds[scheduled.Build.Guid] = scheduled
 	scheduler.mutex.Unlock()
 
-	if build.Status == builds.StatusStarted {
+	if build.Status == turbine.StatusStarted {
 		scheduled.EventHub.EmitEvent(event.CURRENT_VERSION)
 
 		scheduler.inFlight.Add(1)
@@ -243,9 +243,9 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, scheduled *Sche
 
 		select {
 		case <-scheduled.abort:
-			scheduler.updateAndReportBuild(running.Build, builds.StatusAborted)
+			scheduler.updateAndReportBuild(running.Build, turbine.StatusAborted)
 		default:
-			scheduler.updateAndReportBuild(running.Build, builds.StatusErrored)
+			scheduler.updateAndReportBuild(running.Build, turbine.StatusErrored)
 		}
 
 		scheduled.EventHub.EmitEvent(event.End{})
@@ -264,17 +264,17 @@ func (scheduler *scheduler) finish(exited builder.ExitedBuild, scheduled *Schedu
 
 		select {
 		case <-scheduled.abort:
-			scheduler.updateAndReportBuild(exited.Build, builds.StatusAborted)
+			scheduler.updateAndReportBuild(exited.Build, turbine.StatusAborted)
 		default:
-			scheduler.updateAndReportBuild(exited.Build, builds.StatusErrored)
+			scheduler.updateAndReportBuild(exited.Build, turbine.StatusErrored)
 		}
 	} else {
 		log.Info("finished")
 
 		if exited.ExitStatus == 0 {
-			scheduler.updateAndReportBuild(finished, builds.StatusSucceeded)
+			scheduler.updateAndReportBuild(finished, turbine.StatusSucceeded)
 		} else {
-			scheduler.updateAndReportBuild(finished, builds.StatusFailed)
+			scheduler.updateAndReportBuild(finished, turbine.StatusFailed)
 		}
 	}
 
@@ -301,8 +301,8 @@ func (scheduler *scheduler) updateRunningBuild(running builder.RunningBuild) {
 }
 
 func (scheduler *scheduler) updateAndReportBuild(
-	build builds.Build,
-	status builds.Status,
+	build turbine.Build,
+	status turbine.Status,
 ) {
 	scheduler.mutex.Lock()
 	scheduled := scheduler.builds[build.Guid]

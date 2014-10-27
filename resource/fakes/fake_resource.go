@@ -5,47 +5,47 @@ import (
 	"io"
 	"sync"
 
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/resource"
 )
 
 type FakeResource struct {
-	InStub        func(builds.Input) (io.Reader, builds.Input, builds.Config, error)
+	InStub        func(turbine.Input) (io.Reader, turbine.Input, turbine.Config, error)
 	inMutex       sync.RWMutex
 	inArgsForCall []struct {
-		arg1 builds.Input
+		arg1 turbine.Input
 	}
 	inReturns struct {
 		result1 io.Reader
-		result2 builds.Input
-		result3 builds.Config
+		result2 turbine.Input
+		result3 turbine.Config
 		result4 error
 	}
-	OutStub        func(io.Reader, builds.Output) (builds.Output, error)
+	OutStub        func(io.Reader, turbine.Output) (turbine.Output, error)
 	outMutex       sync.RWMutex
 	outArgsForCall []struct {
 		arg1 io.Reader
-		arg2 builds.Output
+		arg2 turbine.Output
 	}
 	outReturns struct {
-		result1 builds.Output
+		result1 turbine.Output
 		result2 error
 	}
-	CheckStub        func(builds.Input) ([]builds.Version, error)
+	CheckStub        func(turbine.Input) ([]turbine.Version, error)
 	checkMutex       sync.RWMutex
 	checkArgsForCall []struct {
-		arg1 builds.Input
+		arg1 turbine.Input
 	}
 	checkReturns struct {
-		result1 []builds.Version
+		result1 []turbine.Version
 		result2 error
 	}
 }
 
-func (fake *FakeResource) In(arg1 builds.Input) (io.Reader, builds.Input, builds.Config, error) {
+func (fake *FakeResource) In(arg1 turbine.Input) (io.Reader, turbine.Input, turbine.Config, error) {
 	fake.inMutex.Lock()
 	fake.inArgsForCall = append(fake.inArgsForCall, struct {
-		arg1 builds.Input
+		arg1 turbine.Input
 	}{arg1})
 	fake.inMutex.Unlock()
 	if fake.InStub != nil {
@@ -61,27 +61,27 @@ func (fake *FakeResource) InCallCount() int {
 	return len(fake.inArgsForCall)
 }
 
-func (fake *FakeResource) InArgsForCall(i int) builds.Input {
+func (fake *FakeResource) InArgsForCall(i int) turbine.Input {
 	fake.inMutex.RLock()
 	defer fake.inMutex.RUnlock()
 	return fake.inArgsForCall[i].arg1
 }
 
-func (fake *FakeResource) InReturns(result1 io.Reader, result2 builds.Input, result3 builds.Config, result4 error) {
+func (fake *FakeResource) InReturns(result1 io.Reader, result2 turbine.Input, result3 turbine.Config, result4 error) {
 	fake.InStub = nil
 	fake.inReturns = struct {
 		result1 io.Reader
-		result2 builds.Input
-		result3 builds.Config
+		result2 turbine.Input
+		result3 turbine.Config
 		result4 error
 	}{result1, result2, result3, result4}
 }
 
-func (fake *FakeResource) Out(arg1 io.Reader, arg2 builds.Output) (builds.Output, error) {
+func (fake *FakeResource) Out(arg1 io.Reader, arg2 turbine.Output) (turbine.Output, error) {
 	fake.outMutex.Lock()
 	fake.outArgsForCall = append(fake.outArgsForCall, struct {
 		arg1 io.Reader
-		arg2 builds.Output
+		arg2 turbine.Output
 	}{arg1, arg2})
 	fake.outMutex.Unlock()
 	if fake.OutStub != nil {
@@ -97,24 +97,24 @@ func (fake *FakeResource) OutCallCount() int {
 	return len(fake.outArgsForCall)
 }
 
-func (fake *FakeResource) OutArgsForCall(i int) (io.Reader, builds.Output) {
+func (fake *FakeResource) OutArgsForCall(i int) (io.Reader, turbine.Output) {
 	fake.outMutex.RLock()
 	defer fake.outMutex.RUnlock()
 	return fake.outArgsForCall[i].arg1, fake.outArgsForCall[i].arg2
 }
 
-func (fake *FakeResource) OutReturns(result1 builds.Output, result2 error) {
+func (fake *FakeResource) OutReturns(result1 turbine.Output, result2 error) {
 	fake.OutStub = nil
 	fake.outReturns = struct {
-		result1 builds.Output
+		result1 turbine.Output
 		result2 error
 	}{result1, result2}
 }
 
-func (fake *FakeResource) Check(arg1 builds.Input) ([]builds.Version, error) {
+func (fake *FakeResource) Check(arg1 turbine.Input) ([]turbine.Version, error) {
 	fake.checkMutex.Lock()
 	fake.checkArgsForCall = append(fake.checkArgsForCall, struct {
-		arg1 builds.Input
+		arg1 turbine.Input
 	}{arg1})
 	fake.checkMutex.Unlock()
 	if fake.CheckStub != nil {
@@ -130,16 +130,16 @@ func (fake *FakeResource) CheckCallCount() int {
 	return len(fake.checkArgsForCall)
 }
 
-func (fake *FakeResource) CheckArgsForCall(i int) builds.Input {
+func (fake *FakeResource) CheckArgsForCall(i int) turbine.Input {
 	fake.checkMutex.RLock()
 	defer fake.checkMutex.RUnlock()
 	return fake.checkArgsForCall[i].arg1
 }
 
-func (fake *FakeResource) CheckReturns(result1 []builds.Version, result2 error) {
+func (fake *FakeResource) CheckReturns(result1 []turbine.Version, result2 error) {
 	fake.CheckStub = nil
 	fake.checkReturns = struct {
-		result1 []builds.Version
+		result1 []turbine.Version
 		result2 error
 	}{result1, result2}
 }

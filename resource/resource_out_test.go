@@ -6,9 +6,9 @@ import (
 	"io"
 	"io/ioutil"
 
-	garden_api "github.com/cloudfoundry-incubator/garden/api"
+	garden "github.com/cloudfoundry-incubator/garden/api"
 	gfakes "github.com/cloudfoundry-incubator/garden/api/fakes"
-	"github.com/concourse/turbine/api/builds"
+	"github.com/concourse/turbine"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -17,7 +17,7 @@ import (
 
 var _ = Describe("Resource Out", func() {
 	var (
-		output builds.Output
+		output turbine.Output
 
 		outScriptStdout     string
 		outScriptStderr     string
@@ -26,17 +26,17 @@ var _ = Describe("Resource Out", func() {
 
 		outScriptProcess *gfakes.FakeProcess
 
-		outOutput builds.Output
+		outOutput turbine.Output
 		outErr    error
 	)
 
 	BeforeEach(func() {
-		output = builds.Output{
+		output = turbine.Output{
 			Type:   "some-resource",
-			Params: builds.Params{"some": "params"},
-			Source: builds.Source{"some": "source"},
+			Params: turbine.Params{"some": "params"},
+			Source: turbine.Source{"some": "source"},
 
-			Version: builds.Version{"original": "version"},
+			Version: turbine.Version{"original": "version"},
 		}
 
 		outScriptStdout = "{}"
@@ -51,7 +51,7 @@ var _ = Describe("Resource Out", func() {
 	})
 
 	JustBeforeEach(func() {
-		gardenClient.Connection.RunStub = func(handle string, spec garden_api.ProcessSpec, io garden_api.ProcessIO) (garden_api.Process, error) {
+		gardenClient.Connection.RunStub = func(handle string, spec garden.ProcessSpec, io garden.ProcessIO) (garden.Process, error) {
 			if runOutError != nil {
 				return nil, runOutError
 			}
@@ -125,8 +125,8 @@ var _ = Describe("Resource Out", func() {
 
 		It("returns the build source printed out by /opt/resource/out", func() {
 			expectedOutput := output
-			expectedOutput.Version = builds.Version{"some": "new-version"}
-			expectedOutput.Metadata = []builds.MetadataField{
+			expectedOutput.Version = turbine.Version{"some": "new-version"}
+			expectedOutput.Metadata = []turbine.MetadataField{
 				{Name: "a", Value: "a-value"},
 				{Name: "b", Value: "b-value"},
 			}

@@ -1,9 +1,9 @@
 package event
 
-import "github.com/concourse/turbine/api/builds"
+import "github.com/concourse/turbine"
 
 type Output struct {
-	Output builds.Output `json:"output"`
+	Output turbine.Output `json:"output"`
 }
 
 func (Output) EventType() EventType { return EventTypeOutput }

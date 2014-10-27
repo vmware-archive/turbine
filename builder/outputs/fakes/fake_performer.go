@@ -4,32 +4,32 @@ package fakes
 import (
 	"sync"
 
-	garden_api "github.com/cloudfoundry-incubator/garden/api"
-	"github.com/concourse/turbine/api/builds"
+	garden "github.com/cloudfoundry-incubator/garden/api"
+	"github.com/concourse/turbine"
 	"github.com/concourse/turbine/builder/outputs"
 	"github.com/concourse/turbine/event"
 )
 
 type FakePerformer struct {
-	PerformOutputsStub        func(garden_api.Container, []builds.Output, event.Emitter, <-chan struct{}) ([]builds.Output, error)
+	PerformOutputsStub        func(garden.Container, []turbine.Output, event.Emitter, <-chan struct{}) ([]turbine.Output, error)
 	performOutputsMutex       sync.RWMutex
 	performOutputsArgsForCall []struct {
-		arg1 garden_api.Container
-		arg2 []builds.Output
+		arg1 garden.Container
+		arg2 []turbine.Output
 		arg3 event.Emitter
 		arg4 <-chan struct{}
 	}
 	performOutputsReturns struct {
-		result1 []builds.Output
+		result1 []turbine.Output
 		result2 error
 	}
 }
 
-func (fake *FakePerformer) PerformOutputs(arg1 garden_api.Container, arg2 []builds.Output, arg3 event.Emitter, arg4 <-chan struct{}) ([]builds.Output, error) {
+func (fake *FakePerformer) PerformOutputs(arg1 garden.Container, arg2 []turbine.Output, arg3 event.Emitter, arg4 <-chan struct{}) ([]turbine.Output, error) {
 	fake.performOutputsMutex.Lock()
 	fake.performOutputsArgsForCall = append(fake.performOutputsArgsForCall, struct {
-		arg1 garden_api.Container
-		arg2 []builds.Output
+		arg1 garden.Container
+		arg2 []turbine.Output
 		arg3 event.Emitter
 		arg4 <-chan struct{}
 	}{arg1, arg2, arg3, arg4})
@@ -47,16 +47,16 @@ func (fake *FakePerformer) PerformOutputsCallCount() int {
 	return len(fake.performOutputsArgsForCall)
 }
 
-func (fake *FakePerformer) PerformOutputsArgsForCall(i int) (garden_api.Container, []builds.Output, event.Emitter, <-chan struct{}) {
+func (fake *FakePerformer) PerformOutputsArgsForCall(i int) (garden.Container, []turbine.Output, event.Emitter, <-chan struct{}) {
 	fake.performOutputsMutex.RLock()
 	defer fake.performOutputsMutex.RUnlock()
 	return fake.performOutputsArgsForCall[i].arg1, fake.performOutputsArgsForCall[i].arg2, fake.performOutputsArgsForCall[i].arg3, fake.performOutputsArgsForCall[i].arg4
 }
 
-func (fake *FakePerformer) PerformOutputsReturns(result1 []builds.Output, result2 error) {
+func (fake *FakePerformer) PerformOutputsReturns(result1 []turbine.Output, result2 error) {
 	fake.PerformOutputsStub = nil
 	fake.performOutputsReturns = struct {
-		result1 []builds.Output
+		result1 []turbine.Output
 		result2 error
 	}{result1, result2}
 }
