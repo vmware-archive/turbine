@@ -130,4 +130,12 @@ var _ = Describe("Encoding & Decoding messages", func() {
 
 		itEncodesAndDecodesToItself()
 	})
+
+	Describe("End", func() {
+		BeforeEach(func() {
+			event = End{}
+		})
+
+		itEncodesAndDecodesToItself()
+	})
 })

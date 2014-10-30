@@ -87,6 +87,10 @@ func ParseEvent(t EventType, payload []byte) (Event, error) {
 		event := Version("")
 		err = json.Unmarshal(payload, &event)
 		ev = event
+	case EventTypeEnd:
+		event := End{}
+		err = json.Unmarshal(payload, &event)
+		ev = event
 	default:
 		return nil, fmt.Errorf("unknown event type: %v", t)
 	}
