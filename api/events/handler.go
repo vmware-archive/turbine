@@ -31,6 +31,8 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+
+		idx++
 	}
 
 	events, stop, err := handler.scheduler.Subscribe(guid, idx)

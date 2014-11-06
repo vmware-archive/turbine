@@ -64,12 +64,12 @@ var _ = Describe("GET /builds/:guid/events", func() {
 			request.Header.Set("Last-Event-ID", "42")
 		})
 
-		It("subscribes from the given id", func() {
+		It("subscribes from after the given id", func() {
 			Ω(scheduler.SubscribeCallCount()).Should(Equal(1))
 
 			guid, from := scheduler.SubscribeArgsForCall(0)
 			Ω(guid).Should(Equal("some-build-guid"))
-			Ω(from).Should(Equal(uint(42)))
+			Ω(from).Should(Equal(uint(42 + 1)))
 		})
 
 		Context("but it's set to something bogus", func() {
@@ -176,7 +176,7 @@ var _ = Describe("GET /builds/:guid/events", func() {
 						ev, err := reader.Next()
 						Ω(err).ShouldNot(HaveOccurred())
 
-						Ω(ev.ID).Should(Equal(fmt.Sprintf("%d", 42+i)))
+						Ω(ev.ID).Should(Equal(fmt.Sprintf("%d", 42+1+i)))
 						Ω(ev.Name).Should(Equal(string(event.EventTypeStart)))
 
 						var message event.Start
