@@ -37,10 +37,13 @@ func (handler *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log := handler.logger.Session("check", lager.Data{
-		"input": input,
+		"resource": input.Resource,
+		"type":     input.Type,
 	})
 
-	log.Info("checking")
+	log.Info("checking", lager.Data{
+		"from": input.Version,
+	})
 
 	resource, err := handler.tracker.Init(input.Type, ioutil.Discard, nil)
 	if err != nil {

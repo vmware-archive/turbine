@@ -45,7 +45,8 @@ func (handler *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log := handler.logger.Session("streaming-check", lager.Data{
-		"input": input,
+		"resource": input.Resource,
+		"type":     input.Type,
 	})
 
 	resource, err := handler.tracker.Init(input.Type, ioutil.Discard, handler.drain)
@@ -57,7 +58,9 @@ func (handler *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	defer handler.tracker.Release(resource)
 
 	for {
-		log.Info("checking")
+		log.Info("checking", lager.Data{
+			"from": input.Version,
+		})
 
 		versions, err := resource.Check(input)
 		if err != nil {
