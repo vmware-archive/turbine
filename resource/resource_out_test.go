@@ -75,7 +75,6 @@ var _ = Describe("Resource Out", func() {
 		Ω(handle).Should(Equal("some-handle"))
 		Ω(spec.Path).Should(Equal("/opt/resource/out"))
 		Ω(spec.Args).Should(Equal([]string{"/tmp/build/src"}))
-		Ω(spec.Privileged).Should(BeTrue())
 
 		request, err := ioutil.ReadAll(io.Stdin)
 		Ω(err).ShouldNot(HaveOccurred())

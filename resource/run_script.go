@@ -41,9 +41,8 @@ func (resource *resource) runScript(path string, args []string, input interface{
 	stderr := new(bytes.Buffer)
 
 	process, err := resource.container.Run(garden_api.ProcessSpec{
-		Path:       path,
-		Args:       args,
-		Privileged: true,
+		Path: path,
+		Args: args,
 	}, garden_api.ProcessIO{
 		Stdin:  bytes.NewBuffer(request),
 		Stderr: io.MultiWriter(resource.logs, stderr),

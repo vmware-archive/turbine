@@ -54,9 +54,10 @@ var _ = Describe("Tracker", func() {
 			Ω(initResource).ShouldNot(BeNil())
 		})
 
-		It("creates a container with the resource type's image", func() {
+		It("creates a privileged container with the resource type's image", func() {
 			Ω(gardenClient.Connection.CreateArgsForCall(0)).Should(Equal(garden_api.ContainerSpec{
 				RootFSPath: "image1",
+				Privileged: true,
 			}))
 		})
 

@@ -169,6 +169,11 @@ var _ = Describe("Builder", func() {
 				Ω(created.Handle).Should(Equal(build.Guid))
 			})
 
+			It("creates a container unprivileged", func() {
+				created := gardenClient.Connection.CreateArgsForCall(0)
+				Ω(created.Privileged).Should(BeFalse())
+			})
+
 			It("streams them in to the container", func() {
 				streamInCalls := gardenClient.Connection.StreamInCallCount()
 				Ω(streamInCalls).Should(Equal(2))
@@ -204,7 +209,6 @@ var _ = Describe("Builder", func() {
 				Ω(spec.Env).Should(ConsistOf("FOO=bar", "BAZ=buzz"))
 				Ω(spec.Dir).Should(Equal("/tmp/build/src"))
 				Ω(spec.TTY).Should(Equal(&garden.TTYSpec{}))
-				Ω(spec.Privileged).Should(BeFalse())
 			})
 
 			It("emits an initialize event followed by a start event", func() {
@@ -383,9 +387,8 @@ var _ = Describe("Builder", func() {
 				})
 
 				It("runs the build privileged", func() {
-					handle, spec, _ := gardenClient.Connection.RunArgsForCall(0)
-					Ω(handle).Should(Equal("some-build-guid"))
-					Ω(spec.Privileged).Should(BeTrue())
+					created := gardenClient.Connection.CreateArgsForCall(0)
+					Ω(created.Privileged).Should(BeTrue())
 				})
 			})
 
@@ -572,7 +575,7 @@ var _ = Describe("Builder", func() {
 
 				It("emits an error event", func() {
 					Eventually(events.Sent).Should(ContainElement(event.Error{
-						Message: "failed to lookup container: container not found: some-build-guid",
+						Message: "failed to lookup container: container not found",
 					}))
 				})
 			})

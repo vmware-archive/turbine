@@ -42,6 +42,7 @@ func (tracker *tracker) Init(typ string, logs io.Writer, abort <-chan struct{}) 
 
 	container, err := tracker.gardenClient.Create(garden_api.ContainerSpec{
 		RootFSPath: resourceType.Image,
+		Privileged: true,
 	})
 	if err != nil {
 		return nil, err

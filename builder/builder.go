@@ -99,7 +99,7 @@ func (builder *builder) Start(build turbine.Build, emitter event.Emitter, abort 
 		BuildConfig: build.Config,
 	})
 
-	container, err := builder.createBuildContainer(build.Guid, build.Config)
+	container, err := builder.createBuildContainer(build.Guid, build.Config, build.Privileged)
 	if err != nil {
 		return RunningBuild{}, builder.emitError(emitter, "failed to create container", err)
 	}
@@ -116,7 +116,6 @@ func (builder *builder) Start(build turbine.Build, emitter event.Emitter, abort 
 	process, err := builder.runBuild(
 		container,
 		emitterProcessIO(emitter),
-		build.Privileged,
 		build.Config,
 	)
 	if err != nil {
@@ -204,6 +203,7 @@ func (builder *builder) emitError(emitter event.Emitter, message string, err err
 func (builder *builder) createBuildContainer(
 	buildGuid string,
 	buildConfig turbine.Config,
+	privileged bool,
 ) (gapi.Container, error) {
 	if buildConfig.Image == "" {
 		return nil, ErrNoImageSpecified
@@ -212,6 +212,7 @@ func (builder *builder) createBuildContainer(
 	return builder.gardenClient.Create(gapi.ContainerSpec{
 		Handle:     buildGuid,
 		RootFSPath: buildConfig.Image,
+		Privileged: privileged,
 	})
 }
 
@@ -276,7 +277,6 @@ func (builder *builder) makeEmptySources(container gapi.Container) error {
 func (builder *builder) runBuild(
 	container gapi.Container,
 	processIO gapi.ProcessIO,
-	privileged bool,
 	buildConfig turbine.Config,
 ) (gapi.Process, error) {
 	env := []string{}
@@ -291,8 +291,6 @@ func (builder *builder) runBuild(
 		Dir:  resource.ResourcesDir,
 
 		TTY: &gapi.TTYSpec{},
-
-		Privileged: privileged,
 	}, processIO)
 }
 
