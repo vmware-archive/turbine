@@ -209,6 +209,7 @@ var _ = Describe("Builder", func() {
 				Ω(spec.Env).Should(ConsistOf("FOO=bar", "BAZ=buzz"))
 				Ω(spec.Dir).Should(Equal("/tmp/build/src"))
 				Ω(spec.TTY).Should(Equal(&garden.TTYSpec{}))
+				Ω(spec.Privileged).Should(BeFalse())
 			})
 
 			It("emits an initialize event followed by a start event", func() {
@@ -386,9 +387,15 @@ var _ = Describe("Builder", func() {
 					build.Privileged = true
 				})
 
-				It("runs the build privileged", func() {
+				It("creates the container with privileged true", func() {
 					created := gardenClient.Connection.CreateArgsForCall(0)
 					Ω(created.Privileged).Should(BeTrue())
+				})
+
+				It("runs the build privileged", func() {
+					handle, spec, _ := gardenClient.Connection.RunArgsForCall(0)
+					Ω(handle).Should(Equal("some-build-guid"))
+					Ω(spec.Privileged).Should(BeTrue())
 				})
 			})
 

@@ -117,6 +117,7 @@ func (builder *builder) Start(build turbine.Build, emitter event.Emitter, abort 
 		container,
 		emitterProcessIO(emitter),
 		build.Config,
+		build.Privileged,
 	)
 	if err != nil {
 		return RunningBuild{}, builder.emitError(emitter, "failed to run", err)
@@ -278,6 +279,7 @@ func (builder *builder) runBuild(
 	container gapi.Container,
 	processIO gapi.ProcessIO,
 	buildConfig turbine.Config,
+	privileged bool,
 ) (gapi.Process, error) {
 	env := []string{}
 	for n, v := range buildConfig.Params {
@@ -285,6 +287,8 @@ func (builder *builder) runBuild(
 	}
 
 	return container.Run(gapi.ProcessSpec{
+		Privileged: privileged,
+
 		Path: buildConfig.Run.Path,
 		Args: buildConfig.Run.Args,
 		Env:  env,
