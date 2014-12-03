@@ -132,14 +132,20 @@ func main() {
 		logger.Fatal("failed-to-ping-garden", err)
 	}
 
-	group := grouper.NewParallel(os.Interrupt, []grouper.Member{
+	parallel := grouper.NewParallel(os.Interrupt, []grouper.Member{
 		{"api", http_server.New(*listenAddr, handler)},
 		{"debug", http_server.New(*debugListenAddr, http.DefaultServeMux)},
-		{"snapshotter", snapshotter.NewSnapshotter(logger.Session("snapshotter"), *snapshotPath, scheduler)},
 		{"drainer", &drainer{drain}},
 	})
 
-	running := ifrit.Envoke(sigmon.New(group))
+	// Snapshotter must start before the rest to avoid race conditions when
+	// re-attaching to builds.
+	script := grouper.NewOrdered(os.Interrupt, []grouper.Member{
+		{"snapshotter", snapshotter.NewSnapshotter(logger.Session("snapshotter"), *snapshotPath, scheduler)},
+		{"parallel", parallel},
+	})
+
+	running := ifrit.Envoke(sigmon.New(script))
 
 	logger.Info("listening", lager.Data{
 		"api": *listenAddr,
