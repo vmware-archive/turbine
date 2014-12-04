@@ -42,7 +42,7 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log := handler.logger.Session("execute", lager.Data{
-		"build": build,
+		"guid": build.Guid,
 	})
 
 	guid, err := uuid.NewV4()
@@ -55,7 +55,7 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	build.Guid = guid.String()
 
 	log.Info("scheduling", lager.Data{
-		"guid": build.Guid,
+		"build": build,
 	})
 
 	handler.scheduler.Start(build)

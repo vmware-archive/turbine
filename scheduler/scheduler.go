@@ -87,7 +87,7 @@ func (scheduler *scheduler) Start(build turbine.Build) {
 	scheduler.inFlight.Add(1)
 
 	log := scheduler.logger.Session("start", lager.Data{
-		"build": build,
+		"guid": build.Guid,
 	})
 
 	scheduled := &ScheduledBuild{
@@ -217,7 +217,7 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, scheduled *Sche
 	defer close(scheduled.done)
 
 	log := scheduler.logger.Session("attach", lager.Data{
-		"build": running.Build,
+		"guid": running.Build.Guid,
 	})
 
 	exited := make(chan builder.ExitedBuild, 1)
@@ -255,7 +255,7 @@ func (scheduler *scheduler) attach(running builder.RunningBuild, scheduled *Sche
 
 func (scheduler *scheduler) finish(exited builder.ExitedBuild, scheduled *ScheduledBuild) {
 	log := scheduler.logger.Session("finish", lager.Data{
-		"build": exited.Build,
+		"guid": exited.Build.Guid,
 	})
 
 	finished, err := scheduler.builder.Finish(exited, scheduled.EventHub, scheduled.abort)
