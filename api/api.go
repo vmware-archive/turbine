@@ -28,10 +28,10 @@ func New(
 
 	handlers := map[string]http.Handler{
 		turbine.ExecuteBuild:     execute.NewHandler(logger, scheduler, turbineEndpoint),
-		turbine.DeleteBuild:      deletebuild.NewHandler(scheduler),
-		turbine.AbortBuild:       abort.NewHandler(scheduler),
+		turbine.DeleteBuild:      deletebuild.NewHandler(logger, scheduler),
+		turbine.AbortBuild:       abort.NewHandler(logger, scheduler),
 		turbine.HijackBuild:      hijack.NewHandler(logger, scheduler),
-		turbine.GetBuildEvents:   events.NewHandler(scheduler),
+		turbine.GetBuildEvents:   events.NewHandler(logger, scheduler),
 		turbine.CheckInput:       checkHandler,
 		turbine.CheckInputStream: http.HandlerFunc(checkHandler.Stream),
 	}

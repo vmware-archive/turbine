@@ -6,15 +6,18 @@ import (
 	"net/http"
 
 	"github.com/concourse/turbine/scheduler"
+	"github.com/pivotal-golang/lager"
 	"github.com/vito/go-sse/sse"
 )
 
 type handler struct {
+	logger    lager.Logger
 	scheduler scheduler.Scheduler
 }
 
-func NewHandler(scheduler scheduler.Scheduler) http.Handler {
+func NewHandler(logger lager.Logger, scheduler scheduler.Scheduler) http.Handler {
 	return &handler{
+		logger:    logger,
 		scheduler: scheduler,
 	}
 }
@@ -22,12 +25,17 @@ func NewHandler(scheduler scheduler.Scheduler) http.Handler {
 func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	guid := r.FormValue(":guid")
 
+	hLog := handler.logger.Session("build-events", lager.Data{
+		"guid": guid,
+	})
+
 	var idx uint = 0
 
 	lastID := r.Header.Get("Last-Event-ID")
 	if lastID != "" {
 		_, err := fmt.Sscanf(lastID, "%d", &idx)
 		if err != nil {
+			hLog.Error("bad-id", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -35,8 +43,11 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		idx++
 	}
 
+	hLog.Info("subscribe", lager.Data{"last-event-id": idx})
+
 	events, stop, err := handler.scheduler.Subscribe(guid, idx)
 	if err != nil {
+		hLog.Error("failed-to-subscribe", err)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
