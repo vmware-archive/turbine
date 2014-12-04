@@ -38,7 +38,7 @@ func NewSnapshotter(logger lager.Logger, snapshotPath string, scheduler schedule
 
 func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struct{}) error {
 	log := snapshotter.logger.Session("run", lager.Data{
-		"snapshot": snapshotter.snapshotPath,
+		"snapshot-file": snapshotter.snapshotPath,
 	})
 
 	snapshotFile, err := os.Open(snapshotter.snapshotPath)
@@ -54,7 +54,7 @@ func (snapshotter *Snapshotter) Run(signals <-chan os.Signal, ready chan<- struc
 		} else {
 			for _, snapshot := range snapshots {
 				log.Info("restoring", lager.Data{
-					"snapshot": snapshot,
+					"build-snapshot": snapshot,
 				})
 
 				hub := event.NewHub()
