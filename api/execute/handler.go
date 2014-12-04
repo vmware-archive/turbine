@@ -41,10 +41,6 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log := handler.logger.Session("execute", lager.Data{
-		"guid": build.Guid,
-	})
-
 	guid, err := uuid.NewV4()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -53,6 +49,10 @@ func (handler *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	build.Guid = guid.String()
+
+	log := handler.logger.Session("execute", lager.Data{
+		"guid": build.Guid,
+	})
 
 	log.Info("scheduling", lager.Data{
 		"build": build,
