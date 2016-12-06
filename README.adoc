@@ -1,4 +1,0 @@
-= Turbine
-
-Provides a stateless HTTP API to execute builds on a
-https://github.com/cloudfoundry-incubator/garden[Garden] server.
